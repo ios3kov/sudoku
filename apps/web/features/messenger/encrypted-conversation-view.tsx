@@ -36,6 +36,7 @@ export function EncryptedConversationView({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncBlocked, setSyncBlocked] = useState(true);
   const [queuedCount, setQueuedCount] = useState(0);
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,6 +49,7 @@ export function EncryptedConversationView({
       await adapter.syncTransport(conversation.id);
       const projection = adapter.projectConversation(conversation.id);
       setMessages(projection.messages);
+      setSyncBlocked(false);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       if (projection.rejectedEventIds.length > 0) {
         setError("Some encrypted updates were rejected");
@@ -61,6 +63,7 @@ export function EncryptedConversationView({
         await messengerApi.markRead(conversation.id, latest).catch(() => undefined);
       }
     } catch {
+      setSyncBlocked(true);
       setError("Secure sync is blocked");
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
     } finally {
@@ -76,6 +79,7 @@ export function EncryptedConversationView({
     setEditingId(null);
     setActionMessageId(null);
     setError(null);
+    setSyncBlocked(true);
     void refreshProjection();
   }, [conversation.id, refreshProjection]);
 
@@ -117,7 +121,7 @@ export function EncryptedConversationView({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = body.trim();
-    if (!text || busy) return;
+    if (!text || busy || syncBlocked) return;
     setBusy(true);
     setError(null);
 
@@ -154,7 +158,7 @@ export function EncryptedConversationView({
   }
 
   async function toggleReaction(message: ProjectedEncryptedMessage, emoji: string) {
-    if (busy || message.deleted) return;
+    if (busy || syncBlocked || message.deleted) return;
     setBusy(true);
     setError(null);
     try {
@@ -178,7 +182,7 @@ export function EncryptedConversationView({
   }
 
   async function deleteMessage(message: ProjectedEncryptedMessage) {
-    if (busy || message.deleted || message.senderId !== user.id) return;
+    if (busy || syncBlocked || message.deleted || message.senderId !== user.id) return;
     setBusy(true);
     setError(null);
     try {
@@ -198,7 +202,7 @@ export function EncryptedConversationView({
   }
 
   function beginEdit(message: ProjectedEncryptedMessage) {
-    if (message.senderId !== user.id || message.deleted) return;
+    if (syncBlocked || message.senderId !== user.id || message.deleted) return;
     setEditingId(message.id);
     setReplyingToId(null);
     setBody(message.body ?? "");
@@ -336,9 +340,9 @@ export function EncryptedConversationView({
           rows={1}
           maxLength={20000}
           placeholder={editing ? "Edit encrypted message" : "Message"}
-          disabled={busy}
+          disabled={busy || syncBlocked}
         />
-        <button type="submit" disabled={!body.trim() || busy}>
+        <button type="submit" disabled={!body.trim() || busy || syncBlocked}>
           {busy ? "…" : editing ? "Save" : "Send"}
         </button>
       </form>

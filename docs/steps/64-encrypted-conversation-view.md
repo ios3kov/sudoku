@@ -37,6 +37,8 @@ The deterministic projection enforces author rules for edit/delete and rejects m
 ## Fail-closed behavior
 If the MLS adapter is not ready, MessengerShell does not render the encrypted composer/history. It shows only an unavailable/initializing state; there is no plaintext fallback.
 
+If durable `syncTransport()` fails for the open conversation, the view keeps previously decrypted history visible but locks send/edit/reaction/delete controls until a later secure sync succeeds. This prevents authoring new traffic from stale MLS epoch state.
+
 ## Deliberate remaining gap
 Encrypted attachment/voice UI is not yet activated. Existing encrypted attachment events are shown only as an opaque attachment count rather than fetching ciphertext through a legacy renderer.
 
