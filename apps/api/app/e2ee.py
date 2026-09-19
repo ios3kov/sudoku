@@ -713,6 +713,17 @@ async def list_transport_events(
     await enforce_user_rate_limit(auth.user.id, "mls-transport-list", 240, 60)
     await require_active_device(db, auth.user.id, device_id)
 
+    conversation = (
+        await db.execute(
+            select(Conversation).where(Conversation.id == conversation_id)
+        )
+    ).scalar_one_or_none()
+    if conversation is None or not conversation.encryption_required:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Encrypted conversation not found",
+        )
+
     is_member = (
         await db.execute(
             select(ConversationMember.user_id).where(

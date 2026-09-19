@@ -69,6 +69,8 @@ export interface ProtocolAdapter {
 
   syncControlEvents?(conversationId: string): Promise<number>;
 
+  syncTransport(conversationId: string): Promise<number>;
+
   encrypt(input: OutboundPlaintext): Promise<E2eeEnvelope>;
 
   encryptEdit(
@@ -114,6 +116,7 @@ export const unavailableProtocolAdapter: ProtocolAdapter = {
   createGroup: unavailable,
   addMemberDurably: unavailable,
   removeMemberDurably: unavailable,
+  syncTransport: unavailable,
   encrypt: unavailable,
   encryptEdit: unavailable,
   encryptReaction: unavailable,

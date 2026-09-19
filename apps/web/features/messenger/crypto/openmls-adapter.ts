@@ -7,6 +7,7 @@ import type {
   MlsControlBatchItem,
   MlsControlEvent,
   MlsControlRecipient,
+  MlsTransportEvent,
   Message,
 } from "../types";
 import { BrowserProtocolStateStore } from "./browser-state-store";
@@ -54,6 +55,7 @@ interface LocalMlsStateV1 {
   peerIdentityPins: Record<string, PeerIdentityPin>;
   eventJournal: Record<string, EncryptedEventRecord[]>;
   pendingApplicationSends: PendingApplicationSend[];
+  transportCursors: Record<string, number>;
 }
 
 export interface OpenMlsAdapterOptions {
@@ -210,6 +212,14 @@ function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
       Array.isArray(raw.pendingApplicationSends)
         ? raw.pendingApplicationSends.filter(isPendingApplicationSend)
         : [],
+    transportCursors:
+      raw.transportCursors && typeof raw.transportCursors === "object"
+        ? Object.fromEntries(
+            Object.entries(raw.transportCursors)
+              .filter(([, value]) => Number.isSafeInteger(value) && Number(value) >= 0)
+              .map(([key, value]) => [key, Number(value)]),
+          )
+        : {},
   };
 }
 
@@ -286,6 +296,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         peerIdentityPins: {},
         eventJournal: {},
         pendingApplicationSends: [],
+        transportCursors: {},
       };
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
     }
@@ -645,9 +656,49 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     });
   }
 
+  transportCursor(conversationId: string): number {
+    this.assertReady();
+    return this.localState!.transportCursors[conversationId] ?? 0;
+  }
+
   projectConversation(conversationId: string): EncryptedProjectionResult {
     this.assertReady();
     return projectEncryptedEvents(this.localState!.eventJournal[conversationId] ?? []);
+  }
+
+  async syncTransport(conversationId: string): Promise<number> {
+    return this.enqueue(async () => {
+      this.assertReady();
+      await this.flushPendingOutboundTransition();
+      await this.flushPendingApplicationSends();
+      await this.flushPendingAcks();
+
+      const cursor = this.localState!.transportCursors[conversationId] ?? 0;
+      const events = await messengerApi.mlsTransportEvents(
+        conversationId,
+        this.options.deviceId,
+        cursor,
+      );
+      let processed = 0;
+
+      for (const item of events) {
+        if (
+          !Number.isSafeInteger(item.transport_sequence)
+          || item.transport_sequence <= (this.localState!.transportCursors[conversationId] ?? 0)
+        ) {
+          throw new Error("Invalid or non-monotonic MLS transport sequence");
+        }
+
+        if (item.kind === "message") {
+          await this.processTransportMessage(conversationId, item);
+        } else {
+          await this.processTransportControl(conversationId, item);
+        }
+        processed += 1;
+      }
+
+      return processed;
+    });
   }
 
   async syncControlEvents(conversationId: string): Promise<number> {
@@ -725,6 +776,123 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
       return processed;
     });
+  }
+
+  private async processTransportMessage(
+    conversationId: string,
+    item: Extract<MlsTransportEvent, { kind: "message" }>,
+  ): Promise<void> {
+    const cursorBefore = this.localState!.transportCursors[conversationId] ?? 0;
+    const existing = this.localState!.eventJournal[conversationId]?.find(
+      (record) => record.eventId === item.message_id,
+    );
+
+    if (existing) {
+      const snapshot = this.snapshotRuntime();
+      try {
+        this.localState!.transportCursors[conversationId] = item.transport_sequence;
+        await this.persistCurrentState();
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
+      }
+      return;
+    }
+
+    if (item.sender_user_id === this.options.userId) {
+      throw new Error(
+        "Own MLS message is missing its durable local journal entry",
+      );
+    }
+
+    const snapshot = this.snapshotRuntime();
+    try {
+      const decrypted = this.decryptWithProvider(
+        this.provider!,
+        conversationId,
+        item.envelope,
+      );
+      const journal = this.localState!.eventJournal[conversationId] ?? [];
+      journal.push({
+        eventId: item.message_id,
+        senderId: item.sender_user_id,
+        sequence: item.message_sequence,
+        event: this.toDomainEvent(decrypted.event),
+      });
+      this.localState!.eventJournal[conversationId] = journal;
+      this.localState!.transportCursors[conversationId] = item.transport_sequence;
+      await this.persistCurrentState();
+    } catch (error) {
+      this.localState!.transportCursors[conversationId] = cursorBefore;
+      this.restoreRuntime(snapshot);
+      throw error;
+    }
+  }
+
+  private async processTransportControl(
+    conversationId: string,
+    item: Extract<MlsTransportEvent, { kind: "mls_control" }>,
+  ): Promise<void> {
+    const event = item.control;
+    const senderIdentity = await this.resolveControlSenderIdentity(event);
+    const snapshot = this.snapshotRuntime();
+
+    try {
+      const expectedCredential = utf8(
+        "sudoku-v1:" + event.sender_user_id + ":" + event.sender_device_id,
+      );
+      const expectedPublicKey = base64ToBytes(senderIdentity.publicKeyB64);
+
+      if (event.kind === "welcome") {
+        const joined = utf8String(
+          this.provider!.joinGroup(base64ToBytes(event.payload_b64)),
+        );
+        if (joined !== conversationId) {
+          throw new Error("MLS Welcome group id does not match conversation");
+        }
+        this.provider!.validateGroupMemberIdentity(
+          utf8(conversationId),
+          expectedCredential,
+          expectedPublicKey,
+        );
+      } else if (event.kind === "commit") {
+        this.provider!.validateGroupMemberIdentity(
+          utf8(conversationId),
+          expectedCredential,
+          expectedPublicKey,
+        );
+        this.provider!.processHandshake(
+          utf8(conversationId),
+          base64ToBytes(event.payload_b64),
+        );
+      } else {
+        throw new Error("Unsupported MLS control event");
+      }
+
+      if (!senderIdentity.existingPin) {
+        this.localState!.peerIdentityPins[senderIdentity.pinKey] = {
+          userId: event.sender_user_id,
+          deviceId: event.sender_device_id,
+          publicKeyB64: senderIdentity.publicKeyB64,
+          firstSeenAt: Date.now(),
+          verifiedAt: null,
+        };
+      }
+
+      this.localState!.pendingAckEventIds = uniqueIds([
+        ...this.localState!.pendingAckEventIds,
+        event.id,
+      ]);
+      this.localState!.transportCursors[conversationId] = item.transport_sequence;
+      await this.persistCurrentState();
+    } catch (error) {
+      this.restoreRuntime(snapshot);
+      throw error;
+    }
+
+    // The cursor and pending ACK are already durable. Network ACK failure must
+    // not replay the MLS control event; flushPendingAcks retries it separately.
+    await this.ackAndForget(event);
   }
 
   private async resolveControlSenderIdentity(event: MlsControlEvent): Promise<{
