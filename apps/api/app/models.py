@@ -97,6 +97,7 @@ class Conversation(Base):
     next_crypto_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
     next_transport_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
     encryption_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    e2ee_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

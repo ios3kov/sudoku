@@ -116,6 +116,10 @@ export const messengerApi = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ device_id: deviceId }),
     }),
+  activateMlsConversation: (conversationId: string) =>
+    request<void>(`/v1/e2ee/conversations/${conversationId}/activate`, {
+      method: "POST",
+    }),
   markRead: (conversationId: string, sequence: number) => request<void>(`/v1/conversations/${conversationId}/read`, {
     method: "POST",
     headers: { "content-type": "application/json" },

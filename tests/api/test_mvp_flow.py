@@ -228,7 +228,15 @@ async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() ->
         created=await client.post("/v1/conversations",json={"type":"direct","title":None,"member_ids":[str(peer_id)],"encryption_required":True})
         assert created.status_code==201,created.text
         assert created.json()["encryption_required"] is True
+        assert created.json()["e2ee_ready"] is False
         cid=created.json()["id"]
+        pending_message=await client.post(
+            f"/v1/conversations/{cid}/messages",
+            json={"client_id":str(uuid.uuid4()),"type":"text","body":None,"envelope":{"version":1,"protocol":"mls-rfc9420","kind":"application","ciphertext":"AA=="},"asset_ids":[]},
+        )
+        assert pending_message.status_code==409
+        activated=await client.post(f"/v1/e2ee/conversations/{cid}/activate")
+        assert activated.status_code==204,activated.text
         plaintext=await client.post(f"/v1/conversations/{cid}/messages",json={"client_id":str(uuid.uuid4()),"type":"text","body":"secret plaintext","asset_ids":[]})
         assert plaintext.status_code==422
         envelope={"version":1,"protocol":"test-envelope","ciphertext":"AAECAwQ="}
@@ -753,6 +761,10 @@ async def test_e2ee_legacy_message_mutations_fail_closed() -> None:
         )
         assert created.status_code == 201, created.text
         conversation_id = created.json()["id"]
+        activated = await client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/activate"
+        )
+        assert activated.status_code == 204, activated.text
 
         envelope = {
             "version": 1,
@@ -901,6 +913,10 @@ async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
         )
         assert created.status_code == 201, created.text
         conversation_id = created.json()["id"]
+        activated = await sender_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/activate"
+        )
+        assert activated.status_code == 204, activated.text
 
         def envelope(label: str) -> dict:
             return {

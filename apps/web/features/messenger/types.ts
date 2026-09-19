@@ -24,6 +24,7 @@ export interface Conversation {
   is_pinned: boolean;
   notifications_muted: boolean;
   encryption_required: boolean;
+  e2ee_ready: boolean;
   members: ConversationMember[];
 }
 

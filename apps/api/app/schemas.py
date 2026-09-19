@@ -89,6 +89,7 @@ class ConversationResponse(BaseModel):
     is_pinned: bool
     notifications_muted: bool
     encryption_required: bool
+    e2ee_ready: bool
     members: list[ConversationMemberResponse]
 
 

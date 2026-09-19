@@ -127,6 +127,7 @@ async def conversation_response(
         is_pinned=membership.is_pinned,
         notifications_muted=membership.notifications_muted,
         encryption_required=conversation.encryption_required,
+        e2ee_ready=conversation.e2ee_ready,
         members=await conversation_members_response(db, conversation.id),
     )
 
@@ -233,6 +234,15 @@ async def create_conversation(
                     status_code=409,
                     detail="Existing direct conversation encryption mode does not match request",
                 )
+            if (
+                existing.encryption_required
+                and not existing.e2ee_ready
+                and existing.created_by != auth.user.id
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Secure conversation setup is still pending",
+                )
             membership = await require_membership(db, existing.id, auth.user.id)
             return await conversation_response(db, existing, membership)
 
@@ -243,20 +253,22 @@ async def create_conversation(
         created_by=auth.user.id,
         next_sequence=1,
         encryption_required=payload.encryption_required,
+        e2ee_ready=not payload.encryption_required,
     )
     db.add(conversation)
     await db.flush()
     db.add(ConversationMember(conversation_id=conversation.id, user_id=auth.user.id, role="owner"))
     for member_id in member_ids:
         db.add(ConversationMember(conversation_id=conversation.id, user_id=member_id, role="member"))
-    await emit(
-        db,
-        "conversation.created",
-        conversation.id,
-        "conversation",
-        conversation.id,
-        {"conversation_id": str(conversation.id), "type": conversation.type, "title": conversation.title},
-    )
+    if conversation.e2ee_ready:
+        await emit(
+            db,
+            "conversation.created",
+            conversation.id,
+            "conversation",
+            conversation.id,
+            {"conversation_id": str(conversation.id), "type": conversation.type, "title": conversation.title},
+        )
     db.add(AuditEvent(actor_user_id=auth.user.id, event_type="conversation.created", target_type="conversation", target_id=conversation.id))
     await db.commit()
     await db.refresh(conversation)
@@ -470,7 +482,13 @@ async def list_conversations(auth: AuthContext = Depends(get_auth_context), db: 
         await db.execute(
             select(Conversation, ConversationMember)
             .join(ConversationMember, ConversationMember.conversation_id == Conversation.id)
-            .where(ConversationMember.user_id == auth.user.id)
+            .where(
+                ConversationMember.user_id == auth.user.id,
+                or_(
+                    Conversation.e2ee_ready.is_(True),
+                    Conversation.created_by == auth.user.id,
+                ),
+            )
             .order_by(ConversationMember.is_pinned.desc(), Conversation.created_at.desc())
         )
     ).all()
@@ -560,6 +578,11 @@ async def create_message(
     if conversation_for_policy is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation_for_policy.encryption_required:
+        if not conversation_for_policy.e2ee_ready:
+            raise HTTPException(
+                status_code=409,
+                detail="Secure conversation setup is not active yet",
+            )
         if body is not None or payload.envelope is None:
             raise HTTPException(status_code=422, detail="E2EE conversation requires ciphertext envelope and forbids plaintext body")
     elif payload.envelope is not None:

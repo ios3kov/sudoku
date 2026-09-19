@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .db import get_db
 from .deps import AuthContext, get_auth_context
 from .models import (
+    AuditEvent,
     Conversation,
     ConversationMember,
     ConversationTransportEvent,
@@ -153,6 +154,59 @@ def serialize_control_event(item: MlsControlEvent) -> dict:
         "payload_b64": encode_bytes(item.payload),
         "created_at": item.created_at.isoformat(),
     }
+
+
+
+
+@router.post("/conversations/{conversation_id}/activate", status_code=204)
+async def activate_encrypted_conversation(
+    conversation_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-conversation-activate", 30, 60)
+    conversation = (
+        await db.execute(
+            select(Conversation)
+            .where(Conversation.id == conversation_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if (
+        conversation is None
+        or not conversation.encryption_required
+        or conversation.created_by != auth.user.id
+    ):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Pending encrypted conversation not found",
+        )
+    if conversation.e2ee_ready:
+        return
+
+    conversation.e2ee_ready = True
+    db.add(
+        OutboxEvent(
+            event_type="conversation.created",
+            aggregate_type="conversation",
+            aggregate_id=conversation.id,
+            conversation_id=conversation.id,
+            payload={
+                "conversation_id": str(conversation.id),
+                "type": conversation.type,
+                "title": conversation.title,
+            },
+        )
+    )
+    db.add(
+        AuditEvent(
+            actor_user_id=auth.user.id,
+            event_type="conversation.e2ee_activated",
+            target_type="conversation",
+            target_id=conversation.id,
+        )
+    )
+    await db.commit()
 
 
 @router.put("/devices/{device_id}", status_code=204)
