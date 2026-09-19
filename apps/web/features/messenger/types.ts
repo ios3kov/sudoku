@@ -137,11 +137,21 @@ export interface MlsMembershipChange {
   id: string;
   conversation_id: string;
   target_user_id: string;
+  target_device_id: string | null;
   requested_by: string;
-  kind: "add" | "remove";
-  status: "pending" | "completed";
+  kind: "add" | "remove" | "device_add" | "device_remove";
+  status: "queued" | "pending" | "completed";
   created_at: string;
   completed_at: string | null;
+}
+
+export interface PendingMlsMembershipChange {
+  change: MlsMembershipChange | null;
+  target_device: {
+    device_id: string;
+    identity_public_key_b64: string;
+    active: boolean;
+  } | null;
 }
 
 export interface MlsControlEvent {

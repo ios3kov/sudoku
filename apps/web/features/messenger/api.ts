@@ -1,4 +1,4 @@
-import type { AssetSummary, ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsMembershipChange, MlsTransportEvent } from "./types";
+import type { AssetSummary, ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsMembershipChange, MlsTransportEvent, PendingMlsMembershipChange } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
@@ -140,6 +140,10 @@ export const messengerApi = {
     request<void>(`/v1/e2ee/membership-changes/${changeId}/finalize`, {
       method: "POST",
     }),
+  pendingMlsMembershipChange: (conversationId: string) =>
+    request<PendingMlsMembershipChange>(
+      `/v1/e2ee/conversations/${conversationId}/membership-changes/pending`,
+    ),
   markRead: (conversationId: string, sequence: number) => request<void>(`/v1/conversations/${conversationId}/read`, {
     method: "POST",
     headers: { "content-type": "application/json" },
