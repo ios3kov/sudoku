@@ -600,15 +600,24 @@ async def create_message(
                 status_code=409,
                 detail="Secure conversation setup is not active yet",
             )
-        pending_change_id = (
+        pending_change = (
             await db.execute(
-                select(ConversationMembershipChange.id).where(
+                select(
+                    ConversationMembershipChange.id,
+                    ConversationMembershipChange.kind,
+                ).where(
                     ConversationMembershipChange.conversation_id == conversation_id,
                     ConversationMembershipChange.status == "pending",
                 )
             )
-        ).scalar_one_or_none()
-        if pending_change_id is not None:
+        ).first()
+        if pending_change is not None:
+            pending_change_id, pending_change_kind = pending_change
+            if pending_change_kind in {"device_add", "device_remove"}:
+                raise HTTPException(
+                    status_code=409,
+                    detail="MLS device rekey is required before sending",
+                )
             delivery_started = (
                 await db.execute(
                     select(MlsControlEvent.id)

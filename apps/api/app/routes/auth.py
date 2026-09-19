@@ -10,6 +10,7 @@ from ..db import get_db
 from ..deps import AuthContext, get_auth_context
 from ..models import AuditEvent, Invite, LoginAttempt, MlsDevice, MlsKeyPackage, Session, User
 from ..rate_limit import enforce_ip_rate_limit, enforce_login_rate_limit, enforce_user_rate_limit
+from ..mls_lifecycle import schedule_mls_device_change
 from ..schemas import InviteAcceptRequest, InviteCreateRequest, InviteCreateResponse, LoginRequest, SessionResponse, UserResponse
 from ..security import (
     email_audit_hash,
@@ -64,6 +65,9 @@ async def _revoke_session_mls_device(
     ).scalar_one_or_none()
     if device is not None and device.revoked_at is None:
         device.revoked_at = revoked_at
+        await schedule_mls_device_change(
+            db, user_id, session_id, "device_remove"
+        )
     await db.execute(
         delete(MlsKeyPackage).where(
             MlsKeyPackage.user_id == user_id,
