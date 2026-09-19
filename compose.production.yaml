@@ -22,6 +22,7 @@ services:
       SESSION_COOKIE_NAME: sudoku_session
       SESSION_TTL_DAYS: "30"
       SECURE_COOKIES: "true"
+      REQUIRE_E2EE_NEW_CONVERSATIONS: "true"
       S3_BUCKET: ${S3_BUCKET:-sudoku-assets}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:?S3_ENDPOINT_URL is required}

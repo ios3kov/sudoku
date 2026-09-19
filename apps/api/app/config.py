@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     session_cookie_name: str = Field(default="sudoku_session", alias="SESSION_COOKIE_NAME")
     session_ttl_days: int = Field(default=30, ge=1, le=180, alias="SESSION_TTL_DAYS")
     secure_cookies: bool = Field(default=True, alias="SECURE_COOKIES")
+    require_e2ee_new_conversations: bool = Field(
+        default=False,
+        alias="REQUIRE_E2EE_NEW_CONVERSATIONS",
+    )
     s3_bucket: str = Field(alias="S3_BUCKET")
     s3_region: str = Field(default="auto", alias="S3_REGION")
     s3_endpoint_url: str | None = Field(default=None, alias="S3_ENDPOINT_URL")

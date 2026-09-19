@@ -98,6 +98,7 @@ jobs:
           docker compose -f compose.yaml -f compose.production.yaml config > /tmp/production-compose.yml
           grep -q 'PUBLIC_ORIGIN: https://sudoku.example.com' /tmp/production-compose.yml
           grep -q 'SECURE_COOKIES: "true"' /tmp/production-compose.yml
+          grep -q 'REQUIRE_E2EE_NEW_CONVERSATIONS: "true"' /tmp/production-compose.yml
           if grep -q 'PUBLIC_ORIGIN: http://localhost:8080' /tmp/production-compose.yml; then
             echo "local origin leaked into production config" >&2
             exit 1

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import get_settings
 from ..db import get_db
 from ..deps import AuthContext, get_auth_context
 from ..rate_limit import enforce_user_rate_limit
@@ -41,6 +42,7 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/v1", tags=["messaging"])
+settings = get_settings()
 
 
 def serialize_asset(asset: Asset) -> dict:
@@ -212,6 +214,11 @@ async def create_conversation(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "conversation-create", 20, 60)
+    if settings.require_e2ee_new_conversations and not payload.encryption_required:
+        raise HTTPException(
+            status_code=409,
+            detail="New conversations must use end-to-end encryption",
+        )
     member_ids = set(payload.member_ids)
     member_ids.discard(auth.user.id)
     if payload.type == "direct" and len(member_ids) != 1:
