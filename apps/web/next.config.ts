@@ -3,6 +3,16 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ["@sudoku/domain"],
+  async rewrites() {
+    const target = process.env.API_PROXY_TARGET?.replace(/\/$/, "");
+    if (!target) return [];
+    return [
+      {
+        source: "/v1/:path*",
+        destination: `${target}/v1/:path*`,
+      },
+    ];
+  },
   async headers() {
     return [
       {

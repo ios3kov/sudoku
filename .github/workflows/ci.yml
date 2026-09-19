@@ -80,6 +80,37 @@ jobs:
         run: npm --workspace @sudoku/web run typecheck
       - name: Web production build
         run: npm run build:web
+      - name: Install Chromium for browser acceptance
+        run: npx playwright install --with-deps chromium
+      - name: Seed browser acceptance users
+        env:
+          PYTHONPATH: apps/api
+        run: python tests/browser/seed_users.py
+      - name: Browser E2E acceptance
+        env:
+          API_PROXY_TARGET: http://127.0.0.1:8000
+        run: |
+          PUBLIC_ORIGIN=http://127.0.0.1:3000 SECURE_COOKIES=false PYTHONPATH=apps/api \
+            uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port 8000 >/tmp/sudoku-api-e2e.log 2>&1 &
+          API_PID=$!
+          API_PROXY_TARGET=http://127.0.0.1:8000 \
+            npm --workspace @sudoku/web run dev -- --hostname 127.0.0.1 --port 3000 >/tmp/sudoku-web-e2e.log 2>&1 &
+          WEB_PID=$!
+          cleanup() { kill "$WEB_PID" "$API_PID" 2>/dev/null || true; }
+          trap cleanup EXIT
+          python - <<'PY'
+          import time, urllib.request
+          for url in ("http://127.0.0.1:8000/v1/health/ready", "http://127.0.0.1:3000/"):
+              for _ in range(90):
+                  try:
+                      urllib.request.urlopen(url, timeout=2).read()
+                      break
+                  except Exception:
+                      time.sleep(1)
+              else:
+                  raise SystemExit(f"browser acceptance service did not start: {url}")
+          PY
+          npm --workspace @sudoku/web run test:browser
 
       - name: Validate production Compose merge
         env:

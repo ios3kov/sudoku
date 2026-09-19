@@ -9,4 +9,6 @@ __pycache__/
 .venv/
 .DS_Store
 coverage/
-.tools/\napps/web/generated/mls-wasm/\n
+.tools/
+apps/web/generated/mls-wasm/\nplaywright-report/
+test-results/
