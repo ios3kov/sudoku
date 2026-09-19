@@ -114,6 +114,7 @@ class AssetSummary(BaseModel):
     mime_type: str
     size_bytes: int
     filename: str
+    e2ee_ciphertext: bool
     status: str
     content_url: str
 
@@ -165,6 +166,11 @@ class UploadIntentRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
     mime_type: str = Field(min_length=1, max_length=160)
     size_bytes: int = Field(gt=0, le=25 * 1024 * 1024)
+    sha256_hex: str = Field(pattern="^[0-9a-fA-F]{64}$")
+
+
+class E2eeUploadIntentRequest(BaseModel):
+    size_bytes: int = Field(gt=16, le=25 * 1024 * 1024 + 16)
     sha256_hex: str = Field(pattern="^[0-9a-fA-F]{64}$")
 
 

@@ -176,6 +176,7 @@ class Asset(Base):
     mime_type: Mapped[str] = mapped_column(String(160), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    e2ee_ciphertext: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
