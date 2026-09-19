@@ -280,6 +280,11 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
               reconnectTick={reconnectTick}
               onBack={() => setSelectedId(null)}
               onHide={onHide}
+              onConversationUpdated={updateConversation}
+              onConversationLeft={() => {
+                setSelectedId(null);
+                void loadConversations();
+              }}
             />
           </section>
         </main>

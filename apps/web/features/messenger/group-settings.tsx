@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { messengerApi } from "./api";
 import type { Conversation, CurrentUser } from "./types";
+import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 
 interface DirectoryUser { id: string; display_name: string; email: string; }
 
@@ -12,12 +13,14 @@ export function GroupSettings({
   onUpdated,
   onLeft,
   onClose,
+  adapter = null,
 }: {
   conversation: Conversation;
   user: CurrentUser;
   onUpdated: (conversation: Conversation) => void;
   onLeft: () => void;
   onClose: () => void;
+  adapter?: OpenMlsProtocolAdapter | null;
 }) {
   const [title, setTitle] = useState(conversation.title ?? "");
   const [query, setQuery] = useState("");
@@ -63,9 +66,23 @@ export function GroupSettings({
   async function add(userId: string) {
     setBusy(true); setError(null);
     try {
-      const updated = await messengerApi.addGroupMembers(conversation.id, [userId]);
-      onUpdated(updated); setQuery(""); setDirectory([]);
-    } catch { setError("Unable to add member"); }
+      if (conversation.encryption_required) {
+        if (!adapter) throw new Error("Secure messaging is unavailable");
+        const change = await messengerApi.prepareMlsMemberAdd(conversation.id, userId);
+        await adapter.applyMembershipAdd(conversation, userId, change.id);
+        await messengerApi.finalizeMlsMembershipChange(change.id);
+        const refreshed = (await messengerApi.conversations()).find(
+          (item) => item.id === conversation.id,
+        );
+        if (!refreshed) throw new Error("Updated secure group is unavailable");
+        onUpdated(refreshed);
+      } else {
+        onUpdated(await messengerApi.addGroupMembers(conversation.id, [userId]));
+      }
+      setQuery(""); setDirectory([]);
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : "Unable to add member");
+    }
     finally { setBusy(false); }
   }
 
@@ -79,11 +96,30 @@ export function GroupSettings({
   async function remove(userId: string) {
     setBusy(true); setError(null);
     try {
-      await messengerApi.removeGroupMember(conversation.id, userId);
+      if (conversation.encryption_required) {
+        if (!adapter) throw new Error("Secure messaging is unavailable");
+        const change = await messengerApi.prepareMlsMemberRemove(conversation.id, userId);
+        await adapter.applyMembershipRemove(conversation, userId, change.id);
+        await messengerApi.finalizeMlsMembershipChange(change.id);
+      } else {
+        await messengerApi.removeGroupMember(conversation.id, userId);
+      }
       if (userId === user.id) { onLeft(); return; }
-      const next = { ...conversation, members: conversation.members.filter((member) => member.id !== userId) };
-      onUpdated(next);
-    } catch { setError(userId === user.id ? "Transfer ownership before leaving" : "Unable to remove member"); }
+      const refreshed = (await messengerApi.conversations()).find(
+        (item) => item.id === conversation.id,
+      );
+      if (refreshed) onUpdated(refreshed);
+      else onUpdated({
+        ...conversation,
+        members: conversation.members.filter((member) => member.id !== userId),
+      });
+    } catch (removeError) {
+      setError(
+        removeError instanceof Error
+          ? removeError.message
+          : (userId === user.id ? "Transfer ownership before leaving" : "Unable to remove member"),
+      );
+    }
     finally { setBusy(false); }
   }
 

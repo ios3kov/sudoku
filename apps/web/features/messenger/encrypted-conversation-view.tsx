@@ -16,6 +16,7 @@ import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 import { conversationTitle } from "./conversation-view";
 import { uploadEncryptedAsset } from "./uploads";
+import { GroupSettings } from "./group-settings";
 
 const MAX_VOICE_SECONDS = 5 * 60;
 
@@ -27,6 +28,8 @@ export function EncryptedConversationView({
   reconnectTick,
   onBack,
   onHide,
+  onConversationUpdated,
+  onConversationLeft,
 }: {
   conversation: Conversation;
   user: CurrentUser;
@@ -35,6 +38,8 @@ export function EncryptedConversationView({
   reconnectTick: number;
   onBack: () => void;
   onHide: () => void;
+  onConversationUpdated: (conversation: Conversation) => void;
+  onConversationLeft: () => void;
 }) {
   const [messages, setMessages] = useState<ProjectedEncryptedMessage[]>([]);
   const [body, setBody] = useState("");
@@ -49,6 +54,7 @@ export function EncryptedConversationView({
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [showGroupSettings, setShowGroupSettings] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -394,8 +400,26 @@ export function EncryptedConversationView({
             <span>End-to-end encrypted</span>
           </div>
         </div>
-        <button type="button" onClick={onHide}>Hide</button>
+        <div>
+          {conversation.type === "group" ? (
+            <button type="button" onClick={() => setShowGroupSettings((value) => !value)}>
+              Group
+            </button>
+          ) : null}
+          <button type="button" onClick={onHide}>Hide</button>
+        </div>
       </header>
+
+      {showGroupSettings ? (
+        <GroupSettings
+          conversation={conversation}
+          user={user}
+          adapter={adapter}
+          onUpdated={onConversationUpdated}
+          onLeft={onConversationLeft}
+          onClose={() => setShowGroupSettings(false)}
+        />
+      ) : null}
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {queuedCount > 0 ? (
