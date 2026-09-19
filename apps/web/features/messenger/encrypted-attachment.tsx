@@ -6,23 +6,25 @@ import type { EncryptedAttachmentMetadata } from "./types";
 import { downloadEncryptedAsset } from "./uploads";
 
 export function isEncryptedAttachmentMetadata(
-  value: Record<string, unknown>,
+  value: unknown,
 ): value is EncryptedAttachmentMetadata {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
   return (
-    value.version === 1
-    && value.algorithm === "AES-256-GCM"
-    && typeof value.assetId === "string"
-    && typeof value.keyB64 === "string"
-    && typeof value.nonceB64 === "string"
-    && typeof value.originalName === "string"
-    && typeof value.originalMime === "string"
-    && typeof value.plaintextSize === "number"
-    && Number.isSafeInteger(value.plaintextSize)
-    && value.plaintextSize >= 0
-    && typeof value.plaintextSha256Hex === "string"
-    && /^[0-9a-f]{64}$/i.test(value.plaintextSha256Hex)
-    && typeof value.ciphertextSha256Hex === "string"
-    && /^[0-9a-f]{64}$/i.test(value.ciphertextSha256Hex)
+    item.version === 1
+    && item.algorithm === "AES-256-GCM"
+    && typeof item.assetId === "string"
+    && typeof item.keyB64 === "string"
+    && typeof item.nonceB64 === "string"
+    && typeof item.originalName === "string"
+    && typeof item.originalMime === "string"
+    && typeof item.plaintextSize === "number"
+    && Number.isSafeInteger(item.plaintextSize)
+    && item.plaintextSize >= 0
+    && typeof item.plaintextSha256Hex === "string"
+    && /^[0-9a-f]{64}$/i.test(item.plaintextSha256Hex)
+    && typeof item.ciphertextSha256Hex === "string"
+    && /^[0-9a-f]{64}$/i.test(item.ciphertextSha256Hex)
   );
 }
 
