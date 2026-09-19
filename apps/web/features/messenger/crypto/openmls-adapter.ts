@@ -461,9 +461,15 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       let processed = 0;
 
       for (const event of events) {
+        const senderIdentity = await this.resolveControlSenderIdentity(event);
         const snapshot = this.snapshotRuntime();
         let durableMutation = false;
         try {
+          const expectedCredential = utf8(
+            "sudoku-v1:" + event.sender_user_id + ":" + event.sender_device_id,
+          );
+          const expectedPublicKey = base64ToBytes(senderIdentity.publicKeyB64);
+
           if (event.kind === "welcome") {
             const joined = utf8String(
               this.provider!.joinGroup(base64ToBytes(event.payload_b64)),
@@ -471,13 +477,33 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
             if (joined !== conversationId) {
               throw new Error("MLS Welcome group id does not match conversation");
             }
+            this.provider!.validateGroupMemberIdentity(
+              utf8(conversationId),
+              expectedCredential,
+              expectedPublicKey,
+            );
           } else if (event.kind === "commit") {
+            this.provider!.validateGroupMemberIdentity(
+              utf8(conversationId),
+              expectedCredential,
+              expectedPublicKey,
+            );
             this.provider!.processHandshake(
               utf8(conversationId),
               base64ToBytes(event.payload_b64),
             );
           } else {
             throw new Error("Unsupported MLS control event");
+          }
+
+          if (!senderIdentity.existingPin) {
+            this.localState!.peerIdentityPins[senderIdentity.pinKey] = {
+              userId: event.sender_user_id,
+              deviceId: event.sender_device_id,
+              publicKeyB64: senderIdentity.publicKeyB64,
+              firstSeenAt: Date.now(),
+              verifiedAt: null,
+            };
           }
 
           this.localState!.pendingAckEventIds = uniqueIds([
@@ -496,6 +522,32 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
       return processed;
     });
+  }
+
+  private async resolveControlSenderIdentity(event: MlsControlEvent): Promise<{
+    pinKey: string;
+    publicKeyB64: string;
+    existingPin: PeerIdentityPin | null;
+  }> {
+    const pinKey = this.peerPinKey(event.sender_user_id, event.sender_device_id);
+    const existingPin = this.localState!.peerIdentityPins[pinKey] ?? null;
+    if (existingPin) {
+      return {
+        pinKey,
+        publicKeyB64: existingPin.publicKeyB64,
+        existingPin,
+      };
+    }
+
+    const devices = await messengerApi.mlsDevices(event.sender_user_id);
+    const device = devices.find((item) => item.device_id === event.sender_device_id);
+    if (!device) throw new Error("MLS control sender device is unavailable");
+
+    return {
+      pinKey,
+      publicKeyB64: device.identity_public_key_b64,
+      existingPin: null,
+    };
   }
 
   async safetyNumber(peerUserId: string, peerDeviceId: string): Promise<string> {

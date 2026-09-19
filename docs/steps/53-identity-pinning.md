@@ -32,3 +32,15 @@ Both endpoints compute the same value only when they hold the same view of the t
 
 ## Production status
 Identity changes are now fail-closed and KeyPackages are bound to pinned device identities. UI activation remains blocked pending encrypted attachments/events and browser end-to-end retry tests.
+
+## Incoming Welcome/Commit authentication
+
+Control-event senders are also authenticated against MLS group state before ACK.
+
+- If the sender device is already pinned, the local pin is authoritative and no server-provided replacement key is accepted.
+- If it is a first contact, the browser discovers the sender public key, then verifies the corresponding MLS group member credential/signature key.
+- Welcome is verified after join, because the sender becomes visible in the newly joined group.
+- Commit is verified against the current group before processing, so even a commit that changes membership cannot substitute the author identity.
+- A first-contact sender pin is persisted in the same durable state transaction as the processed control event, before ACK.
+
+This makes safety-number verification symmetric for both group creators and Welcome joiners.
