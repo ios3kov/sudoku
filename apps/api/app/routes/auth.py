@@ -85,8 +85,18 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
 
 @router.post("/auth/refresh", status_code=204)
 async def refresh_session(response: Response, auth: AuthContext = Depends(get_auth_context), db: AsyncSession = Depends(get_db)):
-    auth.session.revoked_at = datetime.now(UTC)
-    replacement, raw_token = await _new_session(db, auth.user, auth.session.device_name)
+    # Serialize rotation of the same session. The dependency proves the cookie was
+    # valid at request start; the row lock + recheck prevents concurrent refreshes
+    # from minting multiple replacement sessions.
+    current = (
+        await db.execute(select(Session).where(Session.id == auth.session.id).with_for_update())
+    ).scalar_one_or_none()
+    now = datetime.now(UTC)
+    if current is None or current.revoked_at is not None or current.expires_at <= now:
+        _clear_session_cookie(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    current.revoked_at = now
+    replacement, raw_token = await _new_session(db, auth.user, current.device_name)
     db.add(AuditEvent(actor_user_id=auth.user.id, event_type="auth.session_rotated", target_type="session", target_id=replacement.id))
     await db.commit()
     _set_session_cookie(response, raw_token)
