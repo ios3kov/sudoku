@@ -1,68 +1,31 @@
 # Architecture Decisions
 
 ## ADR-001 — Hidden Sudoku is not a security boundary
+The gesture changes presentation only; server authorization remains mandatory.
 
-**Decision:** The secret gesture only changes the visible client surface. Every messenger API and WebSocket action requires normal authenticated authorization.
+## ADR-002 — PostgreSQL authoritative, Redis ephemeral
+Messages, membership, sessions and audit history are durable in PostgreSQL.
 
-**Why:** Obscurity is useful for privacy of presentation, but it is not access control.
+## ADR-003 — Opaque revocable sessions
+Browser auth uses Secure HttpOnly opaque tokens stored hashed server-side.
 
-## ADR-002 — Celery + Redis instead of Temporal
+## ADR-004 — Transactional outbox
+Durable mutation and outbound event commit atomically.
 
-**Decision:** Use Celery + Redis for background work.
+## ADR-005 — Generic push
+Push never includes sender, conversation or message content.
 
-**Why:** Messaging jobs are comparatively short-lived (push, thumbnails, media inspection, cleanup). Temporal would add operational weight without enough MVP benefit.
+## ADR-006 — E2EE is a production blocker
+Production must not rely on trusting the hosting provider with message/attachment plaintext. Direct messaging uses a reviewed asynchronous ratcheting protocol; groups use a reviewed group protocol such as MLS. No custom cryptographic protocol.
 
-## ADR-003 — Opaque server sessions, not long-lived JWTs
+## ADR-007 — Official libsignal is not assumed browser-ready
+Official libsignal is valuable protocol/reference material but its published TypeScript path uses native Node bindings, external use is unsupported, APIs may change, and AGPL licensing requires deliberate review. A browser-compatible audited implementation must be selected/validated before coding.
 
-**Decision:** Browser authentication will use secure HttpOnly session cookies backed by revocable server-side session records.
+## ADR-008 — Ciphertext-only attachments
+Files are encrypted client-side before S3-compatible upload. Storage/provider sees ciphertext, size/timing metadata and object identifiers, not plaintext bytes.
 
-**Why:** Device revocation and compromised-session invalidation are first-class requirements.
+## ADR-009 — Server plaintext search is incompatible with E2EE
+Current server-side content search is disabled/removed for E2EE conversations. Any future content search is local-device search over decrypted local state.
 
-## ADR-004 — PostgreSQL authoritative, Redis ephemeral
-
-Redis must never be the only copy of a message, membership, or receipt.
-
-## ADR-005 — Transactional outbox
-
-A message row and its outbound event are committed in one database transaction. Workers publish committed outbox records to realtime/push systems.
-
-## ADR-006 — Generic notification content
-
-Push payloads shown to users contain only Sudoku-themed generic text and never sender names or message content.
-
-## ADR-007 — E2EE is an MVP-hardening milestone, not home-grown crypto
-
-The data model will be encryption-version aware from the start. A proven protocol/library must be selected before production E2EE is enabled. No custom cryptographic protocol will be invented.
-
-## ADR-008 — One real Sudoku level in MVP
-
-The shell contains a fully playable 9x9 puzzle with notes, conflict validation, persistence, reset, and completion state. A fake static Sudoku screen is explicitly rejected.
-
-
-## ADR-009 — Invite issuance is administrative
-
-Only administrators may create/revoke invite codes. The raw token is returned once and only its digest is persisted. First-admin creation is a deliberate bootstrap operation, not an open registration path.
-
-## ADR-010 — WebSocket Origin is a security boundary
-
-Cookie-authenticated WebSockets accept only the exact configured public origin. Browser ambient cookies must not make a cross-site WebSocket connection authoritative.
-
-## ADR-011 — Push endpoints use an explicit provider allowlist
-
-User-supplied Push API endpoints are outbound-request destinations. Production defaults therefore allow only configured HTTPS push-service hostname suffixes, with infrastructure egress policy expected to mirror the same list.
-
-## ADR-012 — Orphan assets are bounded
-
-Uploads that fail validation are deleted immediately when possible; stale pending/rejected and unattached ready objects are removed periodically. Object storage is not allowed to grow indefinitely from abandoned uploads.
-
-## ADR-013 — OTLP observability with privacy-safe cardinality
-
-OpenTelemetry is the common telemetry layer for API and workers, exported over OTLP/HTTP when a collector is configured. Logs remain structured JSON. Message content, credentials and private identifiers are excluded from observability payloads, and metrics use bounded attributes only. Celery telemetry initializes after worker fork because batch exporters use background threads.
-
-## ADR-014 — Conversation-local group ownership
-
-Group administration is controlled by `conversation_members.role`, not by global application admin status. Multiple owners are allowed, but at least one owner must remain. This keeps invitation/system administration separate from private-group authority.
-
-## ADR-015 — Removed members receive a durable removal event
-
-Transactional outbox events may carry reserved server-only extra-recipient metadata. The dispatcher unions those recipients with current membership and strips the reserved field before fan-out. This lets a removed member learn that access was revoked without making Redis the durable source of truth.
+## ADR-010 — Production starts E2EE-only
+Existing development plaintext data is not treated as private production history. New production conversations require E2EE protocol state from creation.
