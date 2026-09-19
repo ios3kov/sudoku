@@ -1,10 +1,8 @@
 name: ci
-
 on:
   push:
     branches: [main]
   pull_request:
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,27 +10,15 @@ jobs:
     services:
       postgres:
         image: postgres:17-alpine
-        env:
-          POSTGRES_DB: sudoku
-          POSTGRES_USER: sudoku
-          POSTGRES_PASSWORD: sudoku-ci
-        ports:
-          - 5432:5432
+        env: { POSTGRES_DB: sudoku, POSTGRES_USER: sudoku, POSTGRES_PASSWORD: sudoku-ci }
+        ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U sudoku -d sudoku"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
+          --health-cmd "pg_isready -U sudoku -d sudoku" --health-interval 5s --health-timeout 3s --health-retries 20
       redis:
         image: redis:7.4-alpine
-        ports:
-          - 6379:6379
+        ports: ["6379:6379"]
         options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
     env:
       DATABASE_URL: postgresql+asyncpg://sudoku:sudoku-ci@127.0.0.1:5432/sudoku
       REDIS_URL: redis://127.0.0.1:6379/0
@@ -47,62 +33,39 @@ jobs:
       S3_ACCESS_KEY_ID: sudoku-ci
       S3_SECRET_ACCESS_KEY: sudoku-ci-secret
       WEB_PUSH_ALLOWED_HOSTS: push.apple.com,fcm.googleapis.com,push.services.mozilla.com
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-
+        with: { python-version: "3.13", cache: pip }
       - name: Install API + tests
         run: python -m pip install -e "./apps/api[test]"
-
       - name: Start S3 test service
         run: |
           moto_server -H 127.0.0.1 -p 9000 >/tmp/moto-s3.log 2>&1 &
           python - <<'PY'
           import time, boto3
-          s3 = boto3.client(
-              "s3",
-              endpoint_url="http://127.0.0.1:9000",
-              region_name="us-east-1",
-              aws_access_key_id="sudoku-ci",
-              aws_secret_access_key="sudoku-ci-secret",
-          )
+          s3=boto3.client("s3",endpoint_url="http://127.0.0.1:9000",region_name="us-east-1",aws_access_key_id="sudoku-ci",aws_secret_access_key="sudoku-ci-secret")
           for _ in range(60):
-              try:
-                  s3.list_buckets()
-                  break
-              except Exception:
-                  time.sleep(1)
-          else:
-              raise SystemExit("S3 test service did not start")
+              try: s3.list_buckets(); break
+              except Exception: time.sleep(1)
+          else: raise SystemExit("S3 test service did not start")
           s3.create_bucket(Bucket="sudoku-assets")
           PY
-
       - name: Migrate database
         working-directory: apps/api
         run: alembic upgrade head
-
       - name: API integration tests
-        env:
-          PYTHONPATH: apps/api
+        env: { PYTHONPATH: apps/api }
         run: pytest -q tests/api
-
       - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
+        with: { node-version: "22" }
       - name: Install web dependencies
         run: npm install --no-audit --no-fund
-
       - name: Domain tests
         run: npm run test:domain
-
+      - name: Build domain declarations
+        run: npm --workspace @sudoku/domain run build
       - name: Web typecheck
         run: npm --workspace @sudoku/web run typecheck
-
       - name: Web production build
         run: npm run build:web
