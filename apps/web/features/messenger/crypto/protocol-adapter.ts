@@ -40,6 +40,8 @@ export interface ProtocolAdapter {
 
   processHandshake(conversationId: string, message: E2eeEnvelope): Promise<void>;
 
+  syncControlEvents?(conversationId: string): Promise<number>;
+
   encrypt(input: OutboundPlaintext): Promise<E2eeEnvelope>;
 
   decrypt(
