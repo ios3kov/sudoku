@@ -3,10 +3,18 @@ FROM rust:1.91-bookworm AS mls-build
 WORKDIR /src
 COPY packages/mls-wasm ./packages/mls-wasm
 RUN rustup target add wasm32-unknown-unknown \
-    && cargo build --manifest-path packages/mls-wasm/Cargo.toml --target wasm32-unknown-unknown --release --locked \
-    && cargo install wasm-bindgen-cli --version 0.2.105 --locked
-RUN mkdir -p /out \
-    && wasm-bindgen \
+    && cargo build --manifest-path packages/mls-wasm/Cargo.toml --target wasm32-unknown-unknown --release --locked
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fL \
+      https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.105/wasm-bindgen-0.2.105-x86_64-unknown-linux-musl.tar.gz \
+      -o /tmp/wasm-bindgen.tar.gz \
+    && echo "b391448c4926ac4b11425a6752484d85164e72489d97804461d5e868c643b88a  /tmp/wasm-bindgen.tar.gz" | sha256sum -c - \
+    && mkdir -p /tmp/wasm-bindgen \
+    && tar -xzf /tmp/wasm-bindgen.tar.gz -C /tmp/wasm-bindgen --strip-components=1 \
+    && mkdir -p /out \
+    && /tmp/wasm-bindgen/wasm-bindgen \
       packages/mls-wasm/target/wasm32-unknown-unknown/release/sudoku_mls_wasm.wasm \
       --target web \
       --typescript \
