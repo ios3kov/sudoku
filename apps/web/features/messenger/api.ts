@@ -1,4 +1,4 @@
-import type { ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsTransportEvent } from "./types";
+import type { AssetSummary, ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsTransportEvent } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
@@ -19,6 +19,7 @@ export const messengerApi = {
     body: JSON.stringify({ email, expires_hours: 168, max_uses: 1 }),
   }),
   conversations: () => request<Conversation[]>("/v1/conversations"),
+  asset: (assetId: string) => request<AssetSummary>(`/v1/assets/${assetId}`),
   messages: (conversationId: string, options?: { before?: number; after?: number; limit?: number }) => {
     const params = new URLSearchParams();
     if (options?.before !== undefined) params.set("before", String(options.before));

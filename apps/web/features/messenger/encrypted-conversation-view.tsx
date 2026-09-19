@@ -2,6 +2,7 @@
 
 import type { ProjectedEncryptedMessage } from "@sudoku/domain";
 import {
+  ChangeEvent,
   FormEvent,
   useCallback,
   useEffect,
@@ -10,9 +11,13 @@ import {
   useState,
 } from "react";
 import { messengerApi } from "./api";
+import { EncryptedAttachment, isEncryptedAttachmentMetadata } from "./encrypted-attachment";
 import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 import { conversationTitle } from "./conversation-view";
+import { uploadEncryptedAsset } from "./uploads";
+
+const MAX_VOICE_SECONDS = 5 * 60;
 
 export function EncryptedConversationView({
   conversation,
@@ -41,7 +46,16 @@ export function EncryptedConversationView({
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionMessageId, setActionMessageId] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<number | null>(null);
+  const recordStopTimerRef = useRef<number | null>(null);
   const lastEventRef = useRef<RealtimeEvent | null>(null);
 
   const refreshProjection = useCallback(async () => {
@@ -109,6 +123,19 @@ export function EncryptedConversationView({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, queuedCount]);
 
+  useEffect(() => () => {
+    if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
+    if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      recorder.onerror = null;
+      recorder.stop();
+    }
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
   const replyingTo = useMemo(
     () => messages.find((message) => message.id === replyingToId) ?? null,
     [messages, replyingToId],
@@ -156,6 +183,154 @@ export function EncryptedConversationView({
       setBusy(false);
     }
   }
+
+
+  async function attach(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || busy || syncBlocked) return;
+    setError(null);
+    if (!navigator.onLine) {
+      setError("Encrypted attachments require a connection");
+      return;
+    }
+
+    setBusy(true);
+    setUploadProgress(0);
+    try {
+      const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
+      const messageType = file.type.startsWith("image/") ? "image" : "file";
+      await adapter.sendMessageDurably({
+        conversationId: conversation.id,
+        messageType,
+        body: null,
+        replyTo: replyingTo?.id ?? null,
+        assetIds: [uploaded.asset.id],
+        attachments: [uploaded.metadata],
+      });
+      setReplyingToId(null);
+      await refreshProjection();
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Encrypted attachment failed",
+      );
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+    } finally {
+      setUploadProgress(null);
+      setBusy(false);
+    }
+  }
+
+  async function toggleRecording() {
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    if (busy || syncBlocked) return;
+    setError(null);
+    if (!navigator.onLine) {
+      setError("Encrypted voice notes require a connection");
+      return;
+    }
+    if (!("MediaRecorder" in window) || !navigator.mediaDevices?.getUserMedia) {
+      setError("Voice recording is not supported on this device");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeCandidates = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+      const supportedMime = mimeCandidates.find((mime) => MediaRecorder.isTypeSupported(mime));
+      const recorder = supportedMime
+        ? new MediaRecorder(stream, { mimeType: supportedMime })
+        : new MediaRecorder(stream);
+      const baseMime = (recorder.mimeType || supportedMime || "").split(";", 1)[0];
+      if (!baseMime || !["audio/mp4", "audio/webm"].includes(baseMime)) {
+        stream.getTracks().forEach((track) => track.stop());
+        setError("This browser records an unsupported audio format");
+        return;
+      }
+
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      recordChunksRef.current = [];
+      setRecordSeconds(0);
+      setRecording(true);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordChunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setError("Voice recording failed");
+        stopRecorderResources();
+        setRecording(false);
+      };
+      recorder.onstop = () => {
+        const chunks = [...recordChunksRef.current];
+        stopRecorderResources();
+        setRecording(false);
+        if (chunks.length > 0) void uploadVoice(chunks, baseMime);
+      };
+      recorder.start(250);
+      recordTimerRef.current = window.setInterval(
+        () => setRecordSeconds((seconds) => seconds + 1),
+        1000,
+      );
+      recordStopTimerRef.current = window.setTimeout(
+        () => recorder.stop(),
+        MAX_VOICE_SECONDS * 1000,
+      );
+    } catch {
+      stopRecorderResources();
+      setRecording(false);
+      setError("Microphone permission is required for voice notes");
+    }
+  }
+
+  async function uploadVoice(chunks: Blob[], mimeType: string) {
+    setBusy(true);
+    setUploadProgress(0);
+    try {
+      const extension = mimeType === "audio/mp4" ? "m4a" : "webm";
+      const file = new File(chunks, `voice-${Date.now()}.${extension}`, {
+        type: mimeType,
+      });
+      const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
+      await adapter.sendMessageDurably({
+        conversationId: conversation.id,
+        messageType: "voice",
+        body: null,
+        replyTo: replyingTo?.id ?? null,
+        assetIds: [uploaded.asset.id],
+        attachments: [uploaded.metadata],
+      });
+      setReplyingToId(null);
+      await refreshProjection();
+    } catch (voiceError) {
+      setError(
+        voiceError instanceof Error
+          ? voiceError.message
+          : "Encrypted voice note failed",
+      );
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+    } finally {
+      setUploadProgress(null);
+      setBusy(false);
+    }
+  }
+
+  function stopRecorderResources() {
+    if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
+    if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
+    recordTimerRef.current = null;
+    recordStopTimerRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    mediaRecorderRef.current = null;
+  }
+
 
   async function toggleReaction(message: ProjectedEncryptedMessage, emoji: string) {
     if (busy || syncBlocked || message.deleted) return;
@@ -253,8 +428,30 @@ export function EncryptedConversationView({
                   {message.deleted ? <p>Message deleted</p> : (
                     <>
                       {message.body ? <p>{message.body}</p> : null}
-                      {message.assetIds.length > 0 ? (
-                        <small>Encrypted attachment · {message.assetIds.length}</small>
+                      {message.attachments.length > 0 ? (
+                        <div className="encrypted-attachments">
+                          {message.attachments.map((raw, index) => {
+                            const metadata = isEncryptedAttachmentMetadata(raw) ? raw : null;
+                            if (
+                              !metadata
+                              || metadata.assetId !== message.assetIds[index]
+                              || !["image", "file", "voice"].includes(message.messageType)
+                            ) {
+                              return (
+                                <div className="file-attachment" key={`invalid-${index}`}>
+                                  <strong>Encrypted attachment unavailable</strong>
+                                </div>
+                              );
+                            }
+                            return (
+                              <EncryptedAttachment
+                                key={metadata.assetId}
+                                metadata={metadata}
+                                messageType={message.messageType as "image" | "file" | "voice"}
+                              />
+                            );
+                          })}
+                        </div>
                       ) : null}
                     </>
                   )}
@@ -334,15 +531,39 @@ export function EncryptedConversationView({
       ) : null}
 
       <form className="composer" onSubmit={submit}>
+        <input
+          ref={fileInputRef}
+          className="hidden-file-input"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,audio/mpeg,audio/mp4,audio/webm,video/mp4,video/webm"
+          onChange={(event) => void attach(event)}
+        />
+        <button
+          type="button"
+          className="attach-button"
+          aria-label="Attach encrypted file"
+          disabled={busy || syncBlocked || recording || uploadProgress !== null}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploadProgress === null ? "+" : `${uploadProgress}%`}
+        </button>
         <textarea
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={1}
           maxLength={20000}
-          placeholder={editing ? "Edit encrypted message" : "Message"}
-          disabled={busy || syncBlocked}
+          placeholder={recording ? `Recording ${formatDuration(recordSeconds)}` : editing ? "Edit encrypted message" : "Message"}
+          disabled={busy || syncBlocked || recording}
         />
-        <button type="submit" disabled={!body.trim() || busy || syncBlocked}>
+        <button
+          type="button"
+          className={`voice-button ${recording ? "recording" : ""}`}
+          onClick={() => void toggleRecording()}
+          disabled={busy || syncBlocked || uploadProgress !== null}
+        >
+          {recording ? "Stop" : "Mic"}
+        </button>
+        <button type="submit" disabled={!body.trim() || busy || syncBlocked || recording || uploadProgress !== null}>
           {busy ? "…" : editing ? "Save" : "Send"}
         </button>
       </form>
@@ -371,4 +592,11 @@ function encryptedReadReceipt(
   if (readCount === 0) return null;
   if (conversation.type === "direct") return "Read";
   return `${readCount} read`;
+}
+
+
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
