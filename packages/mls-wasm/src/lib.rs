@@ -128,33 +128,38 @@ impl Provider {
 
     #[wasm_bindgen(js_name = validateKeyPackage)]
     pub fn validate_key_package(&self, bytes: &[u8]) -> Result<Vec<u8>, JsError> {
-        if bytes.is_empty() || bytes.len() > MAX_KEY_PACKAGE_BYTES {
-            return Err(JsError::new("Invalid MLS KeyPackage size"));
-        }
-
-        let mut input = bytes;
-        let key_package_in = KeyPackageIn::tls_deserialize(&mut input)
-            .map_err(|_| JsError::new("Malformed MLS KeyPackage"))?;
-        if !input.is_empty() {
-            return Err(JsError::new("MLS KeyPackage contains trailing bytes"));
-        }
-
-        let key_package = key_package_in
-            .validate(self.crypto(), ProtocolVersion::Mls10)
-            .map_err(|_| JsError::new("Invalid MLS KeyPackage"))?;
-
-        if key_package.ciphersuite() != CIPHERSUITE {
-            return Err(JsError::new("Unsupported MLS KeyPackage ciphersuite"));
-        }
-
-        key_package
-            .tls_serialize_detached()
-            .map_err(|_| JsError::new("Failed to serialize validated MLS KeyPackage"))
+        self.validate_key_package_inner(bytes)
+            .map_err(|message| JsError::new(&message))
     }
 
     #[wasm_bindgen(js_name = exportState)]
     pub fn export_state(&self) -> Result<Vec<u8>, JsError> {
         encode_storage(&self.storage).map_err(|message| JsError::new(&message))
+    }
+
+    fn validate_key_package_inner(&self, bytes: &[u8]) -> Result<Vec<u8>, String> {
+        if bytes.is_empty() || bytes.len() > MAX_KEY_PACKAGE_BYTES {
+            return Err("Invalid MLS KeyPackage size".to_owned());
+        }
+
+        let mut input = bytes;
+        let key_package_in = KeyPackageIn::tls_deserialize(&mut input)
+            .map_err(|_| "Malformed MLS KeyPackage".to_owned())?;
+        if !input.is_empty() {
+            return Err("MLS KeyPackage contains trailing bytes".to_owned());
+        }
+
+        let key_package = key_package_in
+            .validate(self.crypto(), ProtocolVersion::Mls10)
+            .map_err(|_| "Invalid MLS KeyPackage".to_owned())?;
+
+        if key_package.ciphersuite() != CIPHERSUITE {
+            return Err("Unsupported MLS KeyPackage ciphersuite".to_owned());
+        }
+
+        key_package
+            .tls_serialize_detached()
+            .map_err(|_| "Failed to serialize validated MLS KeyPackage".to_owned())
     }
 
     fn load_signer(&self, identity: &DeviceIdentity) -> Result<SignatureKeyPair, JsError> {
@@ -397,11 +402,11 @@ mod tests {
         let validator = Provider::default();
         assert_eq!(
             validator
-                .validate_key_package(&first)
+                .validate_key_package_inner(&first)
                 .expect("validate first package"),
             first
         );
-        assert!(validator.validate_key_package(b"invalid").is_err());
+        assert!(validator.validate_key_package_inner(b"invalid").is_err());
     }
 
     #[test]
