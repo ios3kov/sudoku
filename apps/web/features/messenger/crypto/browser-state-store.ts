@@ -53,7 +53,8 @@ export class BrowserProtocolStateStore {
     try {
       const key = await getWrappingKey(db);
       const iv = crypto.getRandomValues(new Uint8Array(12));
-      const plaintext = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+      const plaintext = new Uint8Array(value.byteLength);
+      plaintext.set(value);
       const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
       const tx = db.transaction(STATE_STORE, "readwrite");
       await transactionRequest(tx.objectStore(STATE_STORE).put(
