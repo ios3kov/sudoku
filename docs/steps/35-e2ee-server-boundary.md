@@ -9,22 +9,19 @@ Make the API capable of ciphertext-only conversations before client cryptography
 - Versioned JSON ciphertext envelope on messages.
 - Public per-device identity/signed-prekey/one-time-prekey registry; private keys are never accepted.
 - E2EE message creation rejects plaintext `body` and requires an envelope.
-- Legacy conversations reject an E2EE envelope to avoid ambiguous mixed state.
-- Message serialization returns envelope while plaintext body remains null.
+- Legacy conversations reject an E2EE envelope.
 - Server-side content search returns 409 for E2EE conversations.
 - Device key bundles can be revoked.
 
-## Integration invariants
-The test creates an E2EE conversation and verifies:
-1. plaintext send returns 422;
-2. envelope send succeeds;
-3. API response contains no plaintext body;
-4. PostgreSQL `body_text` is null;
-5. PostgreSQL stores only the opaque envelope;
-6. server search is unavailable.
+## First CI finding
+The initial commit contained a generated-source defect: an automated string patch inserted a literal `\\n` into `models.py`, so Python failed to parse before Alembic could run. The E2EE migration itself had not executed.
 
-## Compatibility
-Existing development conversations remain legacy/plaintext during migration. Production remains blocked until creation is forced E2EE-only and the client protocol adapter/encrypted attachments are complete.
+## Fix
+- Replaced the literal escape with a real newline.
+- CI now runs `python -m compileall -q app alembic` before migrations so source-generation/syntax defects fail immediately.
+
+## Integration invariants
+Plaintext send must return 422; ciphertext envelope succeeds; API/DB plaintext body remains null; server search is unavailable.
 
 ## Next
-Run full CI, fix schema/message integration defects, then implement one-time-prekey atomic consumption and browser protocol adapter evaluation.
+Repeat full CI through migration/integration before proceeding to atomic one-time-prekey consumption.
