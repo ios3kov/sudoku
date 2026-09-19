@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 import boto3
+from botocore.config import Config
 
 from .config import get_settings
 
@@ -11,6 +12,7 @@ def _make_client(endpoint_url: str | None):
         "service_name": "s3",
         "region_name": settings.s3_region,
         "endpoint_url": endpoint_url,
+        "config": Config(signature_version="s3v4"),
     }
     if settings.s3_access_key_id and settings.s3_secret_access_key:
         kwargs["aws_access_key_id"] = settings.s3_access_key_id
