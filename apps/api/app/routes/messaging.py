@@ -46,6 +46,7 @@ def serialize_asset(asset: Asset) -> dict:
         "mime_type": asset.mime_type,
         "size_bytes": asset.size_bytes,
         "filename": asset.filename,
+        "e2ee_ciphertext": asset.e2ee_ciphertext,
         "status": asset.status,
         "content_url": f"/v1/assets/{asset.id}/content",
     }
@@ -581,10 +582,22 @@ async def create_message(
         ).scalars().all()
         if {asset.id for asset in assets} != set(unique_asset_ids):
             raise HTTPException(status_code=422, detail="One or more assets are unavailable")
-        if payload.type == "image" and any(not asset.mime_type.startswith("image/") for asset in assets):
-            raise HTTPException(status_code=422, detail="Image message contains a non-image asset")
-        if payload.type == "voice" and (len(assets) != 1 or not assets[0].mime_type.startswith("audio/")):
-            raise HTTPException(status_code=422, detail="Voice message requires exactly one audio asset")
+        if conversation_for_policy.encryption_required:
+            if any(not asset.e2ee_ciphertext for asset in assets):
+                raise HTTPException(
+                    status_code=422,
+                    detail="E2EE conversations require ciphertext-only assets",
+                )
+        else:
+            if any(asset.e2ee_ciphertext for asset in assets):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Ciphertext assets require an E2EE conversation",
+                )
+            if payload.type == "image" and any(not asset.mime_type.startswith("image/") for asset in assets):
+                raise HTTPException(status_code=422, detail="Image message contains a non-image asset")
+            if payload.type == "voice" and (len(assets) != 1 or not assets[0].mime_type.startswith("audio/")):
+                raise HTTPException(status_code=422, detail="Voice message requires exactly one audio asset")
 
     existing = (
         await db.execute(select(Message).where(Message.sender_id == auth.user.id, Message.client_id == payload.client_id))
