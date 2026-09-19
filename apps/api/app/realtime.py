@@ -23,7 +23,7 @@ _parsed_origin = urlparse(settings.public_origin)
 EXPECTED_ORIGIN = f"{_parsed_origin.scheme}://{_parsed_origin.netloc}"
 
 
-async def authenticate_websocket(websocket: WebSocket) -> User | None:
+async def authenticate_websocket(websocket: WebSocket) -> tuple[User, uuid.UUID] | None:
     token = websocket.cookies.get(settings.session_cookie_name)
     if not token:
         return None
@@ -40,7 +40,25 @@ async def authenticate_websocket(websocket: WebSocket) -> User | None:
                 )
             )
         ).first()
-        return row[1] if row else None
+        return (row[1], row[0].id) if row else None
+
+
+async def session_still_valid(session_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    async with SessionFactory() as db:
+        value = (
+            await db.execute(
+                select(Session.id)
+                .join(User, User.id == Session.user_id)
+                .where(
+                    Session.id == session_id,
+                    Session.user_id == user_id,
+                    Session.revoked_at.is_(None),
+                    Session.expires_at > datetime.now(UTC),
+                    User.status == "active",
+                )
+            )
+        ).scalar_one_or_none()
+        return value is not None
 
 
 async def publish_typing(user: User, conversation_id: uuid.UUID, event_type: str) -> bool:
@@ -63,15 +81,7 @@ async def publish_typing(user: User, conversation_id: uuid.UUID, event_type: str
                 )
             )
         ).scalars().all()
-
-    envelope = json.dumps(
-        {
-            "type": event_type,
-            "conversation_id": str(conversation_id),
-            "payload": {"user_id": str(user.id)},
-        },
-        separators=(",", ":"),
-    )
+    envelope=json.dumps({"type":event_type,"conversation_id":str(conversation_id),"payload":{"user_id":str(user.id)}},separators=(",",":"))
     for recipient in recipients:
         await redis.publish(f"rt:user:{recipient}", envelope)
     return True
@@ -79,61 +89,44 @@ async def publish_typing(user: User, conversation_id: uuid.UUID, event_type: str
 
 @router.websocket("/v1/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    # Browser WebSockets carry ambient cookies, so Origin validation is required
-    # to prevent cross-site WebSocket hijacking. This app is browser/PWA-only.
     if websocket.headers.get("origin") != EXPECTED_ORIGIN:
-        await websocket.close(code=4403)
-        return
-
-    user = await authenticate_websocket(websocket)
-    if user is None:
-        await websocket.close(code=4401)
-        return
-
+        await websocket.close(code=4403); return
+    authenticated = await authenticate_websocket(websocket)
+    if authenticated is None:
+        await websocket.close(code=4401); return
+    user, session_id = authenticated
     await websocket.accept()
     websocket_connection_delta(1)
-    pubsub = redis.pubsub()
-    channel = f"rt:user:{user.id}"
-    presence_key = f"presence:user:{user.id}"
-    await pubsub.subscribe(channel)
-    await redis.set(presence_key, "1", ex=70)
+    pubsub=redis.pubsub(); channel=f"rt:user:{user.id}"
+    connection_id=uuid.uuid4().hex
+    presence_key=f"presence:user:{user.id}:{connection_id}"
+    await pubsub.subscribe(channel); await redis.set(presence_key,"1",ex=70)
 
-    async def forward_events() -> None:
+    async def forward_events():
         async for event in pubsub.listen():
-            if event.get("type") != "message":
-                continue
-            await websocket.send_text(str(event["data"]))
-
-    forward_task = asyncio.create_task(forward_events())
-    typing_events: deque[float] = deque()
+            if event.get("type")=="message": await websocket.send_text(str(event["data"]))
+    forward_task=asyncio.create_task(forward_events()); typing_events:deque[float]=deque()
     try:
         while True:
-            raw = await websocket.receive_text()
-            try:
-                payload = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            if payload.get("type") == "ping":
-                await redis.set(presence_key, "1", ex=70)
-                await websocket.send_json({"type": "pong"})
-                continue
-            if payload.get("type") in {"typing.started", "typing.stopped"}:
-                now = time.monotonic()
-                while typing_events and now - typing_events[0] > 5.0:
-                    typing_events.popleft()
-                if len(typing_events) >= 20:
-                    continue
+            raw=await websocket.receive_text()
+            try: payload=json.loads(raw)
+            except json.JSONDecodeError: continue
+            if payload.get("type")=="ping":
+                if not await session_still_valid(session_id,user.id):
+                    await websocket.close(code=4401); break
+                await redis.set(presence_key,"1",ex=70); await websocket.send_json({"type":"pong"}); continue
+            if payload.get("type") in {"typing.started","typing.stopped"}:
+                if not await session_still_valid(session_id,user.id):
+                    await websocket.close(code=4401); break
+                now=time.monotonic()
+                while typing_events and now-typing_events[0]>5.0: typing_events.popleft()
+                if len(typing_events)>=20: continue
                 typing_events.append(now)
-                try:
-                    conversation_id = uuid.UUID(str(payload.get("conversation_id")))
-                except (TypeError, ValueError):
-                    continue
-                await publish_typing(user, conversation_id, str(payload["type"]))
+                try: conversation_id=uuid.UUID(str(payload.get("conversation_id")))
+                except (TypeError,ValueError): continue
+                await publish_typing(user,conversation_id,str(payload["type"]))
     except WebSocketDisconnect:
         pass
     finally:
-        websocket_connection_delta(-1)
-        forward_task.cancel()
-        await pubsub.unsubscribe(channel)
-        await pubsub.aclose()
-        await redis.delete(presence_key)
+        websocket_connection_delta(-1); forward_task.cancel()
+        await pubsub.unsubscribe(channel); await pubsub.aclose(); await redis.delete(presence_key)
