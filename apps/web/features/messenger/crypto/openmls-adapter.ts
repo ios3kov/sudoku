@@ -1369,11 +1369,24 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
     const devices = await messengerApi.mlsDevices(event.sender_user_id);
     const device = devices.find((item) => item.device_id === event.sender_device_id);
-    if (!device) throw new Error("MLS control sender device is unavailable");
+    if (device) {
+      return {
+        pinKey,
+        publicKeyB64: device.identity_public_key_b64,
+        existingPin: null,
+      };
+    }
 
+    const snapshot = await messengerApi.mlsControlSenderIdentity(event.id);
+    if (
+      snapshot.user_id !== event.sender_user_id
+      || snapshot.device_id !== event.sender_device_id
+    ) {
+      throw new Error("MLS control sender identity snapshot mismatch");
+    }
     return {
       pinKey,
-      publicKeyB64: device.identity_public_key_b64,
+      publicKeyB64: snapshot.identity_public_key_b64,
       existingPin: null,
     };
   }

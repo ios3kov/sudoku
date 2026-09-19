@@ -116,6 +116,12 @@ export const messengerApi = {
     request<MlsControlEvent[]>(
       `/v1/e2ee/conversations/${conversationId}/devices/${deviceId}/control-events?after=${after}`,
     ),
+  mlsControlSenderIdentity: (eventId: string) =>
+    request<{
+      user_id: string;
+      device_id: string;
+      identity_public_key_b64: string;
+    }>(`/v1/e2ee/control-events/${eventId}/sender-identity`),
   ackMlsControlEvent: (eventId: string, deviceId: string) =>
     request<void>(`/v1/e2ee/control-events/${eventId}/ack`, {
       method: "POST",

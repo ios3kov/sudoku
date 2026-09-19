@@ -1638,6 +1638,48 @@ async def list_control_events(
     return [serialize_control_event(item) for item in rows]
 
 
+@router.get("/control-events/{event_id}/sender-identity")
+async def control_event_sender_identity(
+    event_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-control-sender-identity", 240, 60)
+    await require_active_device(db, auth.user.id, auth.session.id)
+    event = (
+        await db.execute(
+            select(MlsControlEvent)
+            .join(
+                MlsControlRecipient,
+                MlsControlRecipient.event_id == MlsControlEvent.id,
+            )
+            .where(
+                MlsControlEvent.id == event_id,
+                MlsControlRecipient.user_id == auth.user.id,
+                MlsControlRecipient.device_id == auth.session.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if event is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "MLS control event not found")
+
+    device = (
+        await db.execute(
+            select(MlsDevice).where(
+                MlsDevice.user_id == event.sender_user_id,
+                MlsDevice.device_id == event.sender_device_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "MLS sender identity not found")
+    return {
+        "user_id": str(event.sender_user_id),
+        "device_id": str(event.sender_device_id),
+        "identity_public_key_b64": encode_bytes(device.identity_public_key),
+    }
+
+
 @router.post("/control-events/{event_id}/ack", status_code=204)
 async def ack_control_event(
     event_id: uuid.UUID,
