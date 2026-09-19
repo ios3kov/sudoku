@@ -32,6 +32,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const [pushState, setPushState] = useState<"idle" | "enabling" | "enabled" | "error">("idle");
   const [showInvite, setShowInvite] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
+  const [secureSetupBusy, setSecureSetupBusy] = useState(false);
+  const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
   const [e2eeState, setE2eeState] = useState<"initializing" | "ready" | "error">("initializing");
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
@@ -221,7 +223,52 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
 
   if (selected?.encryption_required) {
-    if (e2eeState === "ready" && e2eeRef.current) {
+    if (
+      !selected.e2ee_ready
+      && selected.created_by === user.id
+      && e2eeState === "ready"
+      && e2eeRef.current
+    ) {
+      return (
+        <main className="messenger-page">
+          <section className="messenger-shell">
+            <header className="messenger-topbar">
+              <div>
+                <strong>{conversationTitle(selected, user.id)}</strong>
+                <span>Secure setup pending</span>
+              </div>
+              <button type="button" onClick={() => setSelectedId(null)}>Back</button>
+            </header>
+            <div className="empty-conversations">
+              <h2>Finish secure setup</h2>
+              <p>{secureSetupError ?? "All participant devices must join the MLS group before activation."}</p>
+              <button
+                type="button"
+                disabled={secureSetupBusy}
+                onClick={() => {
+                  const adapter = e2eeRef.current;
+                  if (!adapter) return;
+                  setSecureSetupBusy(true);
+                  setSecureSetupError(null);
+                  void adapter.bootstrapConversation(selected)
+                    .then((ready) => updateConversation(ready))
+                    .catch((error: unknown) => {
+                      setSecureSetupError(
+                        error instanceof Error ? error.message : "Unable to finish secure setup",
+                      );
+                    })
+                    .finally(() => setSecureSetupBusy(false));
+                }}
+              >
+                {secureSetupBusy ? "Finishing…" : "Resume secure setup"}
+              </button>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    if (selected.e2ee_ready && e2eeState === "ready" && e2eeRef.current) {
       return (
         <main className="messenger-page">
           <section className="messenger-shell">
@@ -292,10 +339,21 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         </header>
 
         {creating ? (
-          <NewChat onCreated={addConversation} onCancel={() => setCreating(false)} />
+          <NewChat
+            onCreated={addConversation}
+            onCancel={() => setCreating(false)}
+            adapter={e2eeState === "ready" ? e2eeRef.current : null}
+          />
         ) : (
           <div className="conversation-list">
-            <button className="new-chat-button" type="button" onClick={() => setCreating(true)}>New chat</button>
+            <button
+              className="new-chat-button"
+              type="button"
+              disabled={e2eeState !== "ready"}
+              onClick={() => setCreating(true)}
+            >
+              {e2eeState === "initializing" ? "Preparing secure messaging…" : "New secure chat"}
+            </button>
             {loading ? <p className="muted center">Loading…</p> : conversations.length === 0 ? (
               <div className="empty-conversations">
                 <div className="empty-icon" aria-hidden="true">•••</div>

@@ -2,6 +2,7 @@ import { projectEncryptedEvents, type EncryptedEventRecord, type EncryptedProjec
 import { messengerApi } from "../api";
 import type {
   ClaimedMlsKeyPackage,
+  Conversation,
   E2eeEnvelope,
   EncryptedAttachmentMetadata,
   MlsControlBatchItem,
@@ -57,6 +58,7 @@ interface LocalMlsStateV1 {
   pendingApplicationSends: PendingApplicationSend[];
   pendingKeyPackagesB64: string[];
   transportCursors: Record<string, number>;
+  trackedConversations: string[];
 }
 
 export interface OpenMlsAdapterOptions {
@@ -225,6 +227,10 @@ function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
               .map(([key, value]) => [key, Number(value)]),
           )
         : {},
+    trackedConversations:
+      Array.isArray(raw.trackedConversations)
+        ? raw.trackedConversations.filter((item) => typeof item === "string")
+        : [],
   };
 }
 
@@ -303,6 +309,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         pendingApplicationSends: [],
         pendingKeyPackagesB64: [],
         transportCursors: {},
+        trackedConversations: [],
       };
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
     }
@@ -389,9 +396,142 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   }
 
   async createGroup(conversationId: string): Promise<void> {
-    await this.mutate((provider, identity) => {
-      provider.createGroup(identity, utf8(conversationId));
+    await this.enqueue(async () => {
+      this.assertReady();
+      if (this.localState!.trackedConversations.includes(conversationId)) return;
+
+      const snapshot = this.snapshotRuntime();
+      try {
+        this.provider!.createGroup(this.identity!, utf8(conversationId));
+        this.localState!.trackedConversations = uniqueIds([
+          ...this.localState!.trackedConversations,
+          conversationId,
+        ]);
+        await this.persistCurrentState();
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
+      }
     });
+  }
+
+  async bootstrapConversation(conversation: Conversation): Promise<Conversation> {
+    if (!conversation.encryption_required) {
+      throw new Error("Conversation is not configured for E2EE");
+    }
+    if (conversation.e2ee_ready) return conversation;
+    if (conversation.created_by !== this.options.userId) {
+      throw new Error("Only the secure conversation creator can resume setup");
+    }
+
+    await this.createGroup(conversation.id);
+
+    const deviceGroups = await Promise.all(
+      conversation.members.map(async (member) => ({
+        member,
+        devices: await messengerApi.mlsDevices(member.id),
+      })),
+    );
+
+    const targets: Array<{
+      userId: string;
+      deviceId: string;
+      identityPublicKeyB64: string;
+      availableKeyPackages: number;
+    }> = [];
+
+    for (const { member, devices } of deviceGroups) {
+      if (member.id !== this.options.userId && devices.length === 0) {
+        throw new Error(member.display_name + " has no secure device ready yet");
+      }
+      for (const device of devices) {
+        if (
+          member.id === this.options.userId
+          && device.device_id === this.options.deviceId
+        ) {
+          continue;
+        }
+        targets.push({
+          userId: member.id,
+          deviceId: device.device_id,
+          identityPublicKeyB64: device.identity_public_key_b64,
+          availableKeyPackages: device.available_key_packages,
+        });
+      }
+    }
+
+    targets.sort((left, right) =>
+      (left.userId + ":" + left.deviceId).localeCompare(
+        right.userId + ":" + right.deviceId,
+      )
+    );
+
+    const existingRecipients: MlsControlRecipient[] = [];
+    const pendingTargets: typeof targets = [];
+
+    for (const target of targets) {
+      const pinKey = this.peerPinKey(target.userId, target.deviceId);
+      const pin = this.localState!.peerIdentityPins[pinKey];
+      if (pin && pin.publicKeyB64 !== target.identityPublicKeyB64) {
+        throw new PeerIdentityChangedError(target.userId, target.deviceId);
+      }
+
+      let alreadyMember = false;
+      try {
+        this.provider!.validateGroupMemberIdentity(
+          utf8(conversation.id),
+          utf8("sudoku-v1:" + target.userId + ":" + target.deviceId),
+          base64ToBytes(pin?.publicKeyB64 ?? target.identityPublicKeyB64),
+        );
+        alreadyMember = true;
+      } catch {
+        alreadyMember = false;
+      }
+
+      if (alreadyMember) {
+        existingRecipients.push({
+          user_id: target.userId,
+          device_id: target.deviceId,
+        });
+      } else {
+        pendingTargets.push(target);
+      }
+    }
+
+    for (const target of pendingTargets) {
+      if (target.availableKeyPackages < 1) {
+        throw new Error(
+          "Secure device " + target.deviceId + " needs a fresh KeyPackage",
+        );
+      }
+
+      const claimed = await messengerApi.claimMlsKeyPackage(
+        target.userId,
+        target.deviceId,
+      );
+      if (
+        claimed.user_id !== target.userId
+        || claimed.device_id !== target.deviceId
+        || claimed.identity_public_key_b64 !== target.identityPublicKeyB64
+      ) {
+        throw new Error("Claimed MLS KeyPackage identity does not match device discovery");
+      }
+
+      const recipient: MlsControlRecipient = {
+        user_id: target.userId,
+        device_id: target.deviceId,
+      };
+      await this.addMemberDurably(
+        conversation.id,
+        claimed,
+        [...existingRecipients],
+        [recipient],
+      );
+      existingRecipients.push(recipient);
+    }
+
+    await messengerApi.activateMlsConversation(conversation.id);
+    return { ...conversation, e2ee_ready: true };
   }
 
   async addMemberDurably(
@@ -716,6 +856,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   trackedConversationIds(): string[] {
     this.assertReady();
     const ids = new Set<string>([
+      ...this.localState!.trackedConversations,
       ...Object.keys(this.localState!.transportCursors),
       ...Object.keys(this.localState!.eventJournal),
       ...this.localState!.pendingApplicationSends.map((item) => item.conversationId),
@@ -915,6 +1056,10 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         if (joined !== conversationId) {
           throw new Error("MLS Welcome group id does not match conversation");
         }
+        this.localState!.trackedConversations = uniqueIds([
+          ...this.localState!.trackedConversations,
+          conversationId,
+        ]);
         this.provider!.validateGroupMemberIdentity(
           utf8(conversationId),
           expectedCredential,

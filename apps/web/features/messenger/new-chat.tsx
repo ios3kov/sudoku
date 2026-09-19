@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { messengerApi } from "./api";
 import type { Conversation } from "./types";
+import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 
 interface DirectoryUser {
   id: string;
@@ -12,7 +13,15 @@ interface DirectoryUser {
 
 type Mode = "direct" | "group";
 
-export function NewChat({ onCreated, onCancel }: { onCreated: (conversation: Conversation) => void; onCancel: () => void }) {
+export function NewChat({
+  onCreated,
+  onCancel,
+  adapter,
+}: {
+  onCreated: (conversation: Conversation) => void;
+  onCancel: () => void;
+  adapter: OpenMlsProtocolAdapter | null;
+}) {
   const [mode, setMode] = useState<Mode>("direct");
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<DirectoryUser[]>([]);
@@ -45,10 +54,17 @@ export function NewChat({ onCreated, onCancel }: { onCreated: (conversation: Con
   async function createDirect(user: DirectoryUser) {
     setError(null);
     setCreating(true);
+    let pending: Conversation | null = null;
     try {
-      onCreated(await messengerApi.createDirect(user.id));
-    } catch {
-      setError("Unable to create chat");
+      if (!adapter) throw new Error("Secure messaging is not ready");
+      pending = await messengerApi.createDirect(user.id, true);
+      onCreated(await adapter.bootstrapConversation(pending));
+    } catch (error) {
+      if (pending) {
+        onCreated(pending);
+      } else {
+        setError(error instanceof Error ? error.message : "Unable to create secure chat");
+      }
     } finally {
       setCreating(false);
     }
@@ -59,10 +75,17 @@ export function NewChat({ onCreated, onCancel }: { onCreated: (conversation: Con
     if (!title || selected.size === 0) return;
     setError(null);
     setCreating(true);
+    let pending: Conversation | null = null;
     try {
-      onCreated(await messengerApi.createGroup(title, [...selected]));
-    } catch {
-      setError("Unable to create group");
+      if (!adapter) throw new Error("Secure messaging is not ready");
+      pending = await messengerApi.createGroup(title, [...selected], true);
+      onCreated(await adapter.bootstrapConversation(pending));
+    } catch (error) {
+      if (pending) {
+        onCreated(pending);
+      } else {
+        setError(error instanceof Error ? error.message : "Unable to create secure group");
+      }
     } finally {
       setCreating(false);
     }
@@ -103,7 +126,7 @@ export function NewChat({ onCreated, onCancel }: { onCreated: (conversation: Con
             type="button"
             key={user.id}
             className={`directory-item ${selected.has(user.id) ? "selected" : ""}`}
-            disabled={creating}
+            disabled={creating || !adapter}
             onClick={() => mode === "direct" ? void createDirect(user) : toggleUser(user.id)}
           >
             <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
@@ -113,7 +136,7 @@ export function NewChat({ onCreated, onCancel }: { onCreated: (conversation: Con
         ))}
       </div>
       {mode === "group" ? (
-        <button className="create-group-button" type="button" disabled={!groupTitle.trim() || selected.size === 0 || creating} onClick={() => void createGroup()}>
+        <button className="create-group-button" type="button" disabled={!groupTitle.trim() || selected.size === 0 || creating || !adapter} onClick={() => void createGroup()}>
           {creating ? "Creating…" : "Create group"}
         </button>
       ) : null}

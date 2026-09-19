@@ -127,15 +127,25 @@ export const messengerApi = {
     body: JSON.stringify({ sequence }),
   }),
   searchUsers: (query: string) => request<Array<{ id: string; display_name: string; email: string }>>(`/v1/users?q=${encodeURIComponent(query)}`),
-  createDirect: (userId: string) => request<Conversation>("/v1/conversations", {
+  createDirect: (userId: string, encryptionRequired = false) => request<Conversation>("/v1/conversations", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ type: "direct", title: null, member_ids: [userId] }),
+    body: JSON.stringify({
+      type: "direct",
+      title: null,
+      member_ids: [userId],
+      encryption_required: encryptionRequired,
+    }),
   }),
-  createGroup: (title: string, userIds: string[]) => request<Conversation>("/v1/conversations", {
+  createGroup: (title: string, userIds: string[], encryptionRequired = false) => request<Conversation>("/v1/conversations", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ type: "group", title, member_ids: userIds }),
+    body: JSON.stringify({
+      type: "group",
+      title,
+      member_ids: userIds,
+      encryption_required: encryptionRequired,
+    }),
   }),
   updateConversationPreferences: (conversationId: string, preferences: { is_pinned?: boolean; notifications_muted?: boolean }) => request<Conversation>(`/v1/conversations/${conversationId}/preferences`, {
     method: "PATCH",
