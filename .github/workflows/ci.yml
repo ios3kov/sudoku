@@ -1,6 +1,4 @@
 name: ci
-permissions:
-  contents: write
 on:
   push:
     branches: [main]
@@ -75,23 +73,10 @@ jobs:
       - name: Web production build
         run: npm run build:web
 
-      - name: Bootstrap pinned OpenMLS WASM lockfile
+      - name: Check pinned OpenMLS WASM package
         run: |
           rustup toolchain install 1.91.0 --profile minimal --target wasm32-unknown-unknown
-          rm -f packages/mls-wasm/Cargo.lock
-          cargo +1.91.0 generate-lockfile --manifest-path packages/mls-wasm/Cargo.toml
           cargo +1.91.0 check --manifest-path packages/mls-wasm/Cargo.toml --target wasm32-unknown-unknown --locked
-      - name: Commit generated OpenMLS Cargo lock
-        run: |
-          if git diff --quiet -- packages/mls-wasm/Cargo.lock; then
-            echo "Cargo.lock already reproducible"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add packages/mls-wasm/Cargo.lock
-            git commit -m "build: lock OpenMLS WASM dependencies"
-            git push origin HEAD:main
-          fi
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com
