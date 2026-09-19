@@ -55,5 +55,8 @@ Control-event payload bytes are base64 only at the HTTP boundary. Server realtim
 ## Production gate
 This adapter is compiled and usable but is not yet wired to the visible production messenger composer. Identity pinning/verification, encrypted attachments, and UI migration remain blockers before `ui_ready=true`.
 
+## First generated-typing CI finding
+The wasm-bindgen `DeviceIdentity` export intentionally has no public JavaScript constructor; it is created through `Provider.createDeviceIdentity()` or `DeviceIdentity.fromPublic()`. The adapter now derives its TypeScript identity type from `ReturnType<Provider["createDeviceIdentity"]>` instead of assuming a constructible class.
+
 ## Next
 Step 53: local identity pinning + human-verifiable fingerprint/QR data and explicit identity-change blocking, so a malicious/compromised delivery service cannot silently replace a peer device identity.

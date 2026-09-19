@@ -33,7 +33,7 @@ export interface OpenMlsAdapterOptions {
 
 type MlsModule = Awaited<ReturnType<typeof loadOpenMlsWasm>>;
 type Provider = InstanceType<MlsModule["Provider"]>;
-type DeviceIdentity = InstanceType<MlsModule["DeviceIdentity"]>;
+type DeviceIdentity = ReturnType<Provider["createDeviceIdentity"]>;
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
