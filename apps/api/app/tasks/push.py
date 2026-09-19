@@ -68,7 +68,7 @@ def send_push_for_event(event_id: str) -> int:
 
         for subscription in subscriptions:
             # Avoid redundant notification noise while the recipient is actively connected.
-            if redis.exists(f"presence:user:{subscription.user_id}"):
+            if next(redis.scan_iter(match=f"presence:user:{subscription.user_id}:*", count=10), None) is not None:
                 continue
             try:
                 webpush(
