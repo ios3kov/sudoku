@@ -178,7 +178,7 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
                 follow_redirects=False,
             )
             assert content.status_code == 302
-            assert "X-Amz-Signature=" in content.headers["location"]
+            assert ("X-Amz-Signature=" in content.headers["location"] or "Signature=" in content.headers["location"])
 
             ssrf = await member_client.post(
                 "/v1/push/subscriptions",

@@ -4,24 +4,20 @@
 Full restored MVP acceptance and hardening.
 
 ## Repository truth
+Steps 17–21 restored the complete ordinary-source MVP. Steps 22–24 are acceptance hardening.
 
-### Steps 17–20
-Direct-source recovery, Sudoku/auth shell, PostgreSQL auth/session migration and rate limiting are restored and service-backed verified.
+### Step 22
+API packaging fixed; S3 test moved in-process.
 
-### Step 21 — Full source import
-Complete MVP source is present as ordinary files: API, web messenger, realtime, assets/push, groups/devices, search/preferences, infrastructure, observability and integration tests.
+### Step 23
+Invalid reserved test email domains replaced without weakening production validation.
 
-### Step 22 — CI packaging + S3 hardening
-API package discovery fixed; S3 integration moved to an in-process test server. Acceptance now reaches real API integration tests.
-
-### Step 23 — Valid integration identities
-Acceptance exposed a test-fixture defect: reserved `.test` email domains are correctly rejected by production `EmailStr` validation. Production validation remains unchanged; randomized `example.com` identities are used in integration tests.
+### Step 24
+API integration now reaches verified asset download. The test was incorrectly coupled to AWS SigV4 query naming; S3-compatible SigV2/SigV4 signed redirects are accepted.
 
 ## Verification
-- Step 20 service-backed gate: fully green.
-- Full-tree packaging/S3 stages: now pass.
-- Latest acceptance reached API integration and failed only at invalid test email fixture before the rest of the scenario.
-- Step 23 acceptance pending.
+Latest acceptance passed: API install ✓ S3 start ✓ migrations ✓ invite/auth ✓ direct/group authorization ✓ message idempotency ✓ search ✓ pin/mute ✓ Origin boundary ✓ upload ✓ server-side asset integrity ✓.
+It failed only on the signature-version-specific assertion before later push/domain/web stages.
 
 ## Next step
-Continue acceptance until API integration, domain, web typecheck and production build are all green; then perform code/security review.
+Repeat acceptance and continue until push boundary, domain tests, web typecheck and Next production build are green; then code/security review.
