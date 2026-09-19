@@ -95,6 +95,7 @@ Read state uses a monotonic per-conversation member watermark; there is no per-m
 - `mime_type varchar(160)`
 - `size_bytes bigint`
 - `sha256 bytea(32)`
+- `e2ee_ciphertext boolean`
 - `status varchar(24)` (`pending`, `ready`, `rejected`)
 - `created_at timestamptz`
 - `ready_at timestamptz null`
@@ -191,3 +192,5 @@ The payload is opaque MLS wire data. The server stores and routes it but does no
 - primary key `(event_id, user_id, device_id)`
 
 Recipient rows are a creation-time delivery snapshot, so an already-issued removal commit is still retrievable after the corresponding server membership row is removed.
+
+For `e2ee_ciphertext=true`, `filename` and `mime_type` are intentionally generic server metadata. Original attachment metadata and decryption material are never stored in the asset row.

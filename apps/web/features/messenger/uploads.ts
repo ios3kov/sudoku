@@ -47,8 +47,8 @@ function base64ToBytes(value: string): Uint8Array {
   return bytes;
 }
 
-function ownedBytes(value: Uint8Array): Uint8Array {
-  const output = new Uint8Array(value.byteLength);
+function ownedBytes(value: Uint8Array): Uint8Array<ArrayBuffer> {
+  const output = new Uint8Array(new ArrayBuffer(value.byteLength));
   output.set(value);
   return output;
 }

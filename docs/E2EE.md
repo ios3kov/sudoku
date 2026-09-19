@@ -30,7 +30,7 @@ The server is a delivery service, not a decryption endpoint:
 Private MLS state remains client-side. Serialized protocol state is encrypted locally before IndexedDB persistence with a non-exportable WebCrypto wrapping key. No private crypto state is stored in localStorage.
 
 ## Attachments
-Attachments are encrypted client-side before upload. The attachment content key and integrity metadata are transported inside an MLS-protected application message. Object storage sees ciphertext only.
+Attachments are encrypted client-side with AES-256-GCM before upload. The attachment key, nonce, original filename/MIME and plaintext integrity metadata are transported inside an MLS-protected application message. The API/object store receive only generic `application/octet-stream` ciphertext, ciphertext length and ciphertext SHA-256.
 
 ## Acceptance criteria
 - fresh two-device direct chat interoperates asynchronously;

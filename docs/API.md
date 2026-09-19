@@ -209,3 +209,17 @@ Realtime fan-out contains only control-event id/kind/sequence metadata. The MLS 
 Membership changes that need both Commit and Welcome use `control-batches`. The request contains one sender device and 1–10 control events, each with its own stable client id and recipient-device snapshot.
 
 The whole batch is one database transaction. A retry with the same client ids/content returns the existing events; a partial or changed retry returns 409. This lets the browser persist a prepared MLS PendingCommit, retry network delivery safely after a crash, and merge the local pending epoch only after the durable batch is accepted.
+
+## E2EE attachments
+
+```http
+POST /assets/e2ee-upload-intents
+POST /assets/{asset_id}/complete
+GET  /assets/{asset_id}/content
+```
+
+The E2EE upload-intent endpoint accepts only ciphertext byte length and ciphertext SHA-256. It never accepts the original filename or MIME type.
+
+Server/object-store metadata is forced to `encrypted.bin` and `application/octet-stream`. The original filename, MIME type, attachment key, nonce and plaintext integrity metadata are carried only inside the MLS application payload.
+
+Encrypted conversations reject ordinary assets; legacy conversations reject `e2ee_ciphertext` assets.
