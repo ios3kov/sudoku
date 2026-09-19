@@ -57,4 +57,5 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall -q app tests migrations
       - run: alembic upgrade head
+      - run: PYTHONPATH=. pytest -q tests/test_schema.py
       - run: PYTHONPATH=. pytest -q tests/test_security.py tests/test_auth_integration.py
