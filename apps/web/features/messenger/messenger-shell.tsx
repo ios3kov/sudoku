@@ -71,10 +71,14 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         e2eeRef.current = adapter;
         setE2eeState("ready");
 
-        for (const conversation of conversationsRef.current) {
-          if (conversation.encryption_required) {
-            await adapter.syncTransport(conversation.id);
-          }
+        const trackedConversationIds = new Set([
+          ...adapter.trackedConversationIds(),
+          ...conversationsRef.current
+            .filter((conversation) => conversation.encryption_required)
+            .map((conversation) => conversation.id),
+        ]);
+        for (const conversationId of trackedConversationIds) {
+          await adapter.syncTransport(conversationId);
         }
       } catch {
         if (!cancelled) {
@@ -97,13 +101,20 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         setReconnectTick((value) => value + 1);
         const adapter = e2eeRef.current;
         if (adapter) {
-          for (const conversation of conversationsRef.current) {
-            if (conversation.encryption_required) {
-              void adapter.syncTransport(conversation.id).catch(() => {
-                setE2eeState("error");
-              });
-            }
+          const trackedConversationIds = new Set([
+            ...adapter.trackedConversationIds(),
+            ...conversationsRef.current
+              .filter((conversation) => conversation.encryption_required)
+              .map((conversation) => conversation.id),
+          ]);
+          for (const conversationId of trackedConversationIds) {
+            void adapter.syncTransport(conversationId).catch(() => {
+              setE2eeState("error");
+            });
           }
+          void adapter.ensureKeyPackagePool(10).catch(() => {
+            setE2eeState("error");
+          });
         }
       },
       onClose: () => setConnectionState("reconnecting"),
@@ -113,15 +124,31 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         if (
           (event.type === "message.created" || event.type === "mls.control.created")
           && event.conversation_id
-          && conversationsRef.current.some(
+        ) {
+          const adapter = e2eeRef.current;
+          const currentConversationIsEncrypted = conversationsRef.current.some(
             (conversation) =>
               conversation.id === event.conversation_id
               && conversation.encryption_required,
-          )
-        ) {
-          void e2eeRef.current?.syncTransport(event.conversation_id).catch(() => {
-            setE2eeState("error");
-          });
+          );
+          const locallyTracked = adapter?.trackedConversationIds().includes(event.conversation_id) ?? false;
+          if (
+            adapter
+            && (
+              event.type === "mls.control.created"
+              || currentConversationIsEncrypted
+              || locallyTracked
+            )
+          ) {
+            void adapter.syncTransport(event.conversation_id).catch(() => {
+              setE2eeState("error");
+            });
+            if (event.type === "mls.control.created") {
+              void adapter.ensureKeyPackagePool(10).catch(() => {
+                setE2eeState("error");
+              });
+            }
+          }
         }
         if (event.type === "conversation.member_removed" && event.conversation_id && (event.payload as { user_id?: string } | undefined)?.user_id === user.id) {
           setSelectedId((current) => current === event.conversation_id ? null : current);
@@ -273,7 +300,17 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         )}
 
         {user.is_admin && showInvite ? <AdminInvite onClose={() => setShowInvite(false)} /> : null}
-        {showDevices ? <DeviceSessions onClose={() => setShowDevices(false)} onCurrentRevoked={() => { void clearPending(); onLoggedOut(); onHide(); }} /> : null}
+        {showDevices ? <DeviceSessions
+          onClose={() => setShowDevices(false)}
+          onCurrentRevoked={() => {
+            void (async () => {
+              await e2eeRef.current?.clearLocalState().catch(() => undefined);
+              await clearPending().catch(() => undefined);
+              onLoggedOut();
+              onHide();
+            })();
+          }}
+        /> : null}
 
         <footer className="messenger-footer">
           {user.is_admin ? <button type="button" onClick={() => setShowInvite((value) => !value)}>Invite</button> : null}

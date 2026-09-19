@@ -713,6 +713,19 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return this.localState!.transportCursors[conversationId] ?? 0;
   }
 
+  trackedConversationIds(): string[] {
+    this.assertReady();
+    const ids = new Set<string>([
+      ...Object.keys(this.localState!.transportCursors),
+      ...Object.keys(this.localState!.eventJournal),
+      ...this.localState!.pendingApplicationSends.map((item) => item.conversationId),
+    ]);
+    if (this.localState!.pendingOutboundTransition) {
+      ids.add(this.localState!.pendingOutboundTransition.conversationId);
+    }
+    return [...ids].sort();
+  }
+
   projectConversation(conversationId: string): EncryptedProjectionResult {
     this.assertReady();
     return projectEncryptedEvents(this.localState!.eventJournal[conversationId] ?? []);
