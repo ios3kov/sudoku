@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
 import { AdminInvite } from "./admin-invite";
 import { ConversationView, conversationTitle } from "./conversation-view";
+import { EncryptedConversationView } from "./encrypted-conversation-view";
 import { NewChat } from "./new-chat";
 import { clearPending } from "./outbox";
 import { RealtimeClient } from "./realtime";
@@ -220,18 +221,36 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
 
   if (selected?.encryption_required) {
+    if (e2eeState === "ready" && e2eeRef.current) {
+      return (
+        <main className="messenger-page">
+          <section className="messenger-shell">
+            <EncryptedConversationView
+              conversation={selected}
+              user={user}
+              adapter={e2eeRef.current}
+              realtimeEvent={latestEvent}
+              reconnectTick={reconnectTick}
+              onBack={() => setSelectedId(null)}
+              onHide={onHide}
+            />
+          </section>
+        </main>
+      );
+    }
+
     return (
       <main className="messenger-page">
         <section className="messenger-shell">
           <header className="messenger-topbar">
             <div>
               <strong>{conversationTitle(selected, user.id)}</strong>
-              <span>{e2eeState === "ready" ? "Secure chat ready" : e2eeState === "error" ? "Secure chat unavailable" : "Initializing secure chat…"}</span>
+              <span>{e2eeState === "error" ? "Secure chat unavailable" : "Initializing secure chat…"}</span>
             </div>
             <button type="button" onClick={() => setSelectedId(null)}>Back</button>
           </header>
           <p className="muted center">
-            Secure conversation rendering is locked until the encrypted history/composer wiring passes its production gate.
+            This encrypted conversation is unavailable until the local MLS state is ready.
           </p>
         </section>
       </main>
