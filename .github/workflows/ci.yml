@@ -65,7 +65,7 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER=sudoku-ci \
             -e MINIO_ROOT_PASSWORD=sudoku-ci-secret \
-            minio/minio:RELEASE.2025-10-15T17-29-55Z \
+            quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z \
             server /data
           python - <<'PY'
           import time, boto3
