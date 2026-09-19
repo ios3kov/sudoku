@@ -103,7 +103,14 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         e2eeRef.current = adapter;
         setE2eeState("ready");
 
-        const encryptedConversations = conversationsRef.current.filter(
+        const latestConversations = sortConversations(
+          await messengerApi.conversations(),
+        );
+        if (cancelled) return;
+        conversationsRef.current = latestConversations;
+        setConversations(latestConversations);
+
+        const encryptedConversations = latestConversations.filter(
           (conversation) => conversation.encryption_required && conversation.e2ee_ready,
         );
         for (const conversation of encryptedConversations) {
