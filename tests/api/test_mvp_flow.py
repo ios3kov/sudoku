@@ -238,11 +238,110 @@ async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() ->
         assert encrypted.json()["envelope"]==envelope
         search=await client.get(f"/v1/conversations/{cid}/search?q=secret")
         assert search.status_code==409
+
+        ciphertext = b"\x01\x99\x00opaque-ciphertext-without-file-signature\xff"
+        ciphertext_digest = hashlib.sha256(ciphertext).hexdigest()
+        e2ee_intent = await client.post(
+            "/v1/assets/e2ee-upload-intents",
+            json={
+                "size_bytes": len(ciphertext),
+                "sha256_hex": ciphertext_digest,
+            },
+        )
+        assert e2ee_intent.status_code == 201, e2ee_intent.text
+        e2ee_intent_json = e2ee_intent.json()
+        async with httpx.AsyncClient() as storage_client:
+            uploaded = await storage_client.put(
+                e2ee_intent_json["upload_url"],
+                content=ciphertext,
+                headers=e2ee_intent_json["headers"],
+            )
+            assert uploaded.status_code in {200, 204}, uploaded.text
+        e2ee_complete = await client.post(
+            f"/v1/assets/{e2ee_intent_json['asset_id']}/complete"
+        )
+        assert e2ee_complete.status_code == 200, e2ee_complete.text
+        assert e2ee_complete.json()["e2ee_ciphertext"] is True
+        assert e2ee_complete.json()["filename"] == "encrypted.bin"
+        assert e2ee_complete.json()["mime_type"] == "application/octet-stream"
+
+        encrypted_file = await client.post(
+            f"/v1/conversations/{cid}/messages",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "type": "file",
+                "body": None,
+                "envelope": {
+                    "version": 1,
+                    "protocol": "test-envelope",
+                    "ciphertext": "encrypted-file-metadata",
+                },
+                "asset_ids": [e2ee_intent_json["asset_id"]],
+            },
+        )
+        assert encrypted_file.status_code == 201, encrypted_file.text
+        assert encrypted_file.json()["assets"][0]["e2ee_ciphertext"] is True
+
+        plaintext_file = b"plaintext metadata leak test"
+        plaintext_digest = hashlib.sha256(plaintext_file).hexdigest()
+        legacy_intent = await client.post(
+            "/v1/assets/upload-intents",
+            json={
+                "filename": "secret-name.txt",
+                "mime_type": "text/plain",
+                "size_bytes": len(plaintext_file),
+                "sha256_hex": plaintext_digest,
+            },
+        )
+        assert legacy_intent.status_code == 201, legacy_intent.text
+        legacy_intent_json = legacy_intent.json()
+        async with httpx.AsyncClient() as storage_client:
+            uploaded = await storage_client.put(
+                legacy_intent_json["upload_url"],
+                content=plaintext_file,
+                headers=legacy_intent_json["headers"],
+            )
+            assert uploaded.status_code in {200, 204}, uploaded.text
+        assert (
+            await client.post(f"/v1/assets/{legacy_intent_json['asset_id']}/complete")
+        ).status_code == 200
+        leaked_asset = await client.post(
+            f"/v1/conversations/{cid}/messages",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "type": "file",
+                "body": None,
+                "envelope": {
+                    "version": 1,
+                    "protocol": "test-envelope",
+                    "ciphertext": "must-be-rejected",
+                },
+                "asset_ids": [legacy_intent_json["asset_id"]],
+            },
+        )
+        assert leaked_asset.status_code == 422
     async with SessionFactory() as db:
-        from app.models import Message
-        row=(await db.execute(select(Message).where(Message.conversation_id==uuid.UUID(cid)))).scalar_one()
+        from app.models import Asset, Message
+        row=(
+            await db.execute(
+                select(Message).where(
+                    Message.conversation_id==uuid.UUID(cid),
+                    Message.type=="text",
+                )
+            )
+        ).scalar_one()
         assert row.body_text is None
         assert row.envelope==envelope
+        encrypted_asset=(
+            await db.execute(
+                select(Asset).where(
+                    Asset.id==uuid.UUID(e2ee_intent_json["asset_id"])
+                )
+            )
+        ).scalar_one()
+        assert encrypted_asset.e2ee_ciphertext is True
+        assert encrypted_asset.filename=="encrypted.bin"
+        assert encrypted_asset.mime_type=="application/octet-stream"
 
 
 @pytest.mark.asyncio(loop_scope="session")
