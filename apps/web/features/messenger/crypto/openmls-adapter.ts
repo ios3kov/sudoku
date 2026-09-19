@@ -26,6 +26,7 @@ const PROTOCOL = "mls-rfc9420" as const;
 
 interface PendingOutboundTransition {
   conversationId: string;
+  membershipChangeId: string | null;
   events: MlsControlBatchItem[];
 }
 
@@ -165,7 +166,12 @@ function parsePendingOutbound(value: unknown): PendingOutboundTransition | null 
   ) {
     throw new Error("Invalid pending MLS outbound transition");
   }
-  return item as PendingOutboundTransition;
+  return {
+    conversationId: item.conversationId,
+    membershipChangeId:
+      typeof item.membershipChangeId === "string" ? item.membershipChangeId : null,
+    events: item.events,
+  };
 }
 
 function isPendingApplicationSend(value: unknown): value is PendingApplicationSend {
@@ -534,11 +540,246 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return { ...conversation, e2ee_ready: true };
   }
 
+
+  async applyMembershipAdd(
+    conversation: Conversation,
+    userId: string,
+    membershipChangeId: string,
+  ): Promise<void> {
+    if (
+      conversation.type !== "group"
+      || !conversation.encryption_required
+      || !conversation.e2ee_ready
+    ) {
+      throw new Error("Encrypted group is not ready for membership changes");
+    }
+
+    const existingRecipients = await this.reconcileActiveDevices(
+      conversation,
+      membershipChangeId,
+    );
+    const devices = await messengerApi.mlsDevices(userId);
+    if (devices.length === 0) {
+      throw new Error("New member has no active secure device");
+    }
+
+    const pending = devices.filter((device) =>
+      !this.groupHasDevice(
+        conversation.id,
+        userId,
+        device.device_id,
+        device.identity_public_key_b64,
+      )
+    );
+    for (const device of pending) {
+      if (device.available_key_packages < 1) {
+        throw new Error("New member device needs a fresh KeyPackage");
+      }
+    }
+
+    for (const device of pending) {
+      const claimed = await messengerApi.claimMlsKeyPackage(
+        userId,
+        device.device_id,
+      );
+      if (
+        claimed.user_id !== userId
+        || claimed.device_id !== device.device_id
+        || claimed.identity_public_key_b64 !== device.identity_public_key_b64
+      ) {
+        throw new Error("Claimed MLS KeyPackage identity does not match device discovery");
+      }
+      const recipient: MlsControlRecipient = {
+        user_id: userId,
+        device_id: device.device_id,
+      };
+      await this.addMemberDurably(
+        conversation.id,
+        claimed,
+        [...existingRecipients],
+        [recipient],
+        membershipChangeId,
+      );
+      existingRecipients.push(recipient);
+    }
+  }
+
+  async applyMembershipRemove(
+    conversation: Conversation,
+    userId: string,
+    membershipChangeId: string,
+  ): Promise<void> {
+    if (
+      conversation.type !== "group"
+      || !conversation.encryption_required
+      || !conversation.e2ee_ready
+    ) {
+      throw new Error("Encrypted group is not ready for membership changes");
+    }
+
+    const activeRecipients = await this.reconcileActiveDevices(
+      conversation,
+      membershipChangeId,
+    );
+    const activeTargetDevices = await messengerApi.mlsDevices(userId);
+    const candidates = new Set<string>([
+      ...activeTargetDevices.map((device) => device.device_id),
+      ...Object.values(this.localState!.peerIdentityPins)
+        .filter((pin) => pin.userId === userId)
+        .map((pin) => pin.deviceId),
+    ]);
+
+    const orderedCandidates = [...candidates].sort((left, right) => {
+      if (left === this.options.deviceId) return 1;
+      if (right === this.options.deviceId) return -1;
+      return left.localeCompare(right);
+    });
+
+    let removed = 0;
+    for (const deviceId of orderedCandidates) {
+      const active = activeTargetDevices.find((item) => item.device_id === deviceId);
+      const pin = this.localState!.peerIdentityPins[this.peerPinKey(userId, deviceId)];
+      const publicKeyB64 = pin?.publicKeyB64 ?? active?.identity_public_key_b64;
+      if (!publicKeyB64) continue;
+      if (!this.groupHasDevice(conversation.id, userId, deviceId, publicKeyB64)) {
+        continue;
+      }
+
+      await this.removeMemberDurably(
+        conversation.id,
+        utf8("sudoku-v1:" + userId + ":" + deviceId),
+        [...activeRecipients],
+        membershipChangeId,
+      );
+      removed += 1;
+      const index = activeRecipients.findIndex(
+        (item) => item.user_id === userId && item.device_id === deviceId,
+      );
+      if (index >= 0) activeRecipients.splice(index, 1);
+    }
+
+    if (removed === 0) {
+      throw new Error("No MLS device leaf found for the member");
+    }
+  }
+
+  private async reconcileActiveDevices(
+    conversation: Conversation,
+    membershipChangeId: string,
+  ): Promise<MlsControlRecipient[]> {
+    this.assertReady();
+    const targets: Array<{
+      userId: string;
+      deviceId: string;
+      identityPublicKeyB64: string;
+      availableKeyPackages: number;
+    }> = [];
+
+    for (const member of conversation.members) {
+      const devices = await messengerApi.mlsDevices(member.id);
+      for (const device of devices) {
+        if (
+          member.id === this.options.userId
+          && device.device_id === this.options.deviceId
+        ) {
+          continue;
+        }
+        targets.push({
+          userId: member.id,
+          deviceId: device.device_id,
+          identityPublicKeyB64: device.identity_public_key_b64,
+          availableKeyPackages: device.available_key_packages,
+        });
+      }
+    }
+    targets.sort((left, right) =>
+      (left.userId + ":" + left.deviceId).localeCompare(
+        right.userId + ":" + right.deviceId,
+      )
+    );
+
+    const recipients: MlsControlRecipient[] = [];
+    const missing: typeof targets = [];
+    for (const target of targets) {
+      if (
+        this.groupHasDevice(
+          conversation.id,
+          target.userId,
+          target.deviceId,
+          target.identityPublicKeyB64,
+        )
+      ) {
+        recipients.push({
+          user_id: target.userId,
+          device_id: target.deviceId,
+        });
+      } else {
+        missing.push(target);
+      }
+    }
+
+    for (const target of missing) {
+      if (target.availableKeyPackages < 1) {
+        throw new Error("Active group device needs a fresh KeyPackage");
+      }
+      const claimed = await messengerApi.claimMlsKeyPackage(
+        target.userId,
+        target.deviceId,
+      );
+      if (
+        claimed.user_id !== target.userId
+        || claimed.device_id !== target.deviceId
+        || claimed.identity_public_key_b64 !== target.identityPublicKeyB64
+      ) {
+        throw new Error("Claimed MLS KeyPackage identity does not match device discovery");
+      }
+      const recipient: MlsControlRecipient = {
+        user_id: target.userId,
+        device_id: target.deviceId,
+      };
+      await this.addMemberDurably(
+        conversation.id,
+        claimed,
+        [...recipients],
+        [recipient],
+        membershipChangeId,
+      );
+      recipients.push(recipient);
+    }
+
+    return recipients;
+  }
+
+  private groupHasDevice(
+    conversationId: string,
+    userId: string,
+    deviceId: string,
+    publicKeyB64: string,
+  ): boolean {
+    this.assertReady();
+    const pin = this.localState!.peerIdentityPins[this.peerPinKey(userId, deviceId)];
+    if (pin && pin.publicKeyB64 !== publicKeyB64) {
+      throw new PeerIdentityChangedError(userId, deviceId);
+    }
+    try {
+      this.provider!.validateGroupMemberIdentity(
+        utf8(conversationId),
+        utf8("sudoku-v1:" + userId + ":" + deviceId),
+        base64ToBytes(pin?.publicKeyB64 ?? publicKeyB64),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+
   async addMemberDurably(
     conversationId: string,
     keyPackage: ClaimedMlsKeyPackage,
     commitRecipients: MlsControlRecipient[],
     welcomeRecipients: MlsControlRecipient[],
+    membershipChangeId: string | null = null,
   ): Promise<void> {
     await this.enqueue(async () => {
       this.assertReady();
@@ -603,7 +844,11 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
           throw new Error("MLS membership transition has no delivery recipients");
         }
 
-        this.localState!.pendingOutboundTransition = { conversationId, events };
+        this.localState!.pendingOutboundTransition = {
+          conversationId,
+          membershipChangeId,
+          events,
+        };
         await this.persistCurrentState();
       } catch (error) {
         this.restoreRuntime(snapshot);
@@ -620,16 +865,13 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     conversationId: string,
     memberCredential: Uint8Array,
     commitRecipients: MlsControlRecipient[],
+    membershipChangeId: string | null = null,
   ): Promise<void> {
     await this.enqueue(async () => {
       this.assertReady();
       await this.flushPendingApplicationSends();
       this.assertNoPendingApplicationSends();
       this.assertNoPendingOutboundTransition();
-      if (commitRecipients.length === 0) {
-        throw new Error("MLS removal transition has no delivery recipients");
-      }
-
       const snapshot = this.snapshotRuntime();
       try {
         const commit = this.provider!.removeMember(
@@ -639,6 +881,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         );
         this.localState!.pendingOutboundTransition = {
           conversationId,
+          membershipChangeId,
           events: [{
             client_id: crypto.randomUUID(),
             kind: "commit",
@@ -1473,6 +1716,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       pending.conversationId,
       this.options.deviceId,
       pending.events,
+      pending.membershipChangeId,
     );
 
     // Durable local state still contains PendingCommit + retry marker here.
