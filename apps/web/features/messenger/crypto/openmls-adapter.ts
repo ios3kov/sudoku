@@ -1,3 +1,4 @@
+import { projectEncryptedEvents, type EncryptedEventRecord, type EncryptedProjectionResult } from "@sudoku/domain";
 import { messengerApi } from "../api";
 import type {
   ClaimedMlsKeyPackage,
@@ -11,6 +12,7 @@ import { BrowserProtocolStateStore } from "./browser-state-store";
 import { loadOpenMlsWasm } from "./openmls-runtime";
 import type {
   DecryptedMessage,
+  EncryptedTransportRecord,
   OutboundPlaintext,
   ProtocolAdapter,
 } from "./protocol-adapter";
@@ -40,6 +42,7 @@ interface LocalMlsStateV1 {
   pendingAckEventIds: string[];
   pendingOutboundTransition: PendingOutboundTransition | null;
   peerIdentityPins: Record<string, PeerIdentityPin>;
+  eventJournal: Record<string, EncryptedEventRecord[]>;
 }
 
 export interface OpenMlsAdapterOptions {
@@ -172,6 +175,10 @@ function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
       raw.peerIdentityPins && typeof raw.peerIdentityPins === "object"
         ? raw.peerIdentityPins as Record<string, PeerIdentityPin>
         : {},
+    eventJournal:
+      raw.eventJournal && typeof raw.eventJournal === "object"
+        ? raw.eventJournal as Record<string, EncryptedEventRecord[]>
+        : {},
   };
 }
 
@@ -246,6 +253,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         pendingAckEventIds: [],
         pendingOutboundTransition: null,
         peerIdentityPins: {},
+        eventJournal: {},
       };
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
     }
@@ -475,93 +483,57 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     conversationId: string,
     envelope: E2eeEnvelope,
   ): Promise<DecryptedMessage> {
-    if (envelope.kind !== "application") {
-      throw new Error("Expected an MLS application envelope");
+    return this.mutate((provider) =>
+      this.decryptWithProvider(provider, conversationId, envelope)
+    );
+  }
+
+  async decryptAndJournal(
+    conversationId: string,
+    record: EncryptedTransportRecord,
+  ): Promise<DecryptedMessage> {
+    if (!record.id || !record.senderId || !Number.isInteger(record.sequence) || record.sequence <= 0) {
+      throw new Error("Invalid encrypted transport record");
     }
 
-    return this.mutate((provider) => {
-      const plaintext = provider.decryptApplication(
-        utf8(conversationId),
-        envelopeBytes(envelope),
+    return this.enqueue(async () => {
+      this.assertReady();
+      await this.flushPendingOutboundTransition();
+
+      const existing = this.localState!.eventJournal[conversationId]?.find(
+        (item) => item.eventId === record.id,
       );
-      const decoded = JSON.parse(utf8String(plaintext)) as Record<string, unknown>;
-      if (decoded.version !== 1 || typeof decoded.kind !== "string") {
-        throw new Error("Invalid decrypted MLS application payload");
+      if (existing) {
+        return this.decryptedMessageFromDomainEvent(existing.event);
       }
 
-      if (decoded.kind === "message") {
-        if (
-          !["text", "image", "file", "voice"].includes(String(decoded.messageType))
-          || !(typeof decoded.body === "string" || decoded.body === null)
-          || !(typeof decoded.replyTo === "string" || decoded.replyTo === null)
-          || !Array.isArray(decoded.assetIds)
-          || decoded.assetIds.some((item) => typeof item !== "string")
-          || !Array.isArray(decoded.attachments)
-          || decoded.attachments.some((item) => !isEncryptedAttachmentMetadata(item))
-        ) {
-          throw new Error("Invalid decrypted MLS message event");
-        }
-        return {
-          body: decoded.body,
-          event: {
-            kind: "message",
-            messageType: decoded.messageType as "text" | "image" | "file" | "voice",
-            body: decoded.body,
-            replyTo: decoded.replyTo,
-            assetIds: decoded.assetIds as string[],
-            attachments: decoded.attachments as EncryptedAttachmentMetadata[],
-          },
-        };
+      const snapshot = this.snapshotRuntime();
+      try {
+        const decrypted = this.decryptWithProvider(
+          this.provider!,
+          conversationId,
+          record.envelope,
+        );
+        const journal = this.localState!.eventJournal[conversationId] ?? [];
+        journal.push({
+          eventId: record.id,
+          senderId: record.senderId,
+          sequence: record.sequence,
+          event: this.toDomainEvent(decrypted.event),
+        });
+        this.localState!.eventJournal[conversationId] = journal;
+        await this.persistCurrentState();
+        return decrypted;
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
       }
-
-      if (decoded.kind === "edit") {
-        if (typeof decoded.targetMessageId !== "string" || typeof decoded.body !== "string") {
-          throw new Error("Invalid decrypted MLS edit event");
-        }
-        return {
-          body: null,
-          event: {
-            kind: "edit",
-            targetMessageId: decoded.targetMessageId,
-            body: decoded.body,
-          },
-        };
-      }
-
-      if (decoded.kind === "reaction") {
-        if (
-          typeof decoded.targetMessageId !== "string"
-          || typeof decoded.emoji !== "string"
-          || typeof decoded.active !== "boolean"
-        ) {
-          throw new Error("Invalid decrypted MLS reaction event");
-        }
-        return {
-          body: null,
-          event: {
-            kind: "reaction",
-            targetMessageId: decoded.targetMessageId,
-            emoji: decoded.emoji,
-            active: decoded.active,
-          },
-        };
-      }
-
-      if (decoded.kind === "delete") {
-        if (typeof decoded.targetMessageId !== "string") {
-          throw new Error("Invalid decrypted MLS delete event");
-        }
-        return {
-          body: null,
-          event: {
-            kind: "delete",
-            targetMessageId: decoded.targetMessageId,
-          },
-        };
-      }
-
-      throw new Error("Unsupported decrypted MLS application event");
     });
+  }
+
+  projectConversation(conversationId: string): EncryptedProjectionResult {
+    this.assertReady();
+    return projectEncryptedEvents(this.localState!.eventJournal[conversationId] ?? []);
   }
 
   async syncControlEvents(conversationId: string): Promise<number> {
@@ -722,6 +694,122 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
   private peerPinKey(userId: string, deviceId: string): string {
     return userId + ":" + deviceId;
+  }
+
+  private decryptWithProvider(
+    provider: Provider,
+    conversationId: string,
+    envelope: E2eeEnvelope,
+  ): DecryptedMessage {
+    if (envelope.kind !== "application") {
+      throw new Error("Expected an MLS application envelope");
+    }
+
+    const plaintext = provider.decryptApplication(
+      utf8(conversationId),
+      envelopeBytes(envelope),
+    );
+    const decoded = JSON.parse(utf8String(plaintext)) as Record<string, unknown>;
+    if (decoded.version !== 1 || typeof decoded.kind !== "string") {
+      throw new Error("Invalid decrypted MLS application payload");
+    }
+
+    if (decoded.kind === "message") {
+      if (
+        !["text", "image", "file", "voice"].includes(String(decoded.messageType))
+        || !(typeof decoded.body === "string" || decoded.body === null)
+        || !(typeof decoded.replyTo === "string" || decoded.replyTo === null)
+        || !Array.isArray(decoded.assetIds)
+        || decoded.assetIds.some((item) => typeof item !== "string")
+        || !Array.isArray(decoded.attachments)
+        || decoded.attachments.some((item) => !isEncryptedAttachmentMetadata(item))
+      ) {
+        throw new Error("Invalid decrypted MLS message event");
+      }
+      return {
+        body: decoded.body,
+        event: {
+          kind: "message",
+          messageType: decoded.messageType as "text" | "image" | "file" | "voice",
+          body: decoded.body,
+          replyTo: decoded.replyTo,
+          assetIds: decoded.assetIds as string[],
+          attachments: decoded.attachments as EncryptedAttachmentMetadata[],
+        },
+      };
+    }
+
+    if (decoded.kind === "edit") {
+      if (typeof decoded.targetMessageId !== "string" || typeof decoded.body !== "string") {
+        throw new Error("Invalid decrypted MLS edit event");
+      }
+      return {
+        body: null,
+        event: {
+          kind: "edit",
+          targetMessageId: decoded.targetMessageId,
+          body: decoded.body,
+        },
+      };
+    }
+
+    if (decoded.kind === "reaction") {
+      if (
+        typeof decoded.targetMessageId !== "string"
+        || typeof decoded.emoji !== "string"
+        || typeof decoded.active !== "boolean"
+      ) {
+        throw new Error("Invalid decrypted MLS reaction event");
+      }
+      return {
+        body: null,
+        event: {
+          kind: "reaction",
+          targetMessageId: decoded.targetMessageId,
+          emoji: decoded.emoji,
+          active: decoded.active,
+        },
+      };
+    }
+
+    if (decoded.kind === "delete") {
+      if (typeof decoded.targetMessageId !== "string") {
+        throw new Error("Invalid decrypted MLS delete event");
+      }
+      return {
+        body: null,
+        event: {
+          kind: "delete",
+          targetMessageId: decoded.targetMessageId,
+        },
+      };
+    }
+
+    throw new Error("Unsupported decrypted MLS application event");
+  }
+
+  private toDomainEvent(event: DecryptedMessage["event"]): EncryptedEventRecord["event"] {
+    if (event.kind !== "message") return event;
+    return {
+      ...event,
+      assetIds: [...event.assetIds],
+      attachments: event.attachments.map((item) => ({ ...item })),
+    };
+  }
+
+  private decryptedMessageFromDomainEvent(
+    event: EncryptedEventRecord["event"],
+  ): DecryptedMessage {
+    if (event.kind === "message") {
+      return {
+        body: event.body,
+        event: {
+          ...event,
+          attachments: event.attachments as EncryptedAttachmentMetadata[],
+        },
+      };
+    }
+    return { body: null, event };
   }
 
   private async encryptApplicationEvent(

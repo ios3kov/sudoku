@@ -32,6 +32,13 @@ export interface DecryptedMessage {
   event: DecryptedApplicationEvent;
 }
 
+export interface EncryptedTransportRecord {
+  id: string;
+  senderId: string;
+  sequence: number;
+  envelope: E2eeEnvelope;
+}
+
 export interface MlsMembershipChange {
   commit: E2eeEnvelope;
   welcome?: E2eeEnvelope;
