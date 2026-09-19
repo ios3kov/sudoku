@@ -571,12 +571,14 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       },
     ].sort((left, right) => left.order.localeCompare(right.order));
 
-    const material = utf8(
+    const materialSource = utf8(
       "sudoku-mls-safety-v1\u0000"
       + records[0].value
       + "\u0000"
       + records[1].value,
     );
+    const material = new Uint8Array(materialSource.byteLength);
+    material.set(materialSource);
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", material));
     const hex = [...digest]
       .map((byte) => byte.toString(16).padStart(2, "0"))
