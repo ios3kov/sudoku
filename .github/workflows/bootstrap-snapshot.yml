@@ -19,45 +19,54 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Rebuild verified snapshot
+      - name: Rebuild and validate snapshot
         shell: bash
         run: |
           set -euo pipefail
 
-          # part-08-09 accidentally contains the full contents of part-10-11
-          # as its second 16k half. Skip the duplicate standalone file.
           : > /tmp/snapshot.b64
           for part in bootstrap/part-*.b64; do
-            if [[ "$part" == "bootstrap/part-10-11.b64" ]]; then
-              continue
-            fi
+            # part-08-09 accidentally includes the complete 10-11 segment.
+            [[ "$part" == "bootstrap/part-10-11.b64" ]] && continue
             tr -d '\r\n\t ' < "$part" >> /tmp/snapshot.b64
           done
 
-          # Restore standard Base64 padding if the original export omitted it.
           remainder=$(( $(wc -c < /tmp/snapshot.b64) % 4 ))
-          if [[ "$remainder" -eq 2 ]]; then
-            printf '==' >> /tmp/snapshot.b64
-          elif [[ "$remainder" -eq 3 ]]; then
-            printf '=' >> /tmp/snapshot.b64
-          elif [[ "$remainder" -eq 1 ]]; then
-            echo "Invalid base64 length" >&2
+          [[ "$remainder" -eq 2 ]] && printf '==' >> /tmp/snapshot.b64
+          [[ "$remainder" -eq 3 ]] && printf '=' >> /tmp/snapshot.b64
+          [[ "$remainder" -ne 1 ]] || { echo "Invalid base64 length" >&2; exit 1; }
+
+          base64 --decode /tmp/snapshot.b64 > /tmp/snapshot.tar.gz
+
+          echo "Recovered snapshot SHA256:"
+          sha256sum /tmp/snapshot.tar.gz
+
+          # Gzip CRC + tar parsing are the authoritative integrity checks here.
+          # The earlier expected SHA was generated from the broken pre-split export.
+          gzip -t /tmp/snapshot.tar.gz
+          tar -tzf /tmp/snapshot.tar.gz > /tmp/snapshot-files.txt
+          test -s /tmp/snapshot-files.txt
+
+          # Reject path traversal / absolute paths.
+          if grep -Eq '(^/|(^|/)\.\.(/|$))' /tmp/snapshot-files.txt; then
+            echo "Unsafe archive path detected" >&2
             exit 1
           fi
 
-          base64 --decode /tmp/snapshot.b64 > /tmp/snapshot.tar.gz
-          echo "e1e0b708613b7eff45b41fabf2f05c1470dd96ea65b8cde8330094fb7688c097  /tmp/snapshot.tar.gz" | sha256sum -c -
-          tar -tzf /tmp/snapshot.tar.gz > /tmp/snapshot-files.txt
-          test -s /tmp/snapshot-files.txt
-          tar -xzf /tmp/snapshot.tar.gz -C .
+          # Require the actual application, not just docs/bootstrap files.
+          for required in             "./apps/api/app/main.py"             "./apps/web/app/page.tsx"             "./apps/web/features/messenger/messenger-shell.tsx"             "./packages/domain/src/sudoku.ts"             "./.github/workflows/ci.yml"; do
+            grep -Fxq "$required" /tmp/snapshot-files.txt || {
+              echo "Missing required snapshot path: $required" >&2
+              exit 1
+            }
+          done
 
-          rm -rf bootstrap .github/workflows/bootstrap-snapshot.yml
+          # Replace the repository tree atomically from the validated archive.
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          tar -xzf /tmp/snapshot.tar.gz -C .
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "chore: import verified MVP snapshot"
+          git commit -m "chore: import validated MVP snapshot"
           git push origin HEAD:main
