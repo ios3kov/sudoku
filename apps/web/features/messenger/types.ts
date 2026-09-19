@@ -133,6 +133,17 @@ export interface MlsControlRecipient {
   device_id: string;
 }
 
+export interface MlsMembershipChange {
+  id: string;
+  conversation_id: string;
+  target_user_id: string;
+  requested_by: string;
+  kind: "add" | "remove";
+  status: "pending" | "completed";
+  created_at: string;
+  completed_at: string | null;
+}
+
 export interface MlsControlEvent {
   id: string;
   conversation_id: string;
@@ -141,6 +152,7 @@ export interface MlsControlEvent {
   client_id: string;
   sequence: number;
   kind: "commit" | "welcome";
+  membership_change_id?: string | null;
   payload_b64: string;
   created_at: string;
 }

@@ -1,4 +1,4 @@
-import type { AssetSummary, ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsTransportEvent } from "./types";
+import type { AssetSummary, ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsMembershipChange, MlsTransportEvent } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
@@ -94,13 +94,18 @@ export const messengerApi = {
     conversationId: string,
     senderDeviceId: string,
     events: MlsControlBatchItem[],
+    membershipChangeId: string | null = null,
   ) =>
     request<MlsControlBatchResponse>(
       `/v1/e2ee/conversations/${conversationId}/control-batches`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sender_device_id: senderDeviceId, events }),
+        body: JSON.stringify({
+          sender_device_id: senderDeviceId,
+          membership_change_id: membershipChangeId,
+          events,
+        }),
       },
     ),
   mlsTransportEvents: (conversationId: string, deviceId: string, after = 0) =>
@@ -119,6 +124,20 @@ export const messengerApi = {
     }),
   activateMlsConversation: (conversationId: string) =>
     request<void>(`/v1/e2ee/conversations/${conversationId}/activate`, {
+      method: "POST",
+    }),
+  prepareMlsMemberAdd: (conversationId: string, userId: string) =>
+    request<MlsMembershipChange>(
+      `/v1/e2ee/conversations/${conversationId}/membership-changes/add/${userId}`,
+      { method: "POST" },
+    ),
+  prepareMlsMemberRemove: (conversationId: string, userId: string) =>
+    request<MlsMembershipChange>(
+      `/v1/e2ee/conversations/${conversationId}/membership-changes/remove/${userId}`,
+      { method: "POST" },
+    ),
+  finalizeMlsMembershipChange: (changeId: string) =>
+    request<void>(`/v1/e2ee/membership-changes/${changeId}/finalize`, {
       method: "POST",
     }),
   markRead: (conversationId: string, sequence: number) => request<void>(`/v1/conversations/${conversationId}/read`, {

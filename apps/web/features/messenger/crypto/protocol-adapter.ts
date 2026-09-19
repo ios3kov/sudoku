@@ -63,12 +63,14 @@ export interface ProtocolAdapter {
     keyPackage: ClaimedMlsKeyPackage,
     commitRecipients: MlsControlRecipient[],
     welcomeRecipients: MlsControlRecipient[],
+    membershipChangeId?: string | null,
   ): Promise<void>;
 
   removeMemberDurably(
     conversationId: string,
     memberCredential: Uint8Array,
     commitRecipients: MlsControlRecipient[],
+    membershipChangeId?: string | null,
   ): Promise<void>;
 
   syncControlEvents?(conversationId: string): Promise<number>;
