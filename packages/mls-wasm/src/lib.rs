@@ -2,8 +2,11 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use openmls::prelude::{
-    BasicCredential, Ciphersuite, CredentialWithKey, Deserialize, KeyPackage, KeyPackageIn,
-    OpenMlsProvider, ProtocolVersion, Serialize, SignatureScheme,
+    BasicCredential, Ciphersuite, CredentialWithKey, KeyPackage, KeyPackageIn, OpenMlsProvider,
+    ProtocolVersion, SignatureScheme,
+};
+use openmls::prelude::tls_codec::{
+    Deserialize as TlsDeserializeTrait, Serialize as TlsSerializeTrait,
 };
 use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::{MemoryStorage, RustCrypto};

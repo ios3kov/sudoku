@@ -1,48 +1,29 @@
 # Step 47 — Persistent device identity and MLS KeyPackages
 
 ## Goal
-Generate MLS credentials/KeyPackages in browser WASM while keeping all private signing and KeyPackage material inside persisted OpenMLS provider state.
+Generate MLS credentials/KeyPackages in browser WASM while keeping private signing and KeyPackage material inside persisted OpenMLS provider state.
 
 ## Device identity
-`Provider.createDeviceIdentity(credentialBytes)`:
-- validates bounded application credential bytes;
-- generates an Ed25519 signing key with OpenMLS BasicCredential support;
-- stores the private signer in OpenMLS `MemoryStorage`;
-- returns a `DeviceIdentity` containing only credential bytes and the 32-byte public key.
+`Provider.createDeviceIdentity(credentialBytes)` creates an Ed25519 signer, persists it in OpenMLS storage, and returns only credential bytes plus the 32-byte public key.
 
-After reload, JavaScript can reconstruct that public handle with `DeviceIdentity.fromPublic(...)`. The provider restores the private signer through `SignatureKeyPair::read(...)` from the encrypted provider-state blob.
+After reload, `DeviceIdentity.fromPublic(...)` reconstructs the public handle and `SignatureKeyPair::read(...)` restores the private signer from provider storage.
 
-## KeyPackage generation
-`Provider.createKeyPackage(identity)`:
-- reloads the signer from provider storage;
-- builds an MLS 1.0 KeyPackage using
-  `MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519`;
-- lets OpenMLS store the associated private KeyPackage bundle in provider storage;
-- returns only serialized public KeyPackage bytes for delivery-service publication.
+## KeyPackages
+`createKeyPackage(identity)` builds an MLS 1.0 KeyPackage using X25519 + ChaCha20Poly1305 + SHA-256 + Ed25519. OpenMLS stores the private KeyPackage bundle; JS receives only serialized public bytes.
 
-## Untrusted KeyPackage validation
-`Provider.validateKeyPackage(bytes)`:
-- enforces a 64 KiB input limit;
-- rejects malformed or trailing bytes;
-- validates MLS 1.0 structure/signature with OpenMLS;
-- rejects unsupported ciphersuites;
-- returns canonical validated bytes.
+`validateKeyPackage(bytes)` applies size limits, TLS decoding, MLS 1.0 validation, ciphersuite validation and trailing-byte rejection.
 
-## Persistence acceptance
-Rust tests verify:
-1. identity creation;
-2. KeyPackage generation;
-3. provider-state export/restore;
-4. signer recovery after restore;
-5. new KeyPackage generation after reload;
-6. public KeyPackage validation;
-7. corrupt package rejection.
+## First Rust CI finding
+The initial import used `Deserialize/Serialize` from the OpenMLS prelude and resolved to private derive macros rather than the public `tls_codec` traits. That prevented `tls_deserialize` / `tls_serialize_detached` from being in scope.
 
-## Privacy boundary
-Private signing keys and private KeyPackage material are not exposed as JS byte arrays. They exist only inside the provider storage blob, which the web layer encrypts before IndexedDB persistence.
+## Fix
+Import the traits explicitly from `openmls::prelude::tls_codec`.
+
+## Acceptance
+Rust tests cover identity creation, KeyPackage generation, provider export/restore, signer recovery, post-reload KeyPackage generation, valid-package canonicalization and malformed-package rejection.
 
 ## Capability
 `device_identity=true`, `key_packages=true`, `persistent_state=true`, `ui_ready=false`.
 
 ## Next
-Step 48: create/join a two-member MLS group using KeyPackage + Welcome, persist both sides, then exchange an encrypted application message after reload.
+Step 48: two-member group create/join via KeyPackage + Welcome and encrypted application-message exchange after reload.
