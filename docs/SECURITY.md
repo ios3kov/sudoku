@@ -66,3 +66,17 @@ Redis fixed-window limits exist for login IP/account buckets and authenticated a
 The hidden UI is privacy-of-presentation, not a security boundary or anti-forensics mechanism. A determined person with developer tooling can discover bundled messenger code. Network/DNS/device-management history can also expose the service.
 
 MVP transport uses TLS and server-side access control; full E2EE is not yet enabled. The schema reserves ciphertext/version fields, but production E2EE must use a reviewed existing protocol/library rather than custom cryptography.
+
+## App-switcher privacy shield
+
+The private surface must not rely on the 30-second auto-lock alone.
+
+When the PWA enters a hidden/pagehide lifecycle state while the private surface is active:
+
+1. an already-mounted neutral Sudoku cover is shown synchronously via a root DOM attribute;
+2. the private surface is made invisible and non-interactive;
+3. the background timestamp is retained;
+4. returning before 30 seconds restores the private surface;
+5. returning at or after 30 seconds closes the private surface before removing the cover.
+
+This is a privacy-hardening measure for OS/app-switcher snapshots, not a cryptographic security boundary. The application cannot guarantee prevention of screenshots or OS-level capture while the private surface is actively visible.
