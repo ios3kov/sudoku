@@ -224,6 +224,12 @@ impl Provider {
             .map_err(|error| JsError::new(&error))
     }
 
+    #[wasm_bindgen(js_name = mergePendingCommit)]
+    pub fn merge_pending_commit(&self, group_id: &[u8]) -> Result<(), JsError> {
+        self.merge_pending_commit_inner(group_id)
+            .map_err(|error| JsError::new(&error))
+    }
+
     #[wasm_bindgen(js_name = exportState)]
     pub fn export_state(&self) -> Result<Vec<u8>, JsError> {
         encode_storage(&self.storage).map_err(|message| JsError::new(&message))
@@ -259,10 +265,6 @@ impl Provider {
         let (commit, welcome, _) = group
             .add_members(self, &signer, &[new_member])
             .map_err(|_| "Failed to add MLS member".to_owned())?;
-
-        group
-            .merge_pending_commit(self)
-            .map_err(|_| "Failed to merge local MLS membership commit".to_owned())?;
 
         Ok(AddMemberResult {
             commit: serialize_mls_message(&commit)?,
@@ -377,11 +379,15 @@ impl Provider {
             .remove_members(self, &signer, &[leaf])
             .map_err(|_| "Failed to remove MLS member".to_owned())?;
 
+        serialize_mls_message(&commit)
+    }
+
+    fn merge_pending_commit_inner(&self, group_id: &[u8]) -> Result<(), String> {
+        validate_group_id(group_id)?;
+        let mut group = self.load_group_inner(group_id)?;
         group
             .merge_pending_commit(self)
-            .map_err(|_| "Failed to merge local MLS removal commit".to_owned())?;
-
-        serialize_mls_message(&commit)
+            .map_err(|_| "Failed to merge local MLS pending commit".to_owned())
     }
 
     fn parse_key_package_inner(&self, bytes: &[u8]) -> Result<KeyPackage, String> {
@@ -450,7 +456,7 @@ pub fn openmls_version() -> String {
 
 #[wasm_bindgen]
 pub fn binding_capabilities() -> String {
-    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"membership_rekey":true,"ui_ready":false}"#.to_owned()
+    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"membership_rekey":true,"two_phase_membership":true,"ui_ready":false}"#.to_owned()
 }
 
 fn validate_group_id(group_id: &[u8]) -> Result<(), String> {
@@ -716,7 +722,10 @@ mod tests {
             .expect("create alice group");
         let add = alice
             .add_member_inner(&alice_identity, group_id, &bob_key_package)
-            .expect("add bob");
+            .expect("prepare add bob");
+        alice
+            .merge_pending_commit_inner(group_id)
+            .expect("merge add bob after durable acceptance");
 
         let joined_group_id = bob
             .join_group_inner(&add.welcome)
@@ -791,13 +800,19 @@ mod tests {
 
         let add_bob = alice
             .add_member_inner(&alice_identity, group_id, &bob_key_package)
-            .expect("add bob");
+            .expect("prepare add bob");
+        alice
+            .merge_pending_commit_inner(group_id)
+            .expect("merge add bob");
         bob.join_group_inner(&add_bob.welcome)
             .expect("bob joins");
 
         let add_charlie = alice
             .add_member_inner(&alice_identity, group_id, &charlie_key_package)
-            .expect("add charlie");
+            .expect("prepare add charlie");
+        alice
+            .merge_pending_commit_inner(group_id)
+            .expect("merge add charlie");
         bob.process_handshake_inner(group_id, &add_charlie.commit)
             .expect("bob applies charlie add commit");
         charlie
@@ -821,7 +836,10 @@ mod tests {
 
         let remove_bob = alice
             .remove_member_inner(&alice_identity, group_id, &bob_identity.credential)
-            .expect("remove bob");
+            .expect("prepare remove bob");
+        alice
+            .merge_pending_commit_inner(group_id)
+            .expect("merge remove bob");
 
         charlie
             .process_handshake_inner(group_id, &remove_bob)
@@ -842,6 +860,64 @@ mod tests {
             bob.decrypt_application_inner(group_id, &after_remove)
                 .is_err(),
             "removed member must not decrypt messages from the new MLS epoch"
+        );
+    }
+
+    #[test]
+    fn pending_membership_commit_survives_reload_before_merge() {
+        let alice = Provider::default();
+        let bob = Provider::default();
+
+        let alice_identity = alice
+            .create_device_identity(b"alice:pending-device")
+            .expect("alice identity");
+        let bob_identity = bob
+            .create_device_identity(b"bob:pending-device")
+            .expect("bob identity");
+        let bob_key_package = bob
+            .create_key_package(&bob_identity)
+            .expect("bob key package");
+
+        let group_id = b"conversation-pending-commit";
+        alice
+            .create_group_inner(&alice_identity, group_id)
+            .expect("create group");
+        let prepared = alice
+            .add_member_inner(&alice_identity, group_id, &bob_key_package)
+            .expect("prepare add bob");
+
+        // The creator is intentionally still in PendingCommit state here.
+        assert!(
+            alice
+                .encrypt_application_inner(&alice_identity, group_id, b"must block")
+                .is_err(),
+            "application messages must be blocked while membership commit is pending"
+        );
+
+        let state = encode_storage(&alice.storage).expect("export pending state");
+        let restored = Provider {
+            crypto: RustCrypto::default(),
+            storage: decode_storage(&state).expect("restore pending state"),
+        };
+
+        bob.join_group_inner(&prepared.welcome)
+            .expect("bob joins from prepared welcome");
+
+        restored
+            .merge_pending_commit_inner(group_id)
+            .expect("merge pending commit after reload");
+
+        let alice_handle = DeviceIdentity {
+            credential: alice_identity.credential.clone(),
+            public_key: alice_identity.public_key.clone(),
+        };
+        let encrypted = restored
+            .encrypt_application_inner(&alice_handle, group_id, b"after merge")
+            .expect("encrypt after merge");
+        assert_eq!(
+            bob.decrypt_application_inner(group_id, &encrypted)
+                .expect("bob decrypts after merge"),
+            b"after merge"
         );
     }
 
