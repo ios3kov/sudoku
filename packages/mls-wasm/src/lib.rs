@@ -170,6 +170,21 @@ impl Provider {
         .map_err(|message| JsError::new(&message))
     }
 
+    #[wasm_bindgen(js_name = validateGroupMemberIdentity)]
+    pub fn validate_group_member_identity(
+        &self,
+        group_id: &[u8],
+        expected_credential: &[u8],
+        expected_public_key: &[u8],
+    ) -> Result<(), JsError> {
+        self.validate_group_member_identity_inner(
+            group_id,
+            expected_credential,
+            expected_public_key,
+        )
+        .map_err(|message| JsError::new(&message))
+    }
+
     #[wasm_bindgen(js_name = createGroup)]
     pub fn create_group(
         &self,
@@ -405,6 +420,31 @@ impl Provider {
             .map_err(|_| "Failed to merge local MLS pending commit".to_owned())
     }
 
+    fn validate_group_member_identity_inner(
+        &self,
+        group_id: &[u8],
+        expected_credential: &[u8],
+        expected_public_key: &[u8],
+    ) -> Result<(), String> {
+        validate_group_id(group_id)?;
+        validate_credential(expected_credential)?;
+        if expected_public_key.len() != ED25519_PUBLIC_KEY_BYTES {
+            return Err("Expected MLS identity key must be 32-byte Ed25519".to_owned());
+        }
+
+        let group = self.load_group_inner(group_id)?;
+        let credential: Credential = BasicCredential::new(expected_credential.to_vec()).into();
+        let member = group
+            .members()
+            .find(|member| member.credential == credential)
+            .ok_or_else(|| "Expected MLS group member credential not found".to_owned())?;
+
+        if member.signature_key.as_slice() != expected_public_key {
+            return Err("MLS group member signature key does not match pinned identity".to_owned());
+        }
+        Ok(())
+    }
+
     fn parse_key_package_inner(&self, bytes: &[u8]) -> Result<KeyPackage, String> {
         if bytes.is_empty() || bytes.len() > MAX_KEY_PACKAGE_BYTES {
             return Err("Invalid MLS KeyPackage size".to_owned());
@@ -498,7 +538,7 @@ pub fn openmls_version() -> String {
 
 #[wasm_bindgen]
 pub fn binding_capabilities() -> String {
-    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"membership_rekey":true,"two_phase_membership":true,"key_package_identity_binding":true,"ui_ready":false}"#.to_owned()
+    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"membership_rekey":true,"two_phase_membership":true,"key_package_identity_binding":true,"group_member_identity_binding":true,"ui_ready":false}"#.to_owned()
 }
 
 fn validate_group_id(group_id: &[u8]) -> Result<(), String> {
@@ -800,6 +840,22 @@ mod tests {
             .join_group_inner(&add.welcome)
             .expect("bob joins from welcome");
         assert_eq!(joined_group_id, group_id);
+        assert!(
+            bob.validate_group_member_identity_inner(
+                group_id,
+                b"alice:device-1",
+                &alice_identity.public_key,
+            )
+            .is_ok()
+        );
+        assert!(
+            bob.validate_group_member_identity_inner(
+                group_id,
+                b"alice:device-1",
+                &[0u8; 32],
+            )
+            .is_err()
+        );
 
         let alice_state = encode_storage(&alice.storage).expect("alice state");
         let bob_state = encode_storage(&bob.storage).expect("bob state");
