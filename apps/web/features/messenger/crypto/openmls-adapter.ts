@@ -1731,6 +1731,18 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         (item) => item.clientId === clientId,
       );
       if (!existing) {
+        const pendingChange = await messengerApi.pendingMlsMembershipChange(
+          conversationId,
+        );
+        if (
+          pendingChange.change
+          && (
+            pendingChange.change.kind === "device_add"
+            || pendingChange.change.kind === "device_remove"
+          )
+        ) {
+          throw new Error("Secure device rekey is in progress");
+        }
         const snapshot = this.snapshotRuntime();
         try {
           const ciphertext = this.provider!.encryptApplication(
