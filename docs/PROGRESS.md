@@ -1,33 +1,35 @@
 # Progress
 
 ## Current milestone
-MVP acceptance + security hardening.
+Repository MVP accepted; production deployment preparation.
 
 ## Verified baseline
-Commit `90ca6cd` passed the complete acceptance pipeline: PostgreSQL/Redis/S3 integration, migrations, full API MVP flow, domain tests, domain declarations, web typecheck and Next production build.
+Commit `90ca6cd` passed the complete acceptance pipeline: PostgreSQL/Redis/S3 integration, migrations, full API MVP flow, domain tests, declarations, web typecheck and Next production build.
 
-## Hardening review
+## Security hardening
+- Step 26: immediate Sudoku privacy cover on background/app switcher; >=30s locks private state.
+- Step 27: exact Origin required for browser mutations.
+- Step 28: realtime sessions revalidate; connection-scoped presence; push suppression follows live connections.
+- Step 29: concurrent session refresh serialized by row lock + recheck.
+- Step 30: storage ACL, signed downloads, push SSRF, SW cache exclusions, realtime membership reviewed.
+- Sensitive URL logging hardening commit `27d0119`: full CI ✓.
+- Origin/realtime/session hardening commits: full CI ✓.
 
-### Step 26 — Privacy lifecycle
-Immediate Sudoku cover on background/app switcher; >=30s background locks private state before reveal.
+## Production configuration
+Step 31 adds a fail-closed production Compose override:
+- HTTPS public origin.
+- Secure cookies.
+- Required domain/secrets/storage/VAPID values.
+- Caddy TLS on 80/443.
+- No public object-store admin/data ports from the bundled local service.
 
-### Step 27 — Origin boundary
-All browser POST/PUT/PATCH/DELETE requests require exact configured Origin. Missing or wrong Origin is 403.
-
-### Step 28 — Realtime sessions/presence
-WebSocket sessions revalidate on heartbeat/actions; revoked sessions close. Presence is connection-scoped and push suppression recognizes any live connection.
-
-### Step 29 — Session rotation
-Refresh row-locks and rechecks the current session so concurrent refresh cannot mint multiple replacements.
-
-### Step 30 — Review summary
-Storage ACL, signed downloads, push SSRF controls, service-worker cache exclusions, realtime membership and sensitive logging were reviewed; no additional code change was required for those boundaries.
-
-## Current verification
-- Baseline full acceptance: ✓.
-- Privacy hardening commit `2580c82`: full CI ✓.
-- Later Origin/realtime/session-rotation hardening: CI runs pending/current.
-- Production deployment and live mobile smoke are not yet claimed.
+## What is NOT yet verified
+- Live DNS/TLS.
+- Real production PostgreSQL/Redis/S3 durability/backups.
+- Real VAPID delivery on iOS/Android.
+- Add-to-Home-Screen behavior on physical devices.
+- App-switcher concealment on physical iOS/Android.
+- Live worker/beat/realtime behavior under deployment networking.
 
 ## Next step
-Require one full green CI on the latest hardening HEAD. Then prepare production deployment configuration and run live PWA/mobile smoke tests.
+Provision production infrastructure and secrets, deploy, bootstrap the first admin, then run the live mobile/PWA smoke checklist. Do not mark production complete until that passes.
