@@ -1,6 +1,7 @@
 import type {
   ClaimedMlsKeyPackage,
   E2eeEnvelope,
+  EncryptedAttachmentMetadata,
   MlsControlRecipient,
 } from "../types";
 
@@ -10,6 +11,7 @@ export interface OutboundPlaintext {
   body: string | null;
   replyTo: string | null;
   assetIds: string[];
+  attachments?: EncryptedAttachmentMetadata[];
 }
 
 export interface DecryptedMessage {

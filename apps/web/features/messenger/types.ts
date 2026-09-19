@@ -32,8 +32,23 @@ export interface AssetSummary {
   mime_type: string;
   size_bytes: number;
   filename: string;
+  e2ee_ciphertext: boolean;
   status: string;
   content_url: string;
+}
+
+
+export interface EncryptedAttachmentMetadata {
+  version: 1;
+  algorithm: "AES-256-GCM";
+  assetId: string;
+  keyB64: string;
+  nonceB64: string;
+  originalName: string;
+  originalMime: string;
+  plaintextSize: number;
+  plaintextSha256Hex: string;
+  ciphertextSha256Hex: string;
 }
 
 export interface ReactionSummary {

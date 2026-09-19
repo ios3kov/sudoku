@@ -2,6 +2,7 @@ import { messengerApi } from "../api";
 import type {
   ClaimedMlsKeyPackage,
   E2eeEnvelope,
+  EncryptedAttachmentMetadata,
   MlsControlBatchItem,
   MlsControlEvent,
   MlsControlRecipient,
@@ -90,6 +91,27 @@ function envelopeBytes(envelope: E2eeEnvelope): Uint8Array {
     throw new Error("Unsupported E2EE envelope");
   }
   return base64ToBytes(envelope.ciphertext);
+}
+
+function isEncryptedAttachmentMetadata(value: unknown): value is EncryptedAttachmentMetadata {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<EncryptedAttachmentMetadata>;
+  return (
+    item.version === 1
+    && item.algorithm === "AES-256-GCM"
+    && typeof item.assetId === "string"
+    && typeof item.keyB64 === "string"
+    && typeof item.nonceB64 === "string"
+    && typeof item.originalName === "string"
+    && typeof item.originalMime === "string"
+    && typeof item.plaintextSize === "number"
+    && Number.isSafeInteger(item.plaintextSize)
+    && item.plaintextSize >= 0
+    && typeof item.plaintextSha256Hex === "string"
+    && /^[0-9a-f]{64}$/i.test(item.plaintextSha256Hex)
+    && typeof item.ciphertextSha256Hex === "string"
+    && /^[0-9a-f]{64}$/i.test(item.ciphertextSha256Hex)
+  );
 }
 
 function isControlRecipient(value: unknown): value is MlsControlRecipient {
@@ -393,6 +415,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       body: input.body,
       replyTo: input.replyTo,
       assetIds: input.assetIds,
+      attachments: input.attachments ?? [],
     }));
 
     return this.mutate((provider, identity) => {
@@ -424,6 +447,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         body?: unknown;
         replyTo?: unknown;
         assetIds?: unknown;
+        attachments?: unknown;
       };
 
       if (
@@ -433,6 +457,8 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         || !(typeof decoded.replyTo === "string" || decoded.replyTo === null)
         || !Array.isArray(decoded.assetIds)
         || decoded.assetIds.some((item) => typeof item !== "string")
+        || !Array.isArray(decoded.attachments)
+        || decoded.attachments.some((item) => !isEncryptedAttachmentMetadata(item))
       ) {
         throw new Error("Invalid decrypted MLS application payload");
       }
@@ -443,6 +469,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
           messageType: decoded.messageType,
           replyTo: decoded.replyTo,
           assetIds: decoded.assetIds,
+          attachments: decoded.attachments,
         },
       };
     });
