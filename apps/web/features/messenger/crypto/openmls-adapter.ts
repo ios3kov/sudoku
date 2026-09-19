@@ -23,6 +23,14 @@ interface PendingOutboundTransition {
   events: MlsControlBatchItem[];
 }
 
+interface PeerIdentityPin {
+  userId: string;
+  deviceId: string;
+  publicKeyB64: string;
+  firstSeenAt: number;
+  verifiedAt: number | null;
+}
+
 interface LocalMlsStateV1 {
   version: 1;
   providerStateB64: string;
@@ -30,6 +38,7 @@ interface LocalMlsStateV1 {
   publicKeyB64: string;
   pendingAckEventIds: string[];
   pendingOutboundTransition: PendingOutboundTransition | null;
+  peerIdentityPins: Record<string, PeerIdentityPin>;
 }
 
 export interface OpenMlsAdapterOptions {
@@ -137,6 +146,10 @@ function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
     publicKeyB64: raw.publicKeyB64,
     pendingAckEventIds: raw.pendingAckEventIds,
     pendingOutboundTransition: parsePendingOutbound(raw.pendingOutboundTransition),
+    peerIdentityPins:
+      raw.peerIdentityPins && typeof raw.peerIdentityPins === "object"
+        ? raw.peerIdentityPins as Record<string, PeerIdentityPin>
+        : {},
   };
 }
 
@@ -157,6 +170,13 @@ interface RuntimeSnapshot {
   localState: LocalMlsStateV1;
 }
 
+
+export class PeerIdentityChangedError extends Error {
+  constructor(userId: string, deviceId: string) {
+    super("MLS identity changed for " + userId + "/" + deviceId);
+    this.name = "PeerIdentityChangedError";
+  }
+}
 
 export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   readonly protocol = PROTOCOL;
@@ -203,6 +223,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         publicKeyB64: bytesToBase64(identity.publicKeyBytes()),
         pendingAckEventIds: [],
         pendingOutboundTransition: null,
+        peerIdentityPins: {},
       };
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
     }
@@ -259,10 +280,38 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
       const snapshot = this.snapshotRuntime();
       try {
+        const packageBytes = base64ToBytes(keyPackage.key_package_b64);
+        const expectedPublicKey = base64ToBytes(keyPackage.identity_public_key_b64);
+        const expectedCredential = utf8(
+          "sudoku-v1:" + keyPackage.user_id + ":" + keyPackage.device_id,
+        );
+        const pinKey = this.peerPinKey(keyPackage.user_id, keyPackage.device_id);
+        const existingPin = this.localState!.peerIdentityPins[pinKey];
+
+        if (existingPin && existingPin.publicKeyB64 !== keyPackage.identity_public_key_b64) {
+          throw new PeerIdentityChangedError(keyPackage.user_id, keyPackage.device_id);
+        }
+
+        this.provider!.validateKeyPackageIdentity(
+          packageBytes,
+          expectedCredential,
+          expectedPublicKey,
+        );
+
+        if (!existingPin) {
+          this.localState!.peerIdentityPins[pinKey] = {
+            userId: keyPackage.user_id,
+            deviceId: keyPackage.device_id,
+            publicKeyB64: keyPackage.identity_public_key_b64,
+            firstSeenAt: Date.now(),
+            verifiedAt: null,
+          };
+        }
+
         const change = this.provider!.addMember(
           this.identity!,
           utf8(conversationId),
-          base64ToBytes(keyPackage.key_package_b64),
+          packageBytes,
         );
 
         const events: MlsControlBatchItem[] = [];
@@ -447,6 +496,62 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
       return processed;
     });
+  }
+
+  async safetyNumber(peerUserId: string, peerDeviceId: string): Promise<string> {
+    this.assertReady();
+    const pin = this.localState!.peerIdentityPins[this.peerPinKey(peerUserId, peerDeviceId)];
+    if (!pin) throw new Error("Peer MLS identity is not pinned");
+
+    const localOrder = this.options.userId + "\u0000" + this.options.deviceId;
+    const peerOrder = pin.userId + "\u0000" + pin.deviceId;
+    const records = [
+      {
+        order: localOrder,
+        value:
+          localOrder
+          + "\u0000"
+          + bytesToBase64(this.identity!.publicKeyBytes()),
+      },
+      {
+        order: peerOrder,
+        value: peerOrder + "\u0000" + pin.publicKeyB64,
+      },
+    ].sort((left, right) => left.order.localeCompare(right.order));
+
+    const material = utf8(
+      "sudoku-mls-safety-v1\u0000"
+      + records[0].value
+      + "\u0000"
+      + records[1].value,
+    );
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", material));
+    const hex = [...digest]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase();
+    return hex.match(/.{1,4}/g)?.join(" ") ?? hex;
+  }
+
+  async markPeerIdentityVerified(peerUserId: string, peerDeviceId: string): Promise<void> {
+    await this.enqueue(async () => {
+      this.assertReady();
+      const pin = this.localState!.peerIdentityPins[this.peerPinKey(peerUserId, peerDeviceId)];
+      if (!pin) throw new Error("Peer MLS identity is not pinned");
+
+      const previous = pin.verifiedAt;
+      pin.verifiedAt = Date.now();
+      try {
+        await this.persistCurrentState();
+      } catch (error) {
+        pin.verifiedAt = previous;
+        throw error;
+      }
+    });
+  }
+
+  private peerPinKey(userId: string, deviceId: string): string {
+    return userId + ":" + deviceId;
   }
 
   private async mutate<T>(
