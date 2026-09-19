@@ -97,7 +97,10 @@ async def conversation_members_response(db: AsyncSession, conversation_id: uuid.
         await db.execute(
             select(User, ConversationMember.role, ConversationMember.last_read_sequence)
             .join(ConversationMember, ConversationMember.user_id == User.id)
-            .where(ConversationMember.conversation_id == conversation_id)
+            .where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.e2ee_state != "pending_add",
+            )
             .order_by(User.display_name)
         )
     ).all()
@@ -138,6 +141,7 @@ async def require_membership(db: AsyncSession, conversation_id: uuid.UUID, user_
             select(ConversationMember).where(
                 ConversationMember.conversation_id == conversation_id,
                 ConversationMember.user_id == user_id,
+                ConversationMember.e2ee_state != "pending_add",
             )
         )
     ).scalar_one_or_none()
@@ -311,6 +315,11 @@ async def add_conversation_members(
 ):
     await enforce_user_rate_limit(auth.user.id, "conversation-member-add", 30, 60)
     conversation, owner_membership = await require_group_owner(db, conversation_id, auth.user.id)
+    if conversation.encryption_required:
+        raise HTTPException(
+            status_code=409,
+            detail="E2EE group membership must use MLS membership transitions",
+        )
     requested_ids = set(payload.user_ids)
     requested_ids.discard(auth.user.id)
     if not requested_ids:
@@ -405,6 +414,11 @@ async def remove_conversation_member(
     ).scalar_one_or_none()
     if conversation is None or conversation.type != "group":
         raise HTTPException(status_code=404, detail="Group not found")
+    if conversation.encryption_required:
+        raise HTTPException(
+            status_code=409,
+            detail="E2EE group membership must use MLS membership transitions",
+        )
     actor_membership = await require_membership(db, conversation_id, auth.user.id)
     target = (
         await db.execute(
@@ -484,6 +498,7 @@ async def list_conversations(auth: AuthContext = Depends(get_auth_context), db: 
             .join(ConversationMember, ConversationMember.conversation_id == Conversation.id)
             .where(
                 ConversationMember.user_id == auth.user.id,
+                ConversationMember.e2ee_state != "pending_add",
                 or_(
                     Conversation.e2ee_ready.is_(True),
                     Conversation.created_by == auth.user.id,
@@ -582,6 +597,19 @@ async def create_message(
             raise HTTPException(
                 status_code=409,
                 detail="Secure conversation setup is not active yet",
+            )
+        pending_membership = await db.scalar(
+            select(func.count())
+            .select_from(ConversationMember)
+            .where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.e2ee_state != "active",
+            )
+        )
+        if int(pending_membership or 0) > 0:
+            raise HTTPException(
+                status_code=409,
+                detail="MLS membership transition is pending",
             )
         if body is not None or payload.envelope is None:
             raise HTTPException(status_code=422, detail="E2EE conversation requires ciphertext envelope and forbids plaintext body")

@@ -114,6 +114,7 @@ class ConversationMember(Base):
     last_read_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     notifications_muted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    e2ee_state: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
 
 
 class Message(Base):
@@ -254,6 +255,45 @@ class MlsDevice(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+
+
+class ConversationMembershipChange(Base):
+    __tablename__ = "conversation_membership_changes"
+    __table_args__ = (
+        Index(
+            "ix_conversation_membership_change_pending",
+            "conversation_id",
+            "status",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requested_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class MlsControlEvent(Base):
     __tablename__ = "mls_control_events"
     __table_args__ = (
@@ -287,6 +327,10 @@ class MlsControlEvent(Base):
     sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    membership_change_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversation_membership_changes.id", ondelete="SET NULL"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

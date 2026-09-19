@@ -14,6 +14,7 @@ from .models import (
     AuditEvent,
     Conversation,
     ConversationMember,
+    ConversationMembershipChange,
     ConversationTransportEvent,
     MlsControlEvent,
     MlsControlRecipient,
@@ -63,6 +64,7 @@ class ControlEventBatchItemRequest(BaseModel):
 
 class ControlEventBatchCreateRequest(BaseModel):
     sender_device_id: uuid.UUID
+    membership_change_id: uuid.UUID | None = None
     events: list[ControlEventBatchItemRequest] = Field(min_length=1, max_length=10)
 
 
@@ -151,10 +153,443 @@ def serialize_control_event(item: MlsControlEvent) -> dict:
         "client_id": str(item.client_id),
         "sequence": item.sequence,
         "kind": item.kind,
+        "membership_change_id": str(item.membership_change_id) if item.membership_change_id else None,
         "payload_b64": encode_bytes(item.payload),
         "created_at": item.created_at.isoformat(),
     }
 
+
+
+
+
+def serialize_membership_change(item: ConversationMembershipChange) -> dict:
+    return {
+        "id": str(item.id),
+        "conversation_id": str(item.conversation_id),
+        "target_user_id": str(item.target_user_id),
+        "requested_by": str(item.requested_by),
+        "kind": item.kind,
+        "status": item.status,
+        "created_at": item.created_at.isoformat(),
+        "completed_at": item.completed_at.isoformat() if item.completed_at else None,
+    }
+
+
+async def require_e2ee_group_owner(
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> tuple[Conversation, ConversationMember]:
+    conversation = (
+        await db.execute(
+            select(Conversation)
+            .where(Conversation.id == conversation_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if (
+        conversation is None
+        or conversation.type != "group"
+        or not conversation.encryption_required
+        or not conversation.e2ee_ready
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Encrypted group not found")
+    membership = (
+        await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == user_id,
+                ConversationMember.e2ee_state != "pending_add",
+            )
+        )
+    ).scalar_one_or_none()
+    if membership is None or membership.role != "owner":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Group owner access required")
+    return conversation, membership
+
+
+async def current_active_device_pairs(
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    states: tuple[str, ...],
+) -> set[tuple[uuid.UUID, uuid.UUID]]:
+    now = datetime.now(UTC)
+    return set(
+        (
+            await db.execute(
+                select(MlsDevice.user_id, MlsDevice.device_id)
+                .join(
+                    ConversationMember,
+                    ConversationMember.user_id == MlsDevice.user_id,
+                )
+                .join(
+                    Session,
+                    and_(
+                        Session.id == MlsDevice.device_id,
+                        Session.user_id == MlsDevice.user_id,
+                    ),
+                )
+                .where(
+                    ConversationMember.conversation_id == conversation_id,
+                    ConversationMember.e2ee_state.in_(states),
+                    MlsDevice.revoked_at.is_(None),
+                    Session.revoked_at.is_(None),
+                    Session.expires_at > now,
+                )
+            )
+        ).all()
+    )
+
+
+async def control_recipient_pairs_for_change(
+    db: AsyncSession,
+    change_id: uuid.UUID,
+    kind: str,
+) -> set[tuple[uuid.UUID, uuid.UUID]]:
+    return set(
+        (
+            await db.execute(
+                select(
+                    MlsControlRecipient.user_id,
+                    MlsControlRecipient.device_id,
+                )
+                .join(
+                    MlsControlEvent,
+                    MlsControlEvent.id == MlsControlRecipient.event_id,
+                )
+                .where(
+                    MlsControlEvent.membership_change_id == change_id,
+                    MlsControlEvent.kind == kind,
+                )
+            )
+        ).all()
+    )
+
+
+@router.post(
+    "/conversations/{conversation_id}/membership-changes/add/{user_id}",
+    status_code=201,
+)
+async def prepare_membership_add(
+    conversation_id: uuid.UUID,
+    user_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-member-add-prepare", 30, 60)
+    conversation, _ = await require_e2ee_group_owner(
+        db, conversation_id, auth.user.id
+    )
+    if user_id == auth.user.id:
+        raise HTTPException(422, "Current user is already a member")
+
+    existing_change = (
+        await db.execute(
+            select(ConversationMembershipChange).where(
+                ConversationMembershipChange.conversation_id == conversation_id,
+                ConversationMembershipChange.status == "pending",
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_change is not None:
+        if existing_change.kind == "add" and existing_change.target_user_id == user_id:
+            return serialize_membership_change(existing_change)
+        raise HTTPException(status.HTTP_409_CONFLICT, "Another MLS membership transition is pending")
+
+    existing_member = (
+        await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_member is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "User is already a group member")
+
+    valid_user = (
+        await db.execute(
+            select(User.id).where(User.id == user_id, User.status == "active")
+        )
+    ).scalar_one_or_none()
+    if valid_user is None:
+        raise HTTPException(422, "User is unavailable")
+
+    member_count = await db.scalar(
+        select(func.count())
+        .select_from(ConversationMember)
+        .where(
+            ConversationMember.conversation_id == conversation_id,
+            ConversationMember.e2ee_state != "pending_add",
+        )
+    )
+    if int(member_count or 0) >= 100:
+        raise HTTPException(422, "Group member limit is 100")
+
+    device_count = await db.scalar(
+        select(func.count())
+        .select_from(MlsDevice)
+        .join(
+            Session,
+            and_(
+                Session.id == MlsDevice.device_id,
+                Session.user_id == MlsDevice.user_id,
+            ),
+        )
+        .where(
+            MlsDevice.user_id == user_id,
+            MlsDevice.revoked_at.is_(None),
+            Session.revoked_at.is_(None),
+            Session.expires_at > datetime.now(UTC),
+        )
+    )
+    if int(device_count or 0) < 1:
+        raise HTTPException(status.HTTP_409_CONFLICT, "User has no active secure device")
+
+    membership = ConversationMember(
+        conversation_id=conversation_id,
+        user_id=user_id,
+        role="member",
+        e2ee_state="pending_add",
+    )
+    change = ConversationMembershipChange(
+        conversation_id=conversation_id,
+        target_user_id=user_id,
+        requested_by=auth.user.id,
+        kind="add",
+        status="pending",
+    )
+    db.add_all([membership, change])
+    await db.flush()
+    db.add(
+        AuditEvent(
+            actor_user_id=auth.user.id,
+            event_type="conversation.e2ee_member_add_prepared",
+            target_type="conversation",
+            target_id=conversation.id,
+        )
+    )
+    await db.commit()
+    await db.refresh(change)
+    return serialize_membership_change(change)
+
+
+@router.post(
+    "/conversations/{conversation_id}/membership-changes/remove/{user_id}",
+    status_code=201,
+)
+async def prepare_membership_remove(
+    conversation_id: uuid.UUID,
+    user_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-member-remove-prepare", 30, 60)
+    conversation = (
+        await db.execute(
+            select(Conversation)
+            .where(Conversation.id == conversation_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if (
+        conversation is None
+        or conversation.type != "group"
+        or not conversation.encryption_required
+        or not conversation.e2ee_ready
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Encrypted group not found")
+
+    actor = (
+        await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == auth.user.id,
+                ConversationMember.e2ee_state != "pending_add",
+            )
+        )
+    ).scalar_one_or_none()
+    if actor is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Encrypted group not found")
+
+    target = (
+        await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == user_id,
+                ConversationMember.e2ee_state == "active",
+            )
+        )
+    ).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(404, "Member not found")
+
+    self_leave = user_id == auth.user.id
+    if not self_leave and actor.role != "owner":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Group owner access required")
+    if target.role == "owner":
+        owner_count = await db.scalar(
+            select(func.count())
+            .select_from(ConversationMember)
+            .where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.role == "owner",
+                ConversationMember.e2ee_state != "pending_add",
+            )
+        )
+        if int(owner_count or 0) <= 1:
+            raise HTTPException(409, "Transfer ownership before removing the last owner")
+
+    existing_change = (
+        await db.execute(
+            select(ConversationMembershipChange).where(
+                ConversationMembershipChange.conversation_id == conversation_id,
+                ConversationMembershipChange.status == "pending",
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_change is not None:
+        if existing_change.kind == "remove" and existing_change.target_user_id == user_id:
+            return serialize_membership_change(existing_change)
+        raise HTTPException(status.HTTP_409_CONFLICT, "Another MLS membership transition is pending")
+
+    target.e2ee_state = "pending_remove"
+    change = ConversationMembershipChange(
+        conversation_id=conversation_id,
+        target_user_id=user_id,
+        requested_by=auth.user.id,
+        kind="remove",
+        status="pending",
+    )
+    db.add(change)
+    await db.flush()
+    db.add(
+        AuditEvent(
+            actor_user_id=auth.user.id,
+            event_type="conversation.e2ee_member_remove_prepared",
+            target_type="conversation",
+            target_id=conversation.id,
+        )
+    )
+    await db.commit()
+    await db.refresh(change)
+    return serialize_membership_change(change)
+
+
+@router.post("/membership-changes/{change_id}/finalize", status_code=204)
+async def finalize_membership_change(
+    change_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-member-finalize", 30, 60)
+    change = (
+        await db.execute(
+            select(ConversationMembershipChange)
+            .where(ConversationMembershipChange.id == change_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if change is None:
+        raise HTTPException(404, "MLS membership transition not found")
+    if change.status == "completed":
+        return
+    if change.status != "pending" or change.requested_by != auth.user.id:
+        raise HTTPException(403, "MLS membership transition cannot be finalized")
+
+    conversation = (
+        await db.execute(
+            select(Conversation)
+            .where(Conversation.id == change.conversation_id)
+            .with_for_update()
+        )
+    ).scalar_one()
+    if not conversation.encryption_required or not conversation.e2ee_ready:
+        raise HTTPException(409, "Encrypted conversation is not active")
+
+    membership = (
+        await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == change.conversation_id,
+                ConversationMember.user_id == change.target_user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(409, "Target membership no longer exists")
+
+    if change.kind == "add":
+        if membership.e2ee_state != "pending_add":
+            raise HTTPException(409, "Target is not pending MLS add")
+
+        expected_welcomes = {
+            pair
+            for pair in await current_active_device_pairs(
+                db, change.conversation_id, ("pending_add",)
+            )
+            if pair[0] == change.target_user_id
+        }
+        welcomed = await control_recipient_pairs_for_change(db, change.id, "welcome")
+        if not expected_welcomes or not expected_welcomes.issubset(welcomed):
+            raise HTTPException(409, "MLS add is missing Welcome delivery")
+
+        expected_commits = await current_active_device_pairs(
+            db, change.conversation_id, ("active",)
+        )
+        expected_commits.discard((auth.user.id, auth.session.id))
+        committed = await control_recipient_pairs_for_change(db, change.id, "commit")
+        if not expected_commits.issubset(committed):
+            raise HTTPException(409, "MLS add is missing Commit delivery")
+
+        membership.e2ee_state = "active"
+        event_type = "conversation.members_added"
+        payload = {
+            "conversation_id": str(change.conversation_id),
+            "user_ids": [str(change.target_user_id)],
+        }
+        extra = [change.target_user_id]
+    elif change.kind == "remove":
+        if membership.e2ee_state != "pending_remove":
+            raise HTTPException(409, "Target is not pending MLS removal")
+
+        expected_commits = await current_active_device_pairs(
+            db, change.conversation_id, ("active", "pending_remove")
+        )
+        expected_commits.discard((auth.user.id, auth.session.id))
+        committed = await control_recipient_pairs_for_change(db, change.id, "commit")
+        if not expected_commits.issubset(committed):
+            raise HTTPException(409, "MLS removal is missing Commit delivery")
+
+        await db.delete(membership)
+        event_type = "conversation.member_removed"
+        payload = {
+            "conversation_id": str(change.conversation_id),
+            "user_id": str(change.target_user_id),
+        }
+        extra = [change.target_user_id]
+    else:
+        raise HTTPException(409, "Unsupported membership transition")
+
+    change.status = "completed"
+    change.completed_at = datetime.now(UTC)
+    db.add(
+        OutboxEvent(
+            event_type=event_type,
+            aggregate_type="conversation",
+            aggregate_id=change.conversation_id,
+            conversation_id=change.conversation_id,
+            payload={**payload, "_extra_recipient_ids": [str(item) for item in extra]},
+        )
+    )
+    db.add(
+        AuditEvent(
+            actor_user_id=auth.user.id,
+            event_type=f"conversation.e2ee_member_{change.kind}_finalized",
+            target_type="conversation",
+            target_id=change.conversation_id,
+        )
+    )
+    await db.commit()
 
 
 
@@ -558,6 +993,7 @@ async def create_control_event(
             select(ConversationMember.user_id).where(
                 ConversationMember.conversation_id == conversation_id,
                 ConversationMember.user_id == auth.user.id,
+                ConversationMember.e2ee_state != "pending_add",
             )
         )
     ).scalar_one_or_none()
@@ -740,11 +1176,31 @@ async def create_control_batch(
             select(ConversationMember.user_id).where(
                 ConversationMember.conversation_id == conversation_id,
                 ConversationMember.user_id == auth.user.id,
+                ConversationMember.e2ee_state != "pending_add",
             )
         )
     ).scalar_one_or_none()
     if sender_member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Encrypted conversation not found")
+
+    pending_change = (
+        await db.execute(
+            select(ConversationMembershipChange).where(
+                ConversationMembershipChange.conversation_id == conversation_id,
+                ConversationMembershipChange.status == "pending",
+            )
+        )
+    ).scalar_one_or_none()
+    if pending_change is not None:
+        if payload.membership_change_id != pending_change.id:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "MLS membership transition id is required for this control batch",
+            )
+        if pending_change.requested_by != auth.user.id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Membership transition owner mismatch")
+    elif payload.membership_change_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Membership transition is no longer pending")
 
     all_recipient_pairs = set().union(
         *(recipient_pairs for _, _, recipient_pairs in decoded)
@@ -793,6 +1249,7 @@ async def create_control_batch(
             sequence=sequence,
             kind=request_item.kind,
             payload=control_bytes,
+            membership_change_id=payload.membership_change_id,
         )
         db.add(item)
         await db.flush()
@@ -877,6 +1334,7 @@ async def list_transport_events(
             select(ConversationMember.user_id).where(
                 ConversationMember.conversation_id == conversation_id,
                 ConversationMember.user_id == auth.user.id,
+                ConversationMember.e2ee_state != "pending_add",
             )
         )
     ).scalar_one_or_none() is not None
