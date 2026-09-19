@@ -1,23 +1,33 @@
 # Progress
 
 ## Current milestone
-Full restored MVP acceptance and hardening.
+MVP acceptance + security hardening.
 
-## Repository truth
-Steps 17–21 restored the complete ordinary-source MVP. Steps 22–24 are acceptance hardening.
+## Verified baseline
+Commit `90ca6cd` passed the complete acceptance pipeline: PostgreSQL/Redis/S3 integration, migrations, full API MVP flow, domain tests, domain declarations, web typecheck and Next production build.
 
-### Step 22
-API packaging fixed; S3 test moved in-process.
+## Hardening review
 
-### Step 23
-Invalid reserved test email domains replaced without weakening production validation.
+### Step 26 — Privacy lifecycle
+Immediate Sudoku cover on background/app switcher; >=30s background locks private state before reveal.
 
-### Step 24
-API integration now reaches verified asset download. The test was incorrectly coupled to AWS SigV4 query naming; S3-compatible SigV2/SigV4 signed redirects are accepted.
+### Step 27 — Origin boundary
+All browser POST/PUT/PATCH/DELETE requests require exact configured Origin. Missing or wrong Origin is 403.
 
-## Verification
-Latest acceptance passed: API install ✓ S3 start ✓ migrations ✓ invite/auth ✓ direct/group authorization ✓ message idempotency ✓ search ✓ pin/mute ✓ Origin boundary ✓ upload ✓ server-side asset integrity ✓.
-It failed only on the signature-version-specific assertion before later push/domain/web stages.
+### Step 28 — Realtime sessions/presence
+WebSocket sessions revalidate on heartbeat/actions; revoked sessions close. Presence is connection-scoped and push suppression recognizes any live connection.
+
+### Step 29 — Session rotation
+Refresh row-locks and rechecks the current session so concurrent refresh cannot mint multiple replacements.
+
+### Step 30 — Review summary
+Storage ACL, signed downloads, push SSRF controls, service-worker cache exclusions, realtime membership and sensitive logging were reviewed; no additional code change was required for those boundaries.
+
+## Current verification
+- Baseline full acceptance: ✓.
+- Privacy hardening commit `2580c82`: full CI ✓.
+- Later Origin/realtime/session-rotation hardening: CI runs pending/current.
+- Production deployment and live mobile smoke are not yet claimed.
 
 ## Next step
-Repeat acceptance and continue until push boundary, domain tests, web typecheck and Next production build are green; then code/security review.
+Require one full green CI on the latest hardening HEAD. Then prepare production deployment configuration and run live PWA/mobile smoke tests.
