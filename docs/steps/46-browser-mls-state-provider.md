@@ -4,43 +4,34 @@
 Provide durable browser MLS state without filesystem persistence and without exposing private key material to JavaScript as separate keys.
 
 ## Design
-A custom `Provider` is composed entirely from official OpenMLS components:
-- `RustCrypto` for cryptography/randomness;
-- `MemoryStorage` for OpenMLS protocol storage;
-- `OpenMlsProvider` re-exported by OpenMLS.
+A custom `Provider` is composed from official OpenMLS components:
+- `RustCrypto`;
+- `MemoryStorage`;
+- `OpenMlsProvider`.
 
-No fork of OpenMLS is required and the Cargo dependency graph is unchanged.
+The Cargo dependency graph remains locked and unchanged.
 
 ## Persistence
 The provider exposes:
 - `exportState()` -> opaque bounded binary state blob;
 - `Provider.fromState(bytes)` -> validated restore.
 
-JavaScript stores that opaque blob through the existing `BrowserProtocolStateStore`, which encrypts it with a non-exportable WebCrypto wrapping key before IndexedDB persistence.
+JavaScript stores this blob through `BrowserProtocolStateStore`, encrypted by a non-exportable WebCrypto wrapping key before IndexedDB persistence.
 
-## Binary format v1
-- 8-byte magic/version: `SMLSST01`;
-- big-endian entry count;
-- deterministic key-sorted entries;
-- each entry contains bounded key/value lengths followed by raw bytes.
+## Format and limits
+State blob v1 uses `SMLSST01`, deterministic key ordering, checked big-endian lengths, a 16 MiB maximum and 100,000-entry maximum. Duplicate keys, truncation, trailing bytes and overflow are rejected.
 
-Limits:
-- maximum blob: 16 MiB;
-- maximum entries: 100,000;
-- checked integer/size arithmetic;
-- duplicate keys rejected;
-- truncated/trailing/corrupt input rejected.
+## First Rust CI finding
+The provider methods were annotated for wasm-bindgen but the `Provider` struct itself was not. Rust correctly rejected the JS ABI because the type had no wasm-bindgen ABI implementation.
 
-## Safety
-JS-facing state import/export uses explicit `Result` errors. No network-controlled parsing path in this binding uses `unwrap`, `expect`, `panic!`, `todo!` or `unimplemented!`.
-
-Test-only assertions may use `expect`; they are not compiled into the production WASM API.
+## Fix
+The struct is now explicitly `#[wasm_bindgen]`. No storage format or cryptographic behavior changed.
 
 ## CI
-The locked OpenMLS package now runs native Rust unit tests and a `wasm32-unknown-unknown` compile check.
+Native Rust unit tests cover deterministic state round-trip and corrupt-state rejection. The same locked crate is then compiled for `wasm32-unknown-unknown`.
 
 ## Capability
-`persistent_state=true`, but `ui_ready=false`. This only proves provider state round-trip plumbing; MLS group interoperability is still required before UI activation.
+`persistent_state=true`, `ui_ready=false`.
 
 ## Next
-Step 47: implement fallible device credential + MLS KeyPackage generation on this provider, then verify KeyPackage bytes round-trip through the delivery-service API.
+Step 47: device credential + KeyPackage generation with signer recovery from persisted provider state.

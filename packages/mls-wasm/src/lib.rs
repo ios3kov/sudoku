@@ -12,6 +12,7 @@ const STATE_MAGIC: &[u8; 8] = b"SMLSST01";
 const MAX_STATE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_STATE_ENTRIES: usize = 100_000;
 
+#[wasm_bindgen]
 pub struct Provider {
     crypto: RustCrypto,
     storage: MemoryStorage,
