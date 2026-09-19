@@ -21,6 +21,17 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm install
-      - run: npm --workspace @sudoku/domain run build
       - run: npm --workspace @sudoku/web run typecheck
       - run: npm --workspace @sudoku/web run build
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q app tests
+      - run: PYTHONPATH=. pytest -q tests/test_security.py

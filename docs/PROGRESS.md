@@ -1,36 +1,35 @@
 # Progress
 
 ## Current milestone
-
-Direct-source recovery of the MVP after the damaged bootstrap transport was retired.
+Direct-source recovery of the production MVP.
 
 ## Repository truth
 
-The earlier Step 01–16 documents describe the designed/local MVP snapshot. They are retained as design history, but repository completion is now tracked separately below so documentation never claims code that is not actually present in `main`.
-
 ### Step 17 — Direct source import
-
-- Damaged multipart bootstrap mechanism removed.
-- `bootstrap/*` removed from `main`.
-- CI is now a normal source-code workflow.
-- Domain Sudoku + secret-gesture source and tests are committed directly.
+- Broken multipart bootstrap removed from `main`.
+- Application code is committed as ordinary Git objects.
+- Normal CI established.
 
 ### Step 18 — Web PWA + auth gate
+- Next.js PWA branded only as Sudoku.
+- Real 9x9 Sudoku shell.
+- Hidden `5 -> upward swipe` gesture.
+- Private surface requires `GET /v1/me`.
+- 30-second background privacy return.
 
-- Next.js web workspace committed directly.
-- PWA metadata/manifest presents only Sudoku.
-- Real 9x9 Sudoku board is wired to the domain parser.
-- Hidden `5 -> upward swipe` gesture opens only an authentication gate.
-- `GET /v1/me` is required before the private surface renders.
-- Login credentials are sent to the API and are not persisted in browser storage.
-- 30-second background privacy return to Sudoku is present.
+### Step 19 — FastAPI invite-only auth
+- FastAPI + async SQLAlchemy/PostgreSQL foundation.
+- Users, one-use invites, opaque revocable session records.
+- Argon2 passwords.
+- Raw session/invite tokens are not persisted; SHA-256 digests are.
+- Login/logout/current-user/admin invite/accept-invite endpoints.
+- Security unit tests added.
 
 ## Verification
-
-- Domain CI workflow is active on `main`.
-- Step 18 extends CI to web typecheck + production build.
-- FastAPI/auth/message implementation from the earlier local snapshot is **not yet considered restored in repository truth** until its source is committed directly and CI covers it.
+- Step 17 domain CI: passed.
+- Step 18 domain tests: passed; web typecheck/build is running at the time Step 19 source is prepared.
+- Step 19 CI adds Python compile + security unit tests.
+- PostgreSQL-backed integration is not yet claimed.
 
 ## Next step
-
-Step 19: commit FastAPI PostgreSQL-backed invite-only auth/session endpoints, migrations, and API tests; then connect the authenticated web shell to conversations/messages.
+Step 20: Alembic migration + PostgreSQL service integration + device-session revocation + Redis rate limiting. Then restore conversations/messages.
