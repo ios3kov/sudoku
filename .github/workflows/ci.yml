@@ -61,21 +61,25 @@ jobs:
 
       - name: Start S3 test service
         run: |
-          docker run -d --name sudoku-minio \
-            -p 9000:9000 \
-            -e MINIO_ROOT_USER=sudoku-ci \
-            -e MINIO_ROOT_PASSWORD=sudoku-ci-secret \
-            quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z \
-            server /data
+          moto_server -H 127.0.0.1 -p 9000 >/tmp/moto-s3.log 2>&1 &
           python - <<'PY'
           import time, boto3
-          s3 = boto3.client('s3', endpoint_url='http://127.0.0.1:9000', region_name='us-east-1', aws_access_key_id='sudoku-ci', aws_secret_access_key='sudoku-ci-secret')
+          s3 = boto3.client(
+              "s3",
+              endpoint_url="http://127.0.0.1:9000",
+              region_name="us-east-1",
+              aws_access_key_id="sudoku-ci",
+              aws_secret_access_key="sudoku-ci-secret",
+          )
           for _ in range(60):
               try:
-                  s3.list_buckets(); break
-              except Exception: time.sleep(1)
-          else: raise SystemExit('S3 test service did not start')
-          s3.create_bucket(Bucket='sudoku-assets')
+                  s3.list_buckets()
+                  break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise SystemExit("S3 test service did not start")
+          s3.create_bucket(Bucket="sudoku-assets")
           PY
 
       - name: Migrate database
