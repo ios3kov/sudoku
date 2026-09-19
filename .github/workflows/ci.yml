@@ -51,6 +51,9 @@ jobs:
           else: raise SystemExit("S3 test service did not start")
           s3.create_bucket(Bucket="sudoku-assets")
           PY
+      - name: Compile API and migrations
+        working-directory: apps/api
+        run: python -m compileall -q app alembic
       - name: Migrate database
         working-directory: apps/api
         run: alembic upgrade head
