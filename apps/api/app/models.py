@@ -129,6 +129,7 @@ class Message(Base):
     type: Mapped[str] = mapped_column(String(24), nullable=False, default="text")
     body_text: Mapped[str | None] = mapped_column(Text)
     body_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    envelope: Mapped[dict | None] = mapped_column(JSONB)
     encryption_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     reply_to: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -220,3 +221,18 @@ class DeviceKeyBundle(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DeviceOneTimePrekey(Base):
+    __tablename__ = "device_one_time_prekeys"
+    __table_args__ = (
+        UniqueConstraint("user_id","device_id","key_id",name="uq_device_prekey_identity"),
+        Index("ix_device_prekeys_claim","user_id","device_id","consumed_at","created_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
+    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),nullable=False)
+    key_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),nullable=False,default=uuid.uuid4)
+    public_key: Mapped[bytes] = mapped_column(LargeBinary,nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
