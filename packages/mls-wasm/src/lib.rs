@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use openmls::prelude::{
-    BasicCredential, Ciphersuite, CredentialWithKey, KeyPackage, KeyPackageIn, OpenMlsProvider,
-    ProtocolVersion, SignatureScheme,
+    BasicCredential, Ciphersuite, CredentialWithKey, GroupId, KeyPackage, KeyPackageIn,
+    MlsGroup, MlsGroupJoinConfig, MlsMessageBodyIn, MlsMessageIn, OpenMlsProvider,
+    ProcessedMessageContent, ProtocolVersion, SignatureScheme, StagedWelcome,
 };
 use openmls::prelude::tls_codec::{
     Deserialize as TlsDeserializeTrait, Serialize as TlsSerializeTrait,
@@ -19,6 +20,9 @@ const CIPHERSUITE: Ciphersuite =
 const MAX_CREDENTIAL_BYTES: usize = 256;
 const ED25519_PUBLIC_KEY_BYTES: usize = 32;
 const MAX_KEY_PACKAGE_BYTES: usize = 64 * 1024;
+const MAX_GROUP_ID_BYTES: usize = 128;
+const MAX_MLS_MESSAGE_BYTES: usize = 1024 * 1024;
+const MAX_APPLICATION_BYTES: usize = 256 * 1024;
 
 const STATE_MAGIC: &[u8; 8] = b"SMLSST01";
 const MAX_STATE_BYTES: usize = 16 * 1024 * 1024;
@@ -89,6 +93,25 @@ impl DeviceIdentity {
 }
 
 #[wasm_bindgen]
+pub struct AddMemberResult {
+    commit: Vec<u8>,
+    welcome: Vec<u8>,
+}
+
+#[wasm_bindgen]
+impl AddMemberResult {
+    #[wasm_bindgen(js_name = commitBytes)]
+    pub fn commit_bytes(&self) -> Vec<u8> {
+        self.commit.clone()
+    }
+
+    #[wasm_bindgen(js_name = welcomeBytes)]
+    pub fn welcome_bytes(&self) -> Vec<u8> {
+        self.welcome.clone()
+    }
+}
+
+#[wasm_bindgen]
 impl Provider {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Provider {
@@ -132,12 +155,163 @@ impl Provider {
             .map_err(|message| JsError::new(&message))
     }
 
+    #[wasm_bindgen(js_name = createGroup)]
+    pub fn create_group(
+        &self,
+        identity: &DeviceIdentity,
+        group_id: &[u8],
+    ) -> Result<(), JsError> {
+        self.create_group_inner(identity, group_id)
+            .map_err(|message| JsError::new(&message))
+    }
+
+    #[wasm_bindgen(js_name = addMember)]
+    pub fn add_member(
+        &self,
+        identity: &DeviceIdentity,
+        group_id: &[u8],
+        key_package: &[u8],
+    ) -> Result<AddMemberResult, JsError> {
+        self.add_member_inner(identity, group_id, key_package)
+            .map_err(|message| JsError::new(&message))
+    }
+
+    #[wasm_bindgen(js_name = joinGroup)]
+    pub fn join_group(&self, welcome: &[u8]) -> Result<Vec<u8>, JsError> {
+        self.join_group_inner(welcome)
+            .map_err(|message| JsError::new(&message))
+    }
+
+    #[wasm_bindgen(js_name = encryptApplication)]
+    pub fn encrypt_application(
+        &self,
+        identity: &DeviceIdentity,
+        group_id: &[u8],
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, JsError> {
+        self.encrypt_application_inner(identity, group_id, plaintext)
+            .map_err(|message| JsError::new(&message))
+    }
+
+    #[wasm_bindgen(js_name = decryptApplication)]
+    pub fn decrypt_application(
+        &self,
+        group_id: &[u8],
+        message: &[u8],
+    ) -> Result<Vec<u8>, JsError> {
+        self.decrypt_application_inner(group_id, message)
+            .map_err(|message| JsError::new(&message))
+    }
+
     #[wasm_bindgen(js_name = exportState)]
     pub fn export_state(&self) -> Result<Vec<u8>, JsError> {
         encode_storage(&self.storage).map_err(|message| JsError::new(&message))
     }
 
-    fn validate_key_package_inner(&self, bytes: &[u8]) -> Result<Vec<u8>, String> {
+    fn create_group_inner(
+        &self,
+        identity: &DeviceIdentity,
+        group_id: &[u8],
+    ) -> Result<(), String> {
+        validate_group_id(group_id)?;
+        let signer = self.load_signer_inner(identity)?;
+        MlsGroup::builder()
+            .ciphersuite(CIPHERSUITE)
+            .use_ratchet_tree_extension(true)
+            .with_group_id(GroupId::from_slice(group_id))
+            .build(self, &signer, credential_with_key(identity))
+            .map_err(|_| "Failed to create MLS group".to_owned())?;
+        Ok(())
+    }
+
+    fn add_member_inner(
+        &self,
+        identity: &DeviceIdentity,
+        group_id: &[u8],
+        key_package: &[u8],
+    ) -> Result<AddMemberResult, String> {
+        validate_group_id(group_id)?;
+        let signer = self.load_signer_inner(identity)?;
+        let new_member = self.parse_key_package_inner(key_package)?;
+        let mut group = self.load_group_inner(group_id)?;
+
+        let (commit, welcome, _) = group
+            .add_members(self, &signer, &[new_member])
+            .map_err(|_| "Failed to add MLS member".to_owned())?;
+
+        group
+            .merge_pending_commit(self)
+            .map_err(|_| "Failed to merge local MLS membership commit".to_owned())?;
+
+        Ok(AddMemberResult {
+            commit: serialize_mls_message(&commit)?,
+            welcome: serialize_mls_message(&welcome)?,
+        })
+    }
+
+    fn join_group_inner(&self, welcome: &[u8]) -> Result<Vec<u8>, String> {
+        let message = parse_mls_message(welcome)?;
+        let welcome = match message.extract() {
+            MlsMessageBodyIn::Welcome(welcome) => welcome,
+            _ => return Err("Expected an MLS Welcome message".to_owned()),
+        };
+
+        let config = MlsGroupJoinConfig::builder().build();
+        let staged = StagedWelcome::new_from_welcome(self, &config, welcome, None)
+            .map_err(|_| "Failed to stage MLS Welcome".to_owned())?;
+        let group = staged
+            .into_group(self)
+            .map_err(|_| "Failed to join MLS group".to_owned())?;
+        Ok(group.group_id().as_slice().to_vec())
+    }
+
+    fn encrypt_application_inner(
+        &self,
+        identity: &DeviceIdentity,
+        group_id: &[u8],
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        validate_group_id(group_id)?;
+        if plaintext.is_empty() || plaintext.len() > MAX_APPLICATION_BYTES {
+            return Err("Invalid MLS application payload size".to_owned());
+        }
+        let signer = self.load_signer_inner(identity)?;
+        let mut group = self.load_group_inner(group_id)?;
+        let message = group
+            .create_message(self, &signer, plaintext)
+            .map_err(|_| "Failed to encrypt MLS application message".to_owned())?;
+        serialize_mls_message(&message)
+    }
+
+    fn decrypt_application_inner(
+        &self,
+        group_id: &[u8],
+        message: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        validate_group_id(group_id)?;
+        let message = parse_mls_message(message)?
+            .try_into_protocol_message()
+            .map_err(|_| "Expected an MLS protocol message".to_owned())?;
+        let mut group = self.load_group_inner(group_id)?;
+        let processed = group
+            .process_message(self, message)
+            .map_err(|_| "Failed to process MLS application message".to_owned())?;
+
+        match processed.into_content() {
+            ProcessedMessageContent::ApplicationMessage(application) => {
+                Ok(application.into_bytes())
+            }
+            _ => Err("Expected an MLS application message".to_owned()),
+        }
+    }
+
+    fn load_group_inner(&self, group_id: &[u8]) -> Result<MlsGroup, String> {
+        MlsGroup::load(self.storage(), &GroupId::from_slice(group_id))
+            .map_err(|_| "Failed to load MLS group state".to_owned())?
+            .ok_or_else(|| "MLS group state not found".to_owned())
+    }
+
+    fn parse_key_package_inner(&self, bytes: &[u8]) -> Result<KeyPackage, String> {
         if bytes.is_empty() || bytes.len() > MAX_KEY_PACKAGE_BYTES {
             return Err("Invalid MLS KeyPackage size".to_owned());
         }
@@ -156,19 +330,29 @@ impl Provider {
         if key_package.ciphersuite() != CIPHERSUITE {
             return Err("Unsupported MLS KeyPackage ciphersuite".to_owned());
         }
+        Ok(key_package)
+    }
+
+    fn validate_key_package_inner(&self, bytes: &[u8]) -> Result<Vec<u8>, String> {
+        let key_package = self.parse_key_package_inner(bytes)?;
 
         key_package
             .tls_serialize_detached()
             .map_err(|_| "Failed to serialize validated MLS KeyPackage".to_owned())
     }
 
-    fn load_signer(&self, identity: &DeviceIdentity) -> Result<SignatureKeyPair, JsError> {
+    fn load_signer_inner(&self, identity: &DeviceIdentity) -> Result<SignatureKeyPair, String> {
         SignatureKeyPair::read(
             self.storage(),
             &identity.public_key,
             SignatureScheme::ED25519,
         )
-        .ok_or_else(|| JsError::new("MLS signing key is missing from provider state"))
+        .ok_or_else(|| "MLS signing key is missing from provider state".to_owned())
+    }
+
+    fn load_signer(&self, identity: &DeviceIdentity) -> Result<SignatureKeyPair, JsError> {
+        self.load_signer_inner(identity)
+            .map_err(|message| JsError::new(&message))
     }
 
     #[wasm_bindgen(js_name = fromState)]
@@ -193,7 +377,35 @@ pub fn openmls_version() -> String {
 
 #[wasm_bindgen]
 pub fn binding_capabilities() -> String {
-    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"ui_ready":false}"#.to_owned()
+    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"ui_ready":false}"#.to_owned()
+}
+
+fn validate_group_id(group_id: &[u8]) -> Result<(), String> {
+    if group_id.is_empty() || group_id.len() > MAX_GROUP_ID_BYTES {
+        return Err("Invalid MLS group id size".to_owned());
+    }
+    Ok(())
+}
+
+fn serialize_mls_message(
+    message: &openmls::prelude::MlsMessageOut,
+) -> Result<Vec<u8>, String> {
+    message
+        .tls_serialize_detached()
+        .map_err(|_| "Failed to serialize MLS message".to_owned())
+}
+
+fn parse_mls_message(bytes: &[u8]) -> Result<MlsMessageIn, String> {
+    if bytes.is_empty() || bytes.len() > MAX_MLS_MESSAGE_BYTES {
+        return Err("Invalid MLS message size".to_owned());
+    }
+    let mut input = bytes;
+    let message = MlsMessageIn::tls_deserialize(&mut input)
+        .map_err(|_| "Malformed MLS message".to_owned())?;
+    if !input.is_empty() {
+        return Err("MLS message contains trailing bytes".to_owned());
+    }
+    Ok(message)
 }
 
 fn validate_credential(credential: &[u8]) -> Result<(), String> {
@@ -407,6 +619,73 @@ mod tests {
             first
         );
         assert!(validator.validate_key_package_inner(b"invalid").is_err());
+    }
+
+    #[test]
+    fn two_member_group_survives_reload_and_exchanges_messages() {
+        let alice = Provider::default();
+        let bob = Provider::default();
+
+        let alice_identity = alice
+            .create_device_identity(b"alice:device-1")
+            .expect("alice identity");
+        let bob_identity = bob
+            .create_device_identity(b"bob:device-1")
+            .expect("bob identity");
+
+        let bob_key_package = bob
+            .create_key_package(&bob_identity)
+            .expect("bob key package");
+
+        let group_id = b"conversation-mls-1";
+        alice
+            .create_group_inner(&alice_identity, group_id)
+            .expect("create alice group");
+        let add = alice
+            .add_member_inner(&alice_identity, group_id, &bob_key_package)
+            .expect("add bob");
+
+        let joined_group_id = bob
+            .join_group_inner(&add.welcome)
+            .expect("bob joins from welcome");
+        assert_eq!(joined_group_id, group_id);
+
+        let alice_state = encode_storage(&alice.storage).expect("alice state");
+        let bob_state = encode_storage(&bob.storage).expect("bob state");
+
+        let alice_reloaded = Provider {
+            crypto: RustCrypto::default(),
+            storage: decode_storage(&alice_state).expect("restore alice"),
+        };
+        let bob_reloaded = Provider {
+            crypto: RustCrypto::default(),
+            storage: decode_storage(&bob_state).expect("restore bob"),
+        };
+
+        let alice_handle = DeviceIdentity {
+            credential: alice_identity.credential.clone(),
+            public_key: alice_identity.public_key.clone(),
+        };
+        let bob_handle = DeviceIdentity {
+            credential: bob_identity.credential.clone(),
+            public_key: bob_identity.public_key.clone(),
+        };
+
+        let encrypted = alice_reloaded
+            .encrypt_application_inner(&alice_handle, group_id, b"hello bob")
+            .expect("alice encrypts");
+        let plaintext = bob_reloaded
+            .decrypt_application_inner(group_id, &encrypted)
+            .expect("bob decrypts");
+        assert_eq!(plaintext, b"hello bob");
+
+        let reply = bob_reloaded
+            .encrypt_application_inner(&bob_handle, group_id, b"hello alice")
+            .expect("bob encrypts");
+        let reply_plaintext = alice_reloaded
+            .decrypt_application_inner(group_id, &reply)
+            .expect("alice decrypts");
+        assert_eq!(reply_plaintext, b"hello alice");
     }
 
     #[test]
