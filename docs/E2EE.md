@@ -57,3 +57,10 @@ Before adding a claimed KeyPackage, the browser:
 An unexpected key change is fail-closed and requires explicit recovery/new-device handling.
 
 For first-contact protection against a malicious delivery service, clients expose a symmetric SHA-256 safety number derived from both device identities. Users can compare this value over an independent channel. The local verified marker is stored only in encrypted browser state; the server cannot mark itself trusted.
+
+
+## Activation coverage gate
+
+Secure activation is not trusted to client choreography alone. Before `e2ee_ready` can flip true, the server derives every active registered MLS device for current conversation members from live authenticated sessions. The creator's current device is the initial group leaf; every other active device must have a persisted MLS Welcome recipient record for this conversation.
+
+If any active device is missing Welcome coverage, activation returns 409 and no `conversation.created` event is emitted.

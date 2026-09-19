@@ -184,6 +184,59 @@ async def activate_encrypted_conversation(
     if conversation.e2ee_ready:
         return
 
+    await require_active_device(db, auth.user.id, auth.session.id)
+    now = datetime.now(UTC)
+    expected_recipient_pairs = set(
+        (
+            await db.execute(
+                select(MlsDevice.user_id, MlsDevice.device_id)
+                .join(
+                    ConversationMember,
+                    ConversationMember.user_id == MlsDevice.user_id,
+                )
+                .join(
+                    Session,
+                    and_(
+                        Session.id == MlsDevice.device_id,
+                        Session.user_id == MlsDevice.user_id,
+                    ),
+                )
+                .where(
+                    ConversationMember.conversation_id == conversation_id,
+                    MlsDevice.revoked_at.is_(None),
+                    Session.revoked_at.is_(None),
+                    Session.expires_at > now,
+                )
+            )
+        ).all()
+    )
+    expected_recipient_pairs.discard((auth.user.id, auth.session.id))
+
+    welcomed_pairs = set(
+        (
+            await db.execute(
+                select(
+                    MlsControlRecipient.user_id,
+                    MlsControlRecipient.device_id,
+                )
+                .join(
+                    MlsControlEvent,
+                    MlsControlEvent.id == MlsControlRecipient.event_id,
+                )
+                .where(
+                    MlsControlEvent.conversation_id == conversation_id,
+                    MlsControlEvent.kind == "welcome",
+                )
+            )
+        ).all()
+    )
+    missing_welcomes = expected_recipient_pairs - welcomed_pairs
+    if missing_welcomes:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Encrypted conversation is missing Welcome delivery for active devices",
+        )
+
     conversation.e2ee_ready = True
     db.add(
         OutboxEvent(

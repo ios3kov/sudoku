@@ -16,13 +16,14 @@ Through Step 65 the repository has verified:
 - unified application/control transport ordering and durable cursor;
 - offline removal catch-up for locally tracked MLS groups;
 - encrypted ConversationView text/mutation UI;
-- encrypted image/file/voice upload, download, local decryption and rendering.
+- encrypted image/file/voice upload, download, local decryption and rendering;
+- server activation rejects missing Welcome coverage for any active participant MLS device.
 
 ## Current step
-Step 66 makes new direct/group creation MLS-aware and E2EE-only, including KeyPackage discovery/claim, group bootstrap, activation and membership updates.
+Step 67 routes group membership add/remove through MLS before server membership changes.
 
 ## Production blockers after Step 64
-- MLS-aware new-chat/group membership creation and production E2EE-only enforcement;
+- MLS-safe group membership changes and production API E2EE-only enforcement;
 - safety-number verification UI;
 - browser retry/reload end-to-end tests;
 - final security review;

@@ -913,6 +913,28 @@ async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
         )
         assert created.status_code == 201, created.text
         conversation_id = created.json()["id"]
+        premature = await sender_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/activate"
+        )
+        assert premature.status_code == 409, premature.text
+
+        bootstrap_welcome = await sender_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/control-events",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "sender_device_id": str(sender_device),
+                "kind": "welcome",
+                "payload_b64": base64.b64encode(b"opaque-bootstrap-welcome").decode(),
+                "recipients": [
+                    {
+                        "user_id": str(recipient_id),
+                        "device_id": str(recipient_device),
+                    }
+                ],
+            },
+        )
+        assert bootstrap_welcome.status_code == 201, bootstrap_welcome.text
+
         activated = await sender_client.post(
             f"/v1/e2ee/conversations/{conversation_id}/activate"
         )
@@ -973,20 +995,22 @@ async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
         assert feed.status_code == 200, feed.text
         items = feed.json()
         assert [item["kind"] for item in items] == [
+            "mls_control",
             "message",
             "mls_control",
             "message",
         ]
-        assert [item["transport_sequence"] for item in items] == [1, 2, 3]
-        assert items[0]["message_id"] == first.json()["id"]
-        assert items[1]["control"]["id"] == control.json()["id"]
-        assert items[2]["message_id"] == second.json()["id"]
+        assert [item["transport_sequence"] for item in items] == [1, 2, 3, 4]
+        assert items[0]["control"]["id"] == bootstrap_welcome.json()["id"]
+        assert items[1]["message_id"] == first.json()["id"]
+        assert items[2]["control"]["id"] == control.json()["id"]
+        assert items[3]["message_id"] == second.json()["id"]
 
         after_two = await recipient_client.get(
             f"/v1/e2ee/conversations/{conversation_id}/devices/{recipient_device}/transport-events?after=2"
         )
         assert after_two.status_code == 200
-        assert [item["transport_sequence"] for item in after_two.json()] == [3]
+        assert [item["transport_sequence"] for item in after_two.json()] == [3, 4]
 
 
 @pytest.mark.asyncio(loop_scope="session")
