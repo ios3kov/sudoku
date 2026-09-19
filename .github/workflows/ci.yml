@@ -130,6 +130,10 @@ jobs:
           grep -q 'PUBLIC_ORIGIN: https://sudoku.example.com' /tmp/production-compose.yml
           grep -q 'SECURE_COOKIES: "true"' /tmp/production-compose.yml
           grep -q 'REQUIRE_E2EE_NEW_CONVERSATIONS: "true"' /tmp/production-compose.yml
+          if grep -Eq 'image: .*:latest([[:space:]]|$)' /tmp/production-compose.yml; then
+            echo "unpinned :latest image leaked into production config" >&2
+            exit 1
+          fi
           if grep -q 'PUBLIC_ORIGIN: http://localhost:8080' /tmp/production-compose.yml; then
             echo "local origin leaked into production config" >&2
             exit 1
