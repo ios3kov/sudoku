@@ -73,10 +73,18 @@ jobs:
       - name: Web production build
         run: npm run build:web
 
-      - name: Check pinned OpenMLS WASM package
+      - name: Bootstrap pinned OpenMLS WASM lockfile
         run: |
           rustup toolchain install 1.91.0 --profile minimal --target wasm32-unknown-unknown
+          rm -f packages/mls-wasm/Cargo.lock
+          cargo +1.91.0 generate-lockfile --manifest-path packages/mls-wasm/Cargo.toml
           cargo +1.91.0 check --manifest-path packages/mls-wasm/Cargo.toml --target wasm32-unknown-unknown --locked
+      - name: Upload OpenMLS Cargo lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: mls-wasm-cargo-lock
+          path: packages/mls-wasm/Cargo.lock
+          if-no-files-found: error
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com
