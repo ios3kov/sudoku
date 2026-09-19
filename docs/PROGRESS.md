@@ -123,3 +123,13 @@ MVP implementation + production hardening.
 ## Next MVP step
 
 Add search/pin/mute UX, then install all declared dependencies in a network-enabled runner and execute migrations + real-service API integration tests + Next production build before deployment.
+
+## Step 16 — Privacy lifecycle hardening
+
+- Added domain-level 30-second lock rule with fail-closed invalid timing behavior.
+- Added unit coverage for resume/lock boundary cases.
+- Added an always-mounted neutral Sudoku privacy cover.
+- Added synchronous cover activation on `visibilitychange` and `pagehide`.
+- Added delayed removal after an actual private-surface lock so the messenger cannot flash during React rerender.
+- Service-worker `FORCE_SUDOKU` now uses the same protected hide path.
+- Awaiting repository CI verification for this step.
