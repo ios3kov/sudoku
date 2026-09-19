@@ -1,4 +1,4 @@
-import type { E2eeEnvelope, ClaimedPrekeyBundle } from "../types";
+import type { E2eeEnvelope, ClaimedMlsKeyPackage } from "../types";
 
 export interface OutboundPlaintext {
   conversationId: string;
@@ -17,7 +17,7 @@ export interface ProtocolAdapter {
   readonly protocol: string;
   readonly ready: boolean;
   initialize(): Promise<void>;
-  encrypt(input: OutboundPlaintext, recipients: ClaimedPrekeyBundle[]): Promise<E2eeEnvelope>;
+  encrypt(input: OutboundPlaintext, recipients: ClaimedMlsKeyPackage[]): Promise<E2eeEnvelope>;
   decrypt(envelope: E2eeEnvelope): Promise<DecryptedMessage>;
 }
 

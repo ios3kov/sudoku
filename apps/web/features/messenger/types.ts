@@ -97,17 +97,14 @@ export interface E2eeEnvelope {
   [key: string]: unknown;
 }
 
-export interface E2eeDeviceBundle {
+
+export interface MlsDeviceAvailability {
   device_id: string;
-  protocol: string;
-  identity_key_b64: string;
-  signed_prekey_b64: string;
-  signed_prekey_signature_b64: string;
+  available_key_packages: number;
 }
 
-export interface ClaimedPrekeyBundle extends E2eeDeviceBundle {
-  one_time_prekey: {
-    key_id: string;
-    public_key_b64: string;
-  };
+export interface ClaimedMlsKeyPackage {
+  device_id: string;
+  package_ref: string;
+  key_package_b64: string;
 }

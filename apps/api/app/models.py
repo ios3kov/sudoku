@@ -204,35 +204,27 @@ class PushSubscription(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class DeviceKeyBundle(Base):
-    __tablename__ = "device_key_bundles"
+class MlsKeyPackage(Base):
+    __tablename__ = "mls_key_packages"
     __table_args__ = (
-        UniqueConstraint("user_id","device_id",name="uq_device_key_user_device"),
-        Index("ix_device_key_bundles_user_active","user_id","revoked_at"),
+        UniqueConstraint("package_ref", name="uq_mls_key_package_ref"),
+        Index(
+            "ix_mls_key_packages_claim",
+            "user_id",
+            "device_id",
+            "claimed_at",
+            "created_at",
+        ),
     )
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
-    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),nullable=False)
-    protocol: Mapped[str] = mapped_column(String(32),nullable=False)
-    identity_key: Mapped[bytes] = mapped_column(LargeBinary,nullable=False)
-    signed_prekey: Mapped[bytes] = mapped_column(LargeBinary,nullable=False)
-    signed_prekey_signature: Mapped[bytes] = mapped_column(LargeBinary,nullable=False)
-    one_time_prekeys: Mapped[list] = mapped_column(JSONB,nullable=False,default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-
-class DeviceOneTimePrekey(Base):
-    __tablename__ = "device_one_time_prekeys"
-    __table_args__ = (
-        UniqueConstraint("user_id","device_id","key_id",name="uq_device_prekey_identity"),
-        Index("ix_device_prekeys_claim","user_id","device_id","consumed_at","created_at"),
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
-    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),nullable=False)
-    key_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),nullable=False,default=uuid.uuid4)
-    public_key: Mapped[bytes] = mapped_column(LargeBinary,nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
-    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    package_ref: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    key_package: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

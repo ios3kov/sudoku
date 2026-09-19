@@ -1,4 +1,4 @@
-import type { ClaimedPrekeyBundle, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeDeviceBundle, E2eeEnvelope, Message } from "./types";
+import type { ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsDeviceAvailability } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
@@ -51,15 +51,21 @@ export const messengerApi = {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ client_id: clientId, type, body: null, envelope, reply_to: replyTo, asset_ids: assetIds }),
   }),
-  publishDeviceBundle: (bundle: E2eeDeviceBundle & { one_time_prekeys_b64: string[] }) =>
-    request<void>(`/v1/e2ee/devices/${bundle.device_id}`, {
+  publishMlsKeyPackages: (deviceId: string, keyPackagesB64: string[]) =>
+    request<void>(`/v1/e2ee/devices/${deviceId}/key-packages`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(bundle),
+      body: JSON.stringify({ device_id: deviceId, key_packages_b64: keyPackagesB64 }),
     }),
-  deviceBundles: (userId: string) => request<E2eeDeviceBundle[]>(`/v1/e2ee/users/${userId}/devices`),
-  claimPrekey: (userId: string, deviceId: string) =>
-    request<ClaimedPrekeyBundle>(`/v1/e2ee/users/${userId}/devices/${deviceId}/prekey/claim`, { method: "POST" }),
+  mlsDevices: (userId: string) =>
+    request<MlsDeviceAvailability[]>(`/v1/e2ee/users/${userId}/devices`),
+  claimMlsKeyPackage: (userId: string, deviceId: string) =>
+    request<ClaimedMlsKeyPackage>(
+      `/v1/e2ee/users/${userId}/devices/${deviceId}/key-package/claim`,
+      { method: "POST" },
+    ),
+  discardMlsKeyPackages: (deviceId: string) =>
+    request<void>(`/v1/e2ee/devices/${deviceId}/key-packages`, { method: "DELETE" }),
   markRead: (conversationId: string, sequence: number) => request<void>(`/v1/conversations/${conversationId}/read`, {
     method: "POST",
     headers: { "content-type": "application/json" },

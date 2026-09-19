@@ -1,166 +1,161 @@
 import base64
+import hashlib
 import uuid
-from datetime import UTC,datetime
+from datetime import UTC, datetime
 
-from fastapi import APIRouter,Depends,HTTPException,status
-from pydantic import BaseModel,Field
-from sqlalchemy import delete,select
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db
-from .deps import AuthContext,get_auth_context
-from .models import DeviceKeyBundle,DeviceOneTimePrekey
+from .deps import AuthContext, get_auth_context
+from .models import MlsKeyPackage
 from .rate_limit import enforce_user_rate_limit
 
-router=APIRouter(prefix="/v1/e2ee",tags=["e2ee"])
+router = APIRouter(prefix="/v1/e2ee", tags=["e2ee"])
+
+MAX_KEY_PACKAGE_BYTES = 64 * 1024
 
 
-class DeviceBundleRequest(BaseModel):
-    device_id:uuid.UUID
-    protocol:str=Field(pattern="^(signal-v1|mls-v1)$")
-    identity_key_b64:str=Field(min_length=16,max_length=4096)
-    signed_prekey_b64:str=Field(min_length=16,max_length=4096)
-    signed_prekey_signature_b64:str=Field(min_length=16,max_length=4096)
-    one_time_prekeys_b64:list[str]=Field(default_factory=list,max_length=100)
+class KeyPackagePublishRequest(BaseModel):
+    device_id: uuid.UUID
+    key_packages_b64: list[str] = Field(min_length=1, max_length=100)
 
 
-def dec(value:str)->bytes:
+def decode_key_package(value: str) -> bytes:
     try:
-        return base64.b64decode(value,validate=True)
+        decoded = base64.b64decode(value, validate=True)
     except Exception as exc:
-        raise HTTPException(422,"Invalid base64 key material") from exc
+        raise HTTPException(422, "Invalid base64 KeyPackage") from exc
+    if not decoded or len(decoded) > MAX_KEY_PACKAGE_BYTES:
+        raise HTTPException(422, "Invalid KeyPackage size")
+    return decoded
 
 
-def enc(value:bytes)->str:
+def encode_bytes(value: bytes) -> str:
     return base64.b64encode(value).decode()
 
 
-@router.put("/devices/{device_id}",status_code=204)
-async def put_bundle(
-    device_id:uuid.UUID,
-    payload:DeviceBundleRequest,
-    auth:AuthContext=Depends(get_auth_context),
-    db:AsyncSession=Depends(get_db),
+@router.put("/devices/{device_id}/key-packages", status_code=204)
+async def publish_key_packages(
+    device_id: uuid.UUID,
+    payload: KeyPackagePublishRequest,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
 ):
-    await enforce_user_rate_limit(auth.user.id,"e2ee-device-key",20,3600)
-    if payload.device_id!=device_id:
-        raise HTTPException(422,"Device ID mismatch")
-    decoded_prekeys=[dec(x) for x in payload.one_time_prekeys_b64]
-    item=(await db.execute(
-        select(DeviceKeyBundle)
-        .where(DeviceKeyBundle.user_id==auth.user.id,DeviceKeyBundle.device_id==device_id)
-        .with_for_update()
-    )).scalar_one_or_none()
-    values=dict(
-        protocol=payload.protocol,
-        identity_key=dec(payload.identity_key_b64),
-        signed_prekey=dec(payload.signed_prekey_b64),
-        signed_prekey_signature=dec(payload.signed_prekey_signature_b64),
-        one_time_prekeys=[],
-        updated_at=datetime.now(UTC),
-        revoked_at=None,
-    )
-    if item is None:
-        db.add(DeviceKeyBundle(user_id=auth.user.id,device_id=device_id,**values))
-    else:
-        for key,value in values.items():
-            setattr(item,key,value)
+    await enforce_user_rate_limit(auth.user.id, "mls-key-package-publish", 20, 3600)
+    if payload.device_id != device_id:
+        raise HTTPException(422, "Device ID mismatch")
 
-    if decoded_prekeys:
-        await db.execute(delete(DeviceOneTimePrekey).where(
-            DeviceOneTimePrekey.user_id==auth.user.id,
-            DeviceOneTimePrekey.device_id==device_id,
-            DeviceOneTimePrekey.consumed_at.is_(None),
-        ))
-        for public_key in decoded_prekeys:
-            db.add(DeviceOneTimePrekey(
+    decoded = [decode_key_package(item) for item in payload.key_packages_b64]
+    refs = [hashlib.sha256(item).digest() for item in decoded]
+    if len(set(refs)) != len(refs):
+        raise HTTPException(422, "Duplicate KeyPackage in request")
+
+    existing_refs = set(
+        (
+            await db.execute(
+                select(MlsKeyPackage.package_ref).where(MlsKeyPackage.package_ref.in_(refs))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if existing_refs:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "KeyPackage has already been registered or consumed",
+        )
+
+    for key_package, package_ref in zip(decoded, refs, strict=True):
+        db.add(
+            MlsKeyPackage(
                 user_id=auth.user.id,
                 device_id=device_id,
-                key_id=uuid.uuid4(),
-                public_key=public_key,
-            ))
+                package_ref=package_ref,
+                key_package=key_package,
+            )
+        )
     await db.commit()
 
 
 @router.get("/users/{user_id}/devices")
-async def get_bundles(
-    user_id:uuid.UUID,
-    auth:AuthContext=Depends(get_auth_context),
-    db:AsyncSession=Depends(get_db),
+async def list_key_package_devices(
+    user_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
 ):
-    await enforce_user_rate_limit(auth.user.id,"e2ee-key-fetch",120,60)
-    rows=(await db.execute(select(DeviceKeyBundle).where(
-        DeviceKeyBundle.user_id==user_id,
-        DeviceKeyBundle.revoked_at.is_(None),
-    ))).scalars().all()
-    return [{
-        "device_id":str(item.device_id),
-        "protocol":item.protocol,
-        "identity_key_b64":enc(item.identity_key),
-        "signed_prekey_b64":enc(item.signed_prekey),
-        "signed_prekey_signature_b64":enc(item.signed_prekey_signature),
-    } for item in rows]
-
-
-@router.post("/users/{user_id}/devices/{device_id}/prekey/claim")
-async def claim_prekey(
-    user_id:uuid.UUID,
-    device_id:uuid.UUID,
-    auth:AuthContext=Depends(get_auth_context),
-    db:AsyncSession=Depends(get_db),
-):
-    await enforce_user_rate_limit(auth.user.id,"e2ee-prekey-claim",120,60)
-    bundle=(await db.execute(select(DeviceKeyBundle).where(
-        DeviceKeyBundle.user_id==user_id,
-        DeviceKeyBundle.device_id==device_id,
-        DeviceKeyBundle.revoked_at.is_(None),
-    ))).scalar_one_or_none()
-    if bundle is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND,"Device key bundle not found")
-
-    prekey=(await db.execute(
-        select(DeviceOneTimePrekey)
-        .where(
-            DeviceOneTimePrekey.user_id==user_id,
-            DeviceOneTimePrekey.device_id==device_id,
-            DeviceOneTimePrekey.consumed_at.is_(None),
+    await enforce_user_rate_limit(auth.user.id, "mls-key-package-list", 120, 60)
+    rows = (
+        await db.execute(
+            select(MlsKeyPackage.device_id, func.count(MlsKeyPackage.id))
+            .where(
+                MlsKeyPackage.user_id == user_id,
+                MlsKeyPackage.claimed_at.is_(None),
+            )
+            .group_by(MlsKeyPackage.device_id)
+            .order_by(MlsKeyPackage.device_id)
         )
-        .order_by(DeviceOneTimePrekey.created_at,DeviceOneTimePrekey.id)
-        .with_for_update(skip_locked=True)
-        .limit(1)
-    )).scalar_one_or_none()
-    if prekey is None:
-        raise HTTPException(status.HTTP_409_CONFLICT,"No one-time prekey available")
+    ).all()
+    return [
+        {"device_id": str(device_id), "available_key_packages": int(count)}
+        for device_id, count in rows
+    ]
 
-    prekey.consumed_at=datetime.now(UTC)
+
+@router.post("/users/{user_id}/devices/{device_id}/key-package/claim")
+async def claim_key_package(
+    user_id: uuid.UUID,
+    device_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-key-package-claim", 120, 60)
+
+    item = (
+        await db.execute(
+            select(MlsKeyPackage)
+            .where(
+                MlsKeyPackage.user_id == user_id,
+                MlsKeyPackage.device_id == device_id,
+                MlsKeyPackage.claimed_at.is_(None),
+            )
+            .order_by(MlsKeyPackage.created_at, MlsKeyPackage.id)
+            .with_for_update(skip_locked=True)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    if item is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No MLS KeyPackage available",
+        )
+
+    item.claimed_at = datetime.now(UTC)
     await db.flush()
-    response={
-        "device_id":str(bundle.device_id),
-        "protocol":bundle.protocol,
-        "identity_key_b64":enc(bundle.identity_key),
-        "signed_prekey_b64":enc(bundle.signed_prekey),
-        "signed_prekey_signature_b64":enc(bundle.signed_prekey_signature),
-        "one_time_prekey":{
-            "key_id":str(prekey.key_id),
-            "public_key_b64":enc(prekey.public_key),
-        },
+    response = {
+        "device_id": str(item.device_id),
+        "package_ref": item.package_ref.hex(),
+        "key_package_b64": encode_bytes(item.key_package),
     }
     await db.commit()
     return response
 
 
-@router.delete("/devices/{device_id}",status_code=204)
-async def revoke_bundle(
-    device_id:uuid.UUID,
-    auth:AuthContext=Depends(get_auth_context),
-    db:AsyncSession=Depends(get_db),
+@router.delete("/devices/{device_id}/key-packages", status_code=204)
+async def discard_unclaimed_key_packages(
+    device_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
 ):
-    item=(await db.execute(select(DeviceKeyBundle).where(
-        DeviceKeyBundle.user_id==auth.user.id,
-        DeviceKeyBundle.device_id==device_id,
-        DeviceKeyBundle.revoked_at.is_(None),
-    ))).scalar_one_or_none()
-    if item is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND,"Device key not found")
-    item.revoked_at=datetime.now(UTC)
+    await enforce_user_rate_limit(auth.user.id, "mls-key-package-discard", 20, 3600)
+    await db.execute(
+        delete(MlsKeyPackage).where(
+            MlsKeyPackage.user_id == auth.user.id,
+            MlsKeyPackage.device_id == device_id,
+            MlsKeyPackage.claimed_at.is_(None),
+        )
+    )
     await db.commit()
