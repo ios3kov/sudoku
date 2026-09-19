@@ -1,12 +1,21 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use openmls::prelude::OpenMlsProvider;
+use openmls::prelude::{
+    BasicCredential, Ciphersuite, CredentialWithKey, Deserialize, KeyPackage, KeyPackageIn,
+    OpenMlsProvider, ProtocolVersion, Serialize, SignatureScheme,
+};
+use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::{MemoryStorage, RustCrypto};
 use wasm_bindgen::prelude::*;
 
 const PROTOCOL: &str = "mls-rfc9420";
 const OPENMLS_VERSION: &str = "0.9.0";
+const CIPHERSUITE: Ciphersuite =
+    Ciphersuite::MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519;
+const MAX_CREDENTIAL_BYTES: usize = 256;
+const ED25519_PUBLIC_KEY_BYTES: usize = 32;
+const MAX_KEY_PACKAGE_BYTES: usize = 64 * 1024;
 
 const STATE_MAGIC: &[u8; 8] = b"SMLSST01";
 const MAX_STATE_BYTES: usize = 16 * 1024 * 1024;
@@ -46,15 +55,112 @@ impl OpenMlsProvider for Provider {
 }
 
 #[wasm_bindgen]
+pub struct DeviceIdentity {
+    credential: Vec<u8>,
+    public_key: Vec<u8>,
+}
+
+#[wasm_bindgen]
+impl DeviceIdentity {
+    #[wasm_bindgen(js_name = fromPublic)]
+    pub fn from_public(credential: &[u8], public_key: &[u8]) -> Result<DeviceIdentity, JsError> {
+        validate_credential(credential).map_err(|message| JsError::new(&message))?;
+        if public_key.len() != ED25519_PUBLIC_KEY_BYTES {
+            return Err(JsError::new("MLS identity public key must be 32-byte Ed25519"));
+        }
+        Ok(DeviceIdentity {
+            credential: credential.to_vec(),
+            public_key: public_key.to_vec(),
+        })
+    }
+
+    #[wasm_bindgen(js_name = credentialBytes)]
+    pub fn credential_bytes(&self) -> Vec<u8> {
+        self.credential.clone()
+    }
+
+    #[wasm_bindgen(js_name = publicKeyBytes)]
+    pub fn public_key_bytes(&self) -> Vec<u8> {
+        self.public_key.clone()
+    }
+}
+
+#[wasm_bindgen]
 impl Provider {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Provider {
         Provider::default()
     }
 
+    #[wasm_bindgen(js_name = createDeviceIdentity)]
+    pub fn create_device_identity(&self, credential: &[u8]) -> Result<DeviceIdentity, JsError> {
+        validate_credential(credential).map_err(|message| JsError::new(&message))?;
+
+        let signer = SignatureKeyPair::new(SignatureScheme::ED25519)
+            .map_err(|_| JsError::new("Failed to generate MLS signing key"))?;
+        signer
+            .store(self.storage())
+            .map_err(|_| JsError::new("Failed to persist MLS signing key"))?;
+
+        Ok(DeviceIdentity {
+            credential: credential.to_vec(),
+            public_key: signer.to_public_vec(),
+        })
+    }
+
+    #[wasm_bindgen(js_name = createKeyPackage)]
+    pub fn create_key_package(&self, identity: &DeviceIdentity) -> Result<Vec<u8>, JsError> {
+        let signer = self.load_signer(identity)?;
+        let credential = credential_with_key(identity);
+
+        let bundle = KeyPackage::builder()
+            .build(CIPHERSUITE, self, &signer, credential)
+            .map_err(|_| JsError::new("Failed to build MLS KeyPackage"))?;
+
+        bundle
+            .key_package()
+            .tls_serialize_detached()
+            .map_err(|_| JsError::new("Failed to serialize MLS KeyPackage"))
+    }
+
+    #[wasm_bindgen(js_name = validateKeyPackage)]
+    pub fn validate_key_package(&self, bytes: &[u8]) -> Result<Vec<u8>, JsError> {
+        if bytes.is_empty() || bytes.len() > MAX_KEY_PACKAGE_BYTES {
+            return Err(JsError::new("Invalid MLS KeyPackage size"));
+        }
+
+        let mut input = bytes;
+        let key_package_in = KeyPackageIn::tls_deserialize(&mut input)
+            .map_err(|_| JsError::new("Malformed MLS KeyPackage"))?;
+        if !input.is_empty() {
+            return Err(JsError::new("MLS KeyPackage contains trailing bytes"));
+        }
+
+        let key_package = key_package_in
+            .validate(self.crypto(), ProtocolVersion::Mls10)
+            .map_err(|_| JsError::new("Invalid MLS KeyPackage"))?;
+
+        if key_package.ciphersuite() != CIPHERSUITE {
+            return Err(JsError::new("Unsupported MLS KeyPackage ciphersuite"));
+        }
+
+        key_package
+            .tls_serialize_detached()
+            .map_err(|_| JsError::new("Failed to serialize validated MLS KeyPackage"))
+    }
+
     #[wasm_bindgen(js_name = exportState)]
     pub fn export_state(&self) -> Result<Vec<u8>, JsError> {
         encode_storage(&self.storage).map_err(|message| JsError::new(&message))
+    }
+
+    fn load_signer(&self, identity: &DeviceIdentity) -> Result<SignatureKeyPair, JsError> {
+        SignatureKeyPair::read(
+            self.storage(),
+            &identity.public_key,
+            SignatureScheme::ED25519,
+        )
+        .ok_or_else(|| JsError::new("MLS signing key is missing from provider state"))
     }
 
     #[wasm_bindgen(js_name = fromState)]
@@ -79,7 +185,24 @@ pub fn openmls_version() -> String {
 
 #[wasm_bindgen]
 pub fn binding_capabilities() -> String {
-    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"ui_ready":false}"#.to_owned()
+    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"ui_ready":false}"#.to_owned()
+}
+
+fn validate_credential(credential: &[u8]) -> Result<(), String> {
+    if credential.is_empty() {
+        return Err("MLS credential must not be empty".to_owned());
+    }
+    if credential.len() > MAX_CREDENTIAL_BYTES {
+        return Err("MLS credential exceeds size limit".to_owned());
+    }
+    Ok(())
+}
+
+fn credential_with_key(identity: &DeviceIdentity) -> CredentialWithKey {
+    CredentialWithKey {
+        credential: BasicCredential::new(identity.credential.clone()).into(),
+        signature_key: identity.public_key.clone().into(),
+    }
 }
 
 fn encode_storage(storage: &MemoryStorage) -> Result<Vec<u8>, String> {
@@ -236,6 +359,46 @@ mod tests {
         let restored_values = restored.values.read().expect("restored storage lock");
         assert_eq!(restored_values.get(b"a-key".as_slice()), Some(&b"first".to_vec()));
         assert_eq!(restored_values.get(b"b-key".as_slice()), Some(&b"second".to_vec()));
+    }
+
+    #[test]
+    fn identity_and_key_packages_survive_state_restore() {
+        let provider = Provider::default();
+        let identity = provider
+            .create_device_identity(b"user-1:device-1")
+            .expect("create identity");
+
+        let first = provider
+            .create_key_package(&identity)
+            .expect("create first key package");
+        assert!(!first.is_empty());
+
+        let state = encode_storage(&provider.storage).expect("encode provider state");
+        let restored = Provider {
+            crypto: RustCrypto::default(),
+            storage: decode_storage(&state).expect("restore provider state"),
+        };
+
+        let restored_identity = DeviceIdentity::from_public(
+            &identity.credential,
+            &identity.public_key,
+        )
+        .expect("restore public identity handle");
+
+        let second = restored
+            .create_key_package(&restored_identity)
+            .expect("create key package after reload");
+        assert!(!second.is_empty());
+        assert_ne!(first, second);
+
+        let validator = Provider::default();
+        assert_eq!(
+            validator
+                .validate_key_package(&first)
+                .expect("validate first package"),
+            first
+        );
+        assert!(validator.validate_key_package(b"invalid").is_err());
     }
 
     #[test]
