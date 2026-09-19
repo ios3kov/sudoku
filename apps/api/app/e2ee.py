@@ -642,26 +642,26 @@ async def finalize_membership_change(
         device = await active_device(
             db, change.target_user_id, change.target_device_id
         )
-        if device is None:
-            raise HTTPException(409, "MLS device-add target is no longer active")
-        welcomed = await control_recipient_pairs_for_change(db, change.id, "welcome")
         target_pair = (change.target_user_id, change.target_device_id)
-        if target_pair not in welcomed:
-            raise HTTPException(409, "MLS device add is missing Welcome delivery")
-        expected_commits = await current_active_device_pairs(
-            db, change.conversation_id, ("active", "pending_remove")
-        )
-        expected_commits.discard((auth.user.id, auth.session.id))
-        expected_commits.discard(target_pair)
-        committed = await control_recipient_pairs_for_change(db, change.id, "commit")
-        if not expected_commits.issubset(committed):
-            raise HTTPException(409, "MLS device add is missing Commit delivery")
+        if device is not None:
+            welcomed = await control_recipient_pairs_for_change(db, change.id, "welcome")
+            if target_pair not in welcomed:
+                raise HTTPException(409, "MLS device add is missing Welcome delivery")
+            expected_commits = await current_active_device_pairs(
+                db, change.conversation_id, ("active", "pending_remove")
+            )
+            expected_commits.discard((auth.user.id, auth.session.id))
+            expected_commits.discard(target_pair)
+            committed = await control_recipient_pairs_for_change(db, change.id, "commit")
+            if not expected_commits.issubset(committed):
+                raise HTTPException(409, "MLS device add is missing Commit delivery")
         event_type = "mls.device.rekeyed"
         payload = {
             "conversation_id": str(change.conversation_id),
             "user_id": str(change.target_user_id),
             "device_id": str(change.target_device_id),
             "kind": "device_add",
+            "skipped": device is None,
         }
         extra = []
     elif change.kind == "device_remove":
@@ -687,7 +687,27 @@ async def finalize_membership_change(
             )
             or 0
         )
-        if commit_count < 1:
+        device_was_in_transport = bool(
+            await db.scalar(
+                select(
+                    exists().where(
+                        or_(
+                            and_(
+                                MlsControlEvent.conversation_id == change.conversation_id,
+                                MlsControlEvent.sender_user_id == change.target_user_id,
+                                MlsControlEvent.sender_device_id == change.target_device_id,
+                            ),
+                            exists().where(
+                                MlsControlRecipient.event_id == MlsControlEvent.id,
+                                MlsControlRecipient.user_id == change.target_user_id,
+                                MlsControlRecipient.device_id == change.target_device_id,
+                            ),
+                        )
+                    )
+                )
+            )
+        )
+        if commit_count < 1 and device_was_in_transport:
             raise HTTPException(409, "MLS device removal has no durable Remove commit")
         event_type = "mls.device.rekeyed"
         payload = {

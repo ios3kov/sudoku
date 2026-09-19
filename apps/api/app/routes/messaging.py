@@ -613,10 +613,10 @@ async def create_message(
         ).first()
         if pending_change is not None:
             pending_change_id, pending_change_kind = pending_change
-            if pending_change_kind in {"device_add", "device_remove"}:
+            if pending_change_kind == "device_remove":
                 raise HTTPException(
                     status_code=409,
-                    detail="MLS device rekey is required before sending",
+                    detail="MLS device removal rekey is required before sending",
                 )
             delivery_started = (
                 await db.execute(
