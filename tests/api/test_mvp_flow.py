@@ -1097,3 +1097,189 @@ async def test_session_refresh_keeps_device_id_and_revoke_disables_mls_device() 
             )
         ).scalar_one()
         assert device.revoked_at is not None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_e2ee_membership_prepare_allows_old_epoch_until_control_delivery() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    owner_email = f"phase-owner-{suffix}@example.com"
+    member_email = f"phase-member-{suffix}@example.com"
+    target_email = f"phase-target-{suffix}@example.com"
+    password = "correct horse battery staple"
+
+    async with SessionFactory() as db:
+        owner = User(
+            email=owner_email,
+            display_name="Phase Owner",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        member = User(
+            email=member_email,
+            display_name="Phase Member",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        target = User(
+            email=target_email,
+            display_name="Phase Target",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add_all([owner, member, target])
+        await db.commit()
+        await db.refresh(member)
+        await db.refresh(target)
+        member_id = member.id
+        target_id = target.id
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as owner_client, httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as target_client:
+        assert (
+            await owner_client.post(
+                "/v1/auth/login",
+                json={
+                    "email": owner_email,
+                    "password": password,
+                    "device_name": "phase-owner-device",
+                },
+            )
+        ).status_code == 200
+        assert (
+            await target_client.post(
+                "/v1/auth/login",
+                json={
+                    "email": target_email,
+                    "password": password,
+                    "device_name": "phase-target-device",
+                },
+            )
+        ).status_code == 200
+
+        owner_sessions = await owner_client.get("/v1/sessions")
+        target_sessions = await target_client.get("/v1/sessions")
+        owner_device = uuid.UUID(
+            next(item["id"] for item in owner_sessions.json() if item["current"])
+        )
+        target_device = uuid.UUID(
+            next(item["id"] for item in target_sessions.json() if item["current"])
+        )
+
+        assert (
+            await owner_client.put(
+                f"/v1/e2ee/devices/{owner_device}",
+                json={
+                    "identity_public_key_b64": base64.b64encode(
+                        hashlib.sha256(str(owner_device).encode()).digest()
+                    ).decode()
+                },
+            )
+        ).status_code == 204
+        assert (
+            await target_client.put(
+                f"/v1/e2ee/devices/{target_device}",
+                json={
+                    "identity_public_key_b64": base64.b64encode(
+                        hashlib.sha256(str(target_device).encode()).digest()
+                    ).decode()
+                },
+            )
+        ).status_code == 204
+
+        created = await owner_client.post(
+            "/v1/conversations",
+            json={
+                "type": "group",
+                "title": "Phase Group",
+                "member_ids": [str(member_id)],
+                "encryption_required": True,
+            },
+        )
+        assert created.status_code == 201, created.text
+        conversation_id = created.json()["id"]
+
+        # This test isolates an already-active group. Initial bootstrap activation
+        # coverage is exercised by the dedicated Welcome/device integration test.
+        async with SessionFactory() as db:
+            conversation = (
+                await db.execute(
+                    select(Conversation).where(
+                        Conversation.id == uuid.UUID(conversation_id)
+                    )
+                )
+            ).scalar_one()
+            conversation.e2ee_ready = True
+            await db.commit()
+
+        def encrypted_payload(label: str) -> dict:
+            return {
+                "client_id": str(uuid.uuid4()),
+                "type": "text",
+                "body": None,
+                "envelope": {
+                    "version": 1,
+                    "protocol": "mls-rfc9420",
+                    "kind": "application",
+                    "ciphertext": base64.b64encode(label.encode()).decode(),
+                },
+                "asset_ids": [],
+            }
+
+        before_prepare = await owner_client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            json=encrypted_payload("before-prepare"),
+        )
+        assert before_prepare.status_code == 201, before_prepare.text
+
+        prepared = await owner_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/membership-changes/add/{target_id}"
+        )
+        assert prepared.status_code == 201, prepared.text
+        change_id = prepared.json()["id"]
+
+        # A prepared transition has not changed the MLS epoch yet. Existing
+        # members may still deliver old-epoch application ciphertext.
+        before_commit = await owner_client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            json=encrypted_payload("before-commit"),
+        )
+        assert before_commit.status_code == 201, before_commit.text
+
+        control = await owner_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/control-batches",
+            json={
+                "sender_device_id": str(owner_device),
+                "membership_change_id": change_id,
+                "events": [
+                    {
+                        "client_id": str(uuid.uuid4()),
+                        "kind": "welcome",
+                        "payload_b64": base64.b64encode(b"opaque-mls-welcome").decode(),
+                        "recipients": [
+                            {
+                                "user_id": str(target_id),
+                                "device_id": str(target_device),
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+        assert control.status_code == 201, control.text
+
+        after_commit = await owner_client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            json=encrypted_payload("after-commit"),
+        )
+        assert after_commit.status_code == 409, after_commit.text

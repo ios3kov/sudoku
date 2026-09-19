@@ -13,6 +13,8 @@ from ..models import (
     Conversation,
     ConversationMember,
     ConversationTransportEvent,
+    ConversationMembershipChange,
+    MlsControlEvent,
     Message,
     MessageReaction,
     OutboxEvent,
@@ -598,19 +600,27 @@ async def create_message(
                 status_code=409,
                 detail="Secure conversation setup is not active yet",
             )
-        pending_membership = await db.scalar(
-            select(func.count())
-            .select_from(ConversationMember)
-            .where(
-                ConversationMember.conversation_id == conversation_id,
-                ConversationMember.e2ee_state != "active",
+        pending_change_id = (
+            await db.execute(
+                select(ConversationMembershipChange.id).where(
+                    ConversationMembershipChange.conversation_id == conversation_id,
+                    ConversationMembershipChange.status == "pending",
+                )
             )
-        )
-        if int(pending_membership or 0) > 0:
-            raise HTTPException(
-                status_code=409,
-                detail="MLS membership transition is pending",
-            )
+        ).scalar_one_or_none()
+        if pending_change_id is not None:
+            delivery_started = (
+                await db.execute(
+                    select(MlsControlEvent.id)
+                    .where(MlsControlEvent.membership_change_id == pending_change_id)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if delivery_started is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="MLS membership transition delivery is in progress",
+                )
         if body is not None or payload.envelope is None:
             raise HTTPException(status_code=422, detail="E2EE conversation requires ciphertext envelope and forbids plaintext body")
     elif payload.envelope is not None:
