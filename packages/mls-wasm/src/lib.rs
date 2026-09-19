@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use openmls::prelude::{
-    BasicCredential, Ciphersuite, CredentialWithKey, GroupId, KeyPackage, KeyPackageIn,
+    BasicCredential, Ciphersuite, Credential, CredentialWithKey, GroupId, KeyPackage, KeyPackageIn,
     MlsGroup, MlsGroupJoinConfig, MlsMessageBodyIn, MlsMessageIn, OpenMlsProvider,
     ProcessedMessageContent, ProtocolVersion, SignatureScheme, StagedWelcome,
 };
@@ -203,6 +203,27 @@ impl Provider {
             .map_err(|message| JsError::new(&message))
     }
 
+    #[wasm_bindgen(js_name = processHandshake)]
+    pub fn process_handshake(
+        &self,
+        group_id: &[u8],
+        message: &[u8],
+    ) -> Result<(), JsError> {
+        self.process_handshake_inner(group_id, message)
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = removeMember)]
+    pub fn remove_member(
+        &self,
+        identity: &DeviceIdentity,
+        group_id: &[u8],
+        member_credential: &[u8],
+    ) -> Result<Vec<u8>, JsError> {
+        self.remove_member_inner(identity, group_id, member_credential)
+            .map_err(|error| JsError::new(&error))
+    }
+
     #[wasm_bindgen(js_name = exportState)]
     pub fn export_state(&self) -> Result<Vec<u8>, JsError> {
         encode_storage(&self.storage).map_err(|message| JsError::new(&message))
@@ -311,6 +332,58 @@ impl Provider {
             .ok_or_else(|| "MLS group state not found".to_owned())
     }
 
+    fn process_handshake_inner(
+        &self,
+        group_id: &[u8],
+        message: &[u8],
+    ) -> Result<(), String> {
+        validate_group_id(group_id)?;
+        let protocol_message = parse_mls_message(message)?
+            .try_into_protocol_message()
+            .map_err(|_| "Expected an MLS handshake protocol message".to_owned())?;
+        let mut group = self.load_group_inner(group_id)?;
+        let processed = group
+            .process_message(self, protocol_message)
+            .map_err(|_| "Failed to process MLS handshake message".to_owned())?;
+
+        match processed.into_content() {
+            ProcessedMessageContent::StagedCommitMessage(staged) => group
+                .merge_staged_commit(self, *staged)
+                .map_err(|_| "Failed to merge incoming MLS commit".to_owned()),
+            ProcessedMessageContent::OwnPendingCommit => group
+                .merge_pending_commit(self)
+                .map_err(|_| "Failed to merge own pending MLS commit".to_owned()),
+            _ => Err("Expected an MLS Commit message".to_owned()),
+        }
+    }
+
+    fn remove_member_inner(
+        &self,
+        identity: &DeviceIdentity,
+        group_id: &[u8],
+        member_credential: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        validate_group_id(group_id)?;
+        validate_credential(member_credential)?;
+        let signer = self.load_signer_inner(identity)?;
+        let mut group = self.load_group_inner(group_id)?;
+
+        let credential: Credential = BasicCredential::new(member_credential.to_vec()).into();
+        let leaf = group
+            .member_leaf_index(&credential)
+            .ok_or_else(|| "MLS member credential not found".to_owned())?;
+
+        let (commit, _, _) = group
+            .remove_members(self, &signer, &[leaf])
+            .map_err(|_| "Failed to remove MLS member".to_owned())?;
+
+        group
+            .merge_pending_commit(self)
+            .map_err(|_| "Failed to merge local MLS removal commit".to_owned())?;
+
+        serialize_mls_message(&commit)
+    }
+
     fn parse_key_package_inner(&self, bytes: &[u8]) -> Result<KeyPackage, String> {
         if bytes.is_empty() || bytes.len() > MAX_KEY_PACKAGE_BYTES {
             return Err("Invalid MLS KeyPackage size".to_owned());
@@ -377,7 +450,7 @@ pub fn openmls_version() -> String {
 
 #[wasm_bindgen]
 pub fn binding_capabilities() -> String {
-    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"ui_ready":false}"#.to_owned()
+    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"membership_rekey":true,"ui_ready":false}"#.to_owned()
 }
 
 fn validate_group_id(group_id: &[u8]) -> Result<(), String> {
@@ -686,6 +759,90 @@ mod tests {
             .decrypt_application_inner(group_id, &reply)
             .expect("alice decrypts");
         assert_eq!(reply_plaintext, b"hello alice");
+    }
+
+    #[test]
+    fn removed_member_cannot_decrypt_next_epoch() {
+        let alice = Provider::default();
+        let bob = Provider::default();
+        let charlie = Provider::default();
+
+        let alice_identity = alice
+            .create_device_identity(b"alice:device-1")
+            .expect("alice identity");
+        let bob_identity = bob
+            .create_device_identity(b"bob:device-1")
+            .expect("bob identity");
+        let charlie_identity = charlie
+            .create_device_identity(b"charlie:device-1")
+            .expect("charlie identity");
+
+        let bob_key_package = bob
+            .create_key_package(&bob_identity)
+            .expect("bob key package");
+        let charlie_key_package = charlie
+            .create_key_package(&charlie_identity)
+            .expect("charlie key package");
+
+        let group_id = b"conversation-mls-epoch-rotation";
+        alice
+            .create_group_inner(&alice_identity, group_id)
+            .expect("create group");
+
+        let add_bob = alice
+            .add_member_inner(&alice_identity, group_id, &bob_key_package)
+            .expect("add bob");
+        bob.join_group_inner(&add_bob.welcome)
+            .expect("bob joins");
+
+        let add_charlie = alice
+            .add_member_inner(&alice_identity, group_id, &charlie_key_package)
+            .expect("add charlie");
+        bob.process_handshake_inner(group_id, &add_charlie.commit)
+            .expect("bob applies charlie add commit");
+        charlie
+            .join_group_inner(&add_charlie.welcome)
+            .expect("charlie joins");
+
+        let before_remove = alice
+            .encrypt_application_inner(&alice_identity, group_id, b"before remove")
+            .expect("encrypt before remove");
+        assert_eq!(
+            bob.decrypt_application_inner(group_id, &before_remove)
+                .expect("bob decrypts before removal"),
+            b"before remove"
+        );
+        assert_eq!(
+            charlie
+                .decrypt_application_inner(group_id, &before_remove)
+                .expect("charlie decrypts before removal"),
+            b"before remove"
+        );
+
+        let remove_bob = alice
+            .remove_member_inner(&alice_identity, group_id, &bob_identity.credential)
+            .expect("remove bob");
+
+        charlie
+            .process_handshake_inner(group_id, &remove_bob)
+            .expect("charlie applies removal commit");
+        bob.process_handshake_inner(group_id, &remove_bob)
+            .expect("bob applies self-removal commit");
+
+        let after_remove = alice
+            .encrypt_application_inner(&alice_identity, group_id, b"after remove")
+            .expect("encrypt after remove");
+        assert_eq!(
+            charlie
+                .decrypt_application_inner(group_id, &after_remove)
+                .expect("charlie decrypts after removal"),
+            b"after remove"
+        );
+        assert!(
+            bob.decrypt_application_inner(group_id, &after_remove)
+                .is_err(),
+            "removed member must not decrypt messages from the new MLS epoch"
+        );
     }
 
     #[test]
