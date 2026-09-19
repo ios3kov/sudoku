@@ -52,6 +52,10 @@ export interface ProtocolAdapter {
 
   createKeyPackages(count: number): Promise<Uint8Array[]>;
 
+  createAndPublishKeyPackages(count: number): Promise<void>;
+
+  ensureKeyPackagePool(target?: number): Promise<number>;
+
   createGroup(conversationId: string): Promise<void>;
 
   addMemberDurably(
@@ -113,6 +117,8 @@ export const unavailableProtocolAdapter: ProtocolAdapter = {
   ready: false,
   initialize: unavailable,
   createKeyPackages: unavailable,
+  createAndPublishKeyPackages: unavailable,
+  ensureKeyPackagePool: unavailable,
   createGroup: unavailable,
   addMemberDurably: unavailable,
   removeMemberDurably: unavailable,

@@ -441,7 +441,7 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
                 "key_packages_b64": [base64.b64encode(kp1).decode()],
             },
         )
-        assert replay.status_code == 409
+        assert replay.status_code == 204
 
     async with SessionFactory() as db:
         from app.models import MlsKeyPackage

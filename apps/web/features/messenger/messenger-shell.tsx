@@ -9,6 +9,7 @@ import { clearPending } from "./outbox";
 import { RealtimeClient } from "./realtime";
 import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
+import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 
 function sortConversations(items: Conversation[]): Conversation[] {
@@ -30,12 +31,17 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const [pushState, setPushState] = useState<"idle" | "enabling" | "enabled" | "error">("idle");
   const [showInvite, setShowInvite] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
+  const [e2eeState, setE2eeState] = useState<"initializing" | "ready" | "error">("initializing");
   const realtimeRef = useRef<RealtimeClient | null>(null);
+  const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
 
   const loadConversations = useCallback(async () => {
     try {
       const next = await messengerApi.conversations();
-      setConversations(sortConversations(next));
+      const sorted = sortConversations(next);
+      conversationsRef.current = sorted;
+      setConversations(sorted);
     } finally {
       setLoading(false);
     }
@@ -46,15 +52,77 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   }, [loadConversations]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const sessions = await messengerApi.sessions();
+        const current = sessions.find((session) => session.current);
+        if (!current) throw new Error("Current device session is unavailable");
+
+        const adapter = new OpenMlsProtocolAdapter({
+          userId: user.id,
+          deviceId: current.id,
+        });
+        await adapter.initialize();
+        await adapter.ensureKeyPackagePool(10);
+
+        if (cancelled) return;
+        e2eeRef.current = adapter;
+        setE2eeState("ready");
+
+        for (const conversation of conversationsRef.current) {
+          if (conversation.encryption_required) {
+            await adapter.syncTransport(conversation.id);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          e2eeRef.current = null;
+          setE2eeState("error");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      e2eeRef.current = null;
+    };
+  }, [user.id]);
+
+  useEffect(() => {
     const realtime = new RealtimeClient({
       onOpen: () => {
         setConnectionState("online");
         setReconnectTick((value) => value + 1);
+        const adapter = e2eeRef.current;
+        if (adapter) {
+          for (const conversation of conversationsRef.current) {
+            if (conversation.encryption_required) {
+              void adapter.syncTransport(conversation.id).catch(() => {
+                setE2eeState("error");
+              });
+            }
+          }
+        }
       },
       onClose: () => setConnectionState("reconnecting"),
       onEvent: (event) => {
         setLatestEvent(event);
         if (["conversation.created", "conversation.updated", "conversation.members_added", "conversation.member_role_updated", "conversation.member_removed"].includes(event.type)) void loadConversations();
+        if (
+          (event.type === "message.created" || event.type === "mls.control.created")
+          && event.conversation_id
+          && conversationsRef.current.some(
+            (conversation) =>
+              conversation.id === event.conversation_id
+              && conversation.encryption_required,
+          )
+        ) {
+          void e2eeRef.current?.syncTransport(event.conversation_id).catch(() => {
+            setE2eeState("error");
+          });
+        }
         if (event.type === "conversation.member_removed" && event.conversation_id && (event.payload as { user_id?: string } | undefined)?.user_id === user.id) {
           setSelectedId((current) => current === event.conversation_id ? null : current);
         }
@@ -89,7 +157,10 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   async function logout() {
     setLoggingOut(true);
     try {
-      await fetch("/v1/auth/logout", { method: "POST", credentials: "include" });
+      const response = await fetch("/v1/auth/logout", { method: "POST", credentials: "include" });
+      if (response.ok) {
+        await e2eeRef.current?.clearLocalState().catch(() => undefined);
+      }
       await clearPending().catch(() => undefined);
     } finally {
       setLoggingOut(false);
@@ -101,17 +172,44 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   function addConversation(conversation: Conversation) {
     setConversations((current) => {
       const without = current.filter((item) => item.id !== conversation.id);
-      return sortConversations([conversation, ...without]);
+      const next = sortConversations([conversation, ...without]);
+      conversationsRef.current = next;
+      return next;
     });
     setSelectedId(conversation.id);
     setCreating(false);
   }
 
   function updateConversation(next: Conversation) {
-    setConversations((current) => sortConversations(current.map((item) => item.id === next.id ? next : item)));
+    setConversations((current) => {
+      const updated = sortConversations(
+        current.map((item) => item.id === next.id ? next : item),
+      );
+      conversationsRef.current = updated;
+      return updated;
+    });
   }
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
+
+  if (selected?.encryption_required) {
+    return (
+      <main className="messenger-page">
+        <section className="messenger-shell">
+          <header className="messenger-topbar">
+            <div>
+              <strong>{conversationTitle(selected, user.id)}</strong>
+              <span>{e2eeState === "ready" ? "Secure chat ready" : e2eeState === "error" ? "Secure chat unavailable" : "Initializing secure chat…"}</span>
+            </div>
+            <button type="button" onClick={() => setSelectedId(null)}>Back</button>
+          </header>
+          <p className="muted center">
+            Secure conversation rendering is locked until the encrypted history/composer wiring passes its production gate.
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   if (selected) {
     return (

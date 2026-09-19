@@ -55,6 +55,7 @@ interface LocalMlsStateV1 {
   peerIdentityPins: Record<string, PeerIdentityPin>;
   eventJournal: Record<string, EncryptedEventRecord[]>;
   pendingApplicationSends: PendingApplicationSend[];
+  pendingKeyPackagesB64: string[];
   transportCursors: Record<string, number>;
 }
 
@@ -212,6 +213,10 @@ function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
       Array.isArray(raw.pendingApplicationSends)
         ? raw.pendingApplicationSends.filter(isPendingApplicationSend)
         : [],
+    pendingKeyPackagesB64:
+      Array.isArray(raw.pendingKeyPackagesB64)
+        ? raw.pendingKeyPackagesB64.filter((item) => typeof item === "string")
+        : [],
     transportCursors:
       raw.transportCursors && typeof raw.transportCursors === "object"
         ? Object.fromEntries(
@@ -296,6 +301,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         peerIdentityPins: {},
         eventJournal: {},
         pendingApplicationSends: [],
+        pendingKeyPackagesB64: [],
         transportCursors: {},
       };
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
@@ -310,6 +316,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       this.options.deviceId,
       bytesToBase64(identity.publicKeyBytes()),
     );
+    await this.flushPendingKeyPackages();
     await this.flushPendingOutboundTransition();
     await this.flushPendingApplicationSends();
     await this.flushPendingAcks();
@@ -329,11 +336,56 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   }
 
   async createAndPublishKeyPackages(count: number): Promise<void> {
-    const packages = await this.createKeyPackages(count);
-    await messengerApi.publishMlsKeyPackages(
-      this.options.deviceId,
-      packages.map(bytesToBase64),
-    );
+    if (!Number.isInteger(count) || count < 1 || count > 100) {
+      throw new Error("KeyPackage count must be between 1 and 100");
+    }
+
+    await this.enqueue(async () => {
+      this.assertReady();
+      await this.flushPendingKeyPackages();
+
+      const snapshot = this.snapshotRuntime();
+      try {
+        const packages: string[] = [];
+        for (let index = 0; index < count; index += 1) {
+          packages.push(
+            bytesToBase64(this.provider!.createKeyPackage(this.identity!)),
+          );
+        }
+        this.localState!.pendingKeyPackagesB64 = packages;
+        await this.persistCurrentState();
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
+      }
+
+      await this.flushPendingKeyPackages();
+    });
+  }
+
+  async ensureKeyPackagePool(target = 10): Promise<number> {
+    if (!Number.isInteger(target) || target < 1 || target > 100) {
+      throw new Error("KeyPackage target must be between 1 and 100");
+    }
+    this.assertReady();
+    await this.flushPendingKeyPackages();
+
+    const devices = await messengerApi.mlsDevices(this.options.userId);
+    const current = devices.find((item) => item.device_id === this.options.deviceId);
+    const available = current?.available_key_packages ?? 0;
+    const missing = Math.max(0, target - available);
+    if (missing > 0) {
+      await this.createAndPublishKeyPackages(missing);
+    }
+    return target;
+  }
+
+  async clearLocalState(): Promise<void> {
+    await this.stateStore.delete(this.stateKey);
+    this.module = null;
+    this.provider = null;
+    this.identity = null;
+    this.localState = null;
   }
 
   async createGroup(conversationId: string): Promise<void> {
@@ -1147,6 +1199,23 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       }
       return result;
     });
+  }
+
+  private async flushPendingKeyPackages(): Promise<void> {
+    this.assertReady();
+    const pending = [...this.localState!.pendingKeyPackagesB64];
+    if (pending.length === 0) return;
+
+    await messengerApi.publishMlsKeyPackages(this.options.deviceId, pending);
+
+    const previous = [...this.localState!.pendingKeyPackagesB64];
+    this.localState!.pendingKeyPackagesB64 = [];
+    try {
+      await this.persistCurrentState();
+    } catch (error) {
+      this.localState!.pendingKeyPackagesB64 = previous;
+      throw error;
+    }
   }
 
   private async flushPendingApplicationSends(): Promise<Map<string, Message>> {

@@ -244,22 +244,29 @@ async def publish_key_packages(
     if len(set(refs)) != len(refs):
         raise HTTPException(422, "Duplicate KeyPackage in request")
 
-    existing_refs = set(
-        (
-            await db.execute(
-                select(MlsKeyPackage.package_ref).where(MlsKeyPackage.package_ref.in_(refs))
-            )
+    existing_rows = (
+        await db.execute(
+            select(MlsKeyPackage).where(MlsKeyPackage.package_ref.in_(refs))
         )
-        .scalars()
-        .all()
-    )
-    if existing_refs:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "KeyPackage has already been registered or consumed",
-        )
+    ).scalars().all()
+    existing_by_ref = {item.package_ref: item for item in existing_rows}
 
     for key_package, package_ref in zip(decoded, refs, strict=True):
+        existing = existing_by_ref.get(package_ref)
+        if existing is not None:
+            if (
+                existing.user_id != auth.user.id
+                or existing.device_id != device_id
+                or existing.key_package != key_package
+            ):
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "KeyPackage reference is already owned by another device",
+                )
+            # Idempotent retry. A consumed row remains consumed and is never
+            # resurrected; an unclaimed row remains available exactly once.
+            continue
+
         db.add(
             MlsKeyPackage(
                 user_id=auth.user.id,
