@@ -1,4 +1,4 @@
-import type { Conversation, CreatedInvite, CurrentUser, DeviceSession, Message } from "./types";
+import type { ClaimedPrekeyBundle, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeDeviceBundle, E2eeEnvelope, Message } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
@@ -39,6 +39,27 @@ export const messengerApi = {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ client_id: clientId, type, body, reply_to: replyTo, asset_ids: assetIds }),
   }),
+  sendEncryptedMessage: (
+    conversationId: string,
+    clientId: string,
+    envelope: E2eeEnvelope,
+    type: "text" | "image" | "file" | "voice" = "text",
+    assetIds: string[] = [],
+    replyTo: string | null = null,
+  ) => request<Message>(`/v1/conversations/${conversationId}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, type, body: null, envelope, reply_to: replyTo, asset_ids: assetIds }),
+  }),
+  publishDeviceBundle: (bundle: E2eeDeviceBundle & { one_time_prekeys_b64: string[] }) =>
+    request<void>(`/v1/e2ee/devices/${bundle.device_id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(bundle),
+    }),
+  deviceBundles: (userId: string) => request<E2eeDeviceBundle[]>(`/v1/e2ee/users/${userId}/devices`),
+  claimPrekey: (userId: string, deviceId: string) =>
+    request<ClaimedPrekeyBundle>(`/v1/e2ee/users/${userId}/devices/${deviceId}/prekey/claim`, { method: "POST" }),
   markRead: (conversationId: string, sequence: number) => request<void>(`/v1/conversations/${conversationId}/read`, {
     method: "POST",
     headers: { "content-type": "application/json" },
