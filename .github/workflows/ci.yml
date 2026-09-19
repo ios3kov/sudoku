@@ -73,6 +73,10 @@ jobs:
       - name: Web production build
         run: npm run build:web
 
+      - name: Check pinned OpenMLS WASM package
+        run: |
+          rustup toolchain install 1.91.0 --profile minimal --target wasm32-unknown-unknown
+          cargo +1.91.0 check --manifest-path packages/mls-wasm/Cargo.toml --target wasm32-unknown-unknown --locked
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com

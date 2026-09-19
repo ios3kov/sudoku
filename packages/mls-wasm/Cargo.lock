@@ -1,0 +1,4 @@
+# This file is intentionally a bootstrap lock marker.
+# The real Cargo.lock must be generated from the pinned manifest and committed
+# before the WASM package is allowed to pass CI.
+version = 4
