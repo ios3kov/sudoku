@@ -349,7 +349,7 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
     suffix = uuid.uuid4().hex[:10]
     email = f"mls-{suffix}@example.com"
     password = "correct horse battery staple"
-    device_id = uuid.uuid4()
+    device_id: uuid.UUID | None = None
 
     async with SessionFactory() as db:
         user = User(
@@ -386,6 +386,10 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
             json={"email": email, "password": password, "device_name": "mls-test"},
         )
         assert login.status_code == 200, login.text
+        sessions = await client.get("/v1/sessions")
+        assert sessions.status_code == 200, sessions.text
+        device_id = uuid.UUID(next(item["id"] for item in sessions.json() if item["current"]))
+        payload["device_id"] = str(device_id)
 
         registered = await client.put(
             f"/v1/e2ee/devices/{device_id}",
@@ -460,8 +464,8 @@ async def test_mls_control_event_snapshot_survives_membership_removal_and_ack() 
     sender_email = f"mls-control-sender-{suffix}@example.com"
     recipient_email = f"mls-control-recipient-{suffix}@example.com"
     password = "correct horse battery staple"
-    sender_device = uuid.uuid4()
-    recipient_device = uuid.uuid4()
+    sender_device: uuid.UUID | None = None
+    recipient_device: uuid.UUID | None = None
 
     async with SessionFactory() as db:
         sender = User(
@@ -513,6 +517,15 @@ async def test_mls_control_event_snapshot_survives_membership_removal_and_ack() 
                 },
             )
         ).status_code == 200
+
+        sender_sessions = await sender_client.get("/v1/sessions")
+        recipient_sessions = await recipient_client.get("/v1/sessions")
+        sender_device = uuid.UUID(
+            next(item["id"] for item in sender_sessions.json() if item["current"])
+        )
+        recipient_device = uuid.UUID(
+            next(item["id"] for item in recipient_sessions.json() if item["current"])
+        )
 
         sender_key_b64 = base64.b64encode(b"S" * 32).decode()
         recipient_key_b64 = base64.b64encode(b"R" * 32).decode()
@@ -797,8 +810,8 @@ async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
     sender_email = f"transport-sender-{suffix}@example.com"
     recipient_email = f"transport-recipient-{suffix}@example.com"
     password = "correct horse battery staple"
-    sender_device = uuid.uuid4()
-    recipient_device = uuid.uuid4()
+    sender_device: uuid.UUID | None = None
+    recipient_device: uuid.UUID | None = None
 
     async with SessionFactory() as db:
         sender = User(
@@ -850,6 +863,15 @@ async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
                 },
             )
         ).status_code == 200
+
+        sender_sessions = await sender_client.get("/v1/sessions")
+        recipient_sessions = await recipient_client.get("/v1/sessions")
+        sender_device = uuid.UUID(
+            next(item["id"] for item in sender_sessions.json() if item["current"])
+        )
+        recipient_device = uuid.UUID(
+            next(item["id"] for item in recipient_sessions.json() if item["current"])
+        )
 
         assert (
             await sender_client.put(
@@ -949,3 +971,73 @@ async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
         )
         assert after_two.status_code == 200
         assert [item["transport_sequence"] for item in after_two.json()] == [3]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_session_refresh_keeps_device_id_and_revoke_disables_mls_device() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    email = f"stable-device-{suffix}@example.com"
+    password = "correct horse battery staple"
+
+    async with SessionFactory() as db:
+        user = User(
+            email=email,
+            display_name="Stable Device",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add(user)
+        await db.commit()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as client:
+        login = await client.post(
+            "/v1/auth/login",
+            json={
+                "email": email,
+                "password": password,
+                "device_name": "stable-device",
+            },
+        )
+        assert login.status_code == 200, login.text
+
+        sessions = await client.get("/v1/sessions")
+        current_before = next(item for item in sessions.json() if item["current"])
+        device_id = current_before["id"]
+
+        registered = await client.put(
+            f"/v1/e2ee/devices/{device_id}",
+            json={
+                "identity_public_key_b64": base64.b64encode(b"V" * 32).decode()
+            },
+        )
+        assert registered.status_code == 204, registered.text
+
+        refreshed = await client.post("/v1/auth/refresh")
+        assert refreshed.status_code == 204, refreshed.text
+
+        sessions_after = await client.get("/v1/sessions")
+        current_after = next(item for item in sessions_after.json() if item["current"])
+        assert current_after["id"] == device_id
+
+        listed = await client.get(f"/v1/e2ee/users/{login.json()['id']}/devices")
+        assert listed.status_code == 200, listed.text
+        assert [item["device_id"] for item in listed.json()] == [device_id]
+
+        revoked = await client.delete(f"/v1/sessions/{device_id}")
+        assert revoked.status_code == 204, revoked.text
+
+    async with SessionFactory() as db:
+        from app.models import MlsDevice
+
+        device = (
+            await db.execute(
+                select(MlsDevice).where(MlsDevice.device_id == uuid.UUID(device_id))
+            )
+        ).scalar_one()
+        assert device.revoked_at is not None

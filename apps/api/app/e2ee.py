@@ -20,6 +20,7 @@ from .models import (
     Message,
     MlsKeyPackage,
     OutboxEvent,
+    Session,
 )
 from .rate_limit import enforce_user_rate_limit
 
@@ -107,12 +108,23 @@ async def active_device(
     user_id: uuid.UUID,
     device_id: uuid.UUID,
 ) -> MlsDevice | None:
+    now = datetime.now(UTC)
     return (
         await db.execute(
-            select(MlsDevice).where(
+            select(MlsDevice)
+            .join(
+                Session,
+                and_(
+                    Session.id == MlsDevice.device_id,
+                    Session.user_id == MlsDevice.user_id,
+                ),
+            )
+            .where(
                 MlsDevice.user_id == user_id,
                 MlsDevice.device_id == device_id,
                 MlsDevice.revoked_at.is_(None),
+                Session.revoked_at.is_(None),
+                Session.expires_at > now,
             )
         )
     ).scalar_one_or_none()
@@ -151,6 +163,8 @@ async def register_device(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-device-register", 20, 3600)
+    if device_id != auth.session.id:
+        raise HTTPException(403, "MLS device id must match the current session")
     identity_key = decode_identity_key(payload.identity_public_key_b64)
 
     existing = (
@@ -221,6 +235,8 @@ async def publish_key_packages(
     await enforce_user_rate_limit(auth.user.id, "mls-key-package-publish", 20, 3600)
     if payload.device_id != device_id:
         raise HTTPException(422, "Device ID mismatch")
+    if device_id != auth.session.id:
+        raise HTTPException(403, "MLS KeyPackages can only be published by the current device")
     await require_active_device(db, auth.user.id, device_id)
 
     decoded = [decode_key_package(item) for item in payload.key_packages_b64]
@@ -262,9 +278,17 @@ async def list_key_package_devices(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-key-package-list", 120, 60)
+    now = datetime.now(UTC)
     rows = (
         await db.execute(
             select(MlsDevice, func.count(MlsKeyPackage.id))
+            .join(
+                Session,
+                and_(
+                    Session.id == MlsDevice.device_id,
+                    Session.user_id == MlsDevice.user_id,
+                ),
+            )
             .outerjoin(
                 MlsKeyPackage,
                 (MlsKeyPackage.user_id == MlsDevice.user_id)
@@ -274,6 +298,8 @@ async def list_key_package_devices(
             .where(
                 MlsDevice.user_id == user_id,
                 MlsDevice.revoked_at.is_(None),
+                Session.revoked_at.is_(None),
+                Session.expires_at > now,
             )
             .group_by(MlsDevice.id)
             .order_by(MlsDevice.created_at, MlsDevice.device_id)
@@ -341,6 +367,8 @@ async def discard_unclaimed_key_packages(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-key-package-discard", 20, 3600)
+    if device_id != auth.session.id:
+        raise HTTPException(403, "MLS KeyPackages can only be discarded by the current device")
     await require_active_device(db, auth.user.id, device_id)
     await db.execute(
         delete(MlsKeyPackage).where(
@@ -360,6 +388,8 @@ async def create_control_event(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-control-create", 120, 60)
+    if payload.sender_device_id != auth.session.id:
+        raise HTTPException(403, "MLS control sender must be the current device")
     await require_active_device(db, auth.user.id, payload.sender_device_id)
     control_bytes = decode_control_payload(payload.payload_b64)
 
@@ -510,6 +540,8 @@ async def create_control_batch(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-control-batch-create", 60, 60)
+    if payload.sender_device_id != auth.session.id:
+        raise HTTPException(403, "MLS control sender must be the current device")
     await require_active_device(db, auth.user.id, payload.sender_device_id)
 
     client_ids = [item.client_id for item in payload.events]
@@ -711,6 +743,8 @@ async def list_transport_events(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-transport-list", 240, 60)
+    if device_id != auth.session.id:
+        raise HTTPException(403, "MLS feed can only be fetched by the current device")
     await require_active_device(db, auth.user.id, device_id)
 
     conversation = (
@@ -814,6 +848,8 @@ async def list_control_events(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-control-list", 240, 60)
+    if device_id != auth.session.id:
+        raise HTTPException(403, "MLS feed can only be fetched by the current device")
     await require_active_device(db, auth.user.id, device_id)
 
     rows = (
@@ -845,6 +881,8 @@ async def ack_control_event(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-control-ack", 240, 60)
+    if payload.device_id != auth.session.id:
+        raise HTTPException(403, "MLS control event can only be acknowledged by the current device")
     await require_active_device(db, auth.user.id, payload.device_id)
     recipient = (
         await db.execute(

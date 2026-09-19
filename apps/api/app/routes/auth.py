@@ -2,13 +2,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db import get_db
 from ..deps import AuthContext, get_auth_context
-from ..models import AuditEvent, Invite, LoginAttempt, Session, User
+from ..models import AuditEvent, Invite, LoginAttempt, MlsDevice, MlsKeyPackage, Session, User
 from ..rate_limit import enforce_ip_rate_limit, enforce_login_rate_limit, enforce_user_rate_limit
 from ..schemas import InviteAcceptRequest, InviteCreateRequest, InviteCreateResponse, LoginRequest, SessionResponse, UserResponse
 from ..security import (
@@ -45,6 +45,31 @@ def _clear_session_cookie(response: Response) -> None:
         secure=settings.secure_cookies,
         samesite="lax",
         path="/",
+    )
+
+
+async def _revoke_session_mls_device(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID,
+    revoked_at: datetime,
+) -> None:
+    device = (
+        await db.execute(
+            select(MlsDevice).where(
+                MlsDevice.user_id == user_id,
+                MlsDevice.device_id == session_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if device is not None and device.revoked_at is None:
+        device.revoked_at = revoked_at
+    await db.execute(
+        delete(MlsKeyPackage).where(
+            MlsKeyPackage.user_id == user_id,
+            MlsKeyPackage.device_id == session_id,
+            MlsKeyPackage.claimed_at.is_(None),
+        )
     )
 
 
@@ -85,26 +110,49 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
 
 @router.post("/auth/refresh", status_code=204)
 async def refresh_session(response: Response, auth: AuthContext = Depends(get_auth_context), db: AsyncSession = Depends(get_db)):
-    # Serialize rotation of the same session. The dependency proves the cookie was
-    # valid at request start; the row lock + recheck prevents concurrent refreshes
-    # from minting multiple replacement sessions.
+    # Keep the session UUID stable: it is the cryptographic device id. Rotate
+    # only the bearer secret. The original hash is captured before the lock so
+    # a concurrent refresh that already won cannot be overwritten by a stale
+    # request.
+    expected_token_hash = bytes(auth.session.token_hash)
     current = (
-        await db.execute(select(Session).where(Session.id == auth.session.id).with_for_update())
+        await db.execute(
+            select(Session)
+            .where(Session.id == auth.session.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
     ).scalar_one_or_none()
     now = datetime.now(UTC)
-    if current is None or current.revoked_at is not None or current.expires_at <= now:
+    if (
+        current is None
+        or current.revoked_at is not None
+        or current.expires_at <= now
+        or current.token_hash != expected_token_hash
+    ):
         _clear_session_cookie(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    current.revoked_at = now
-    replacement, raw_token = await _new_session(db, auth.user, current.device_name)
-    db.add(AuditEvent(actor_user_id=auth.user.id, event_type="auth.session_rotated", target_type="session", target_id=replacement.id))
+
+    secret = generate_session_secret()
+    current.token_hash = secret.digest
+    current.expires_at = session_expiry(settings.session_ttl_days)
+    db.add(
+        AuditEvent(
+            actor_user_id=auth.user.id,
+            event_type="auth.session_rotated",
+            target_type="session",
+            target_id=current.id,
+        )
+    )
     await db.commit()
-    _set_session_cookie(response, raw_token)
+    _set_session_cookie(response, secret.raw)
 
 
 @router.post("/auth/logout", status_code=204)
 async def logout(response: Response, auth: AuthContext = Depends(get_auth_context), db: AsyncSession = Depends(get_db)):
-    auth.session.revoked_at = datetime.now(UTC)
+    now = datetime.now(UTC)
+    auth.session.revoked_at = now
+    await _revoke_session_mls_device(db, auth.user.id, auth.session.id, now)
     db.add(AuditEvent(actor_user_id=auth.user.id, event_type="auth.logout", target_type="session", target_id=auth.session.id))
     await db.commit()
     _clear_session_cookie(response)
@@ -151,7 +199,9 @@ async def revoke_session(
     ).scalar_one_or_none()
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    session.revoked_at = datetime.now(UTC)
+    now = datetime.now(UTC)
+    session.revoked_at = now
+    await _revoke_session_mls_device(db, auth.user.id, session.id, now)
     db.add(AuditEvent(actor_user_id=auth.user.id, event_type="auth.session_revoked", target_type="session", target_id=session.id))
     await db.commit()
     if session.id == auth.session.id:
