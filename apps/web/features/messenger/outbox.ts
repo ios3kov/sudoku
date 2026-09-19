@@ -10,7 +10,7 @@ interface StoredOutboxItem {
   client_id: string;
   conversation_id: string;
   created_at: number;
-  iv: Uint8Array;
+  iv: ArrayBuffer;
   ciphertext: ArrayBuffer;
 }
 
@@ -46,8 +46,14 @@ async function getOrCreateKey(db: IDBDatabase): Promise<CryptoKey> {
   return key;
 }
 
-function encode(value: PendingMessage): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(value));
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+function encode(value: PendingMessage): ArrayBuffer {
+  return toArrayBuffer(new TextEncoder().encode(JSON.stringify(value)));
 }
 
 function decode(value: ArrayBuffer): PendingMessage {
@@ -58,7 +64,7 @@ export async function enqueuePending(message: PendingMessage): Promise<void> {
   const db = await openDb();
   try {
     const key = await getOrCreateKey(db);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const iv = toArrayBuffer(crypto.getRandomValues(new Uint8Array(12)));
     const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encode(message));
     const stored: StoredOutboxItem = {
       client_id: message.client_id,
