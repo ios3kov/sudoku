@@ -15,7 +15,7 @@ ORIGIN = "https://sudoku.test"
 MUTATION_HEADERS = {"origin": ORIGIN}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
     suffix = uuid.uuid4().hex[:10]
     admin_email = f"admin-{suffix}@example.com"
@@ -211,7 +211,7 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
     assert isinstance(admin_id, uuid.UUID)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() -> None:
     suffix=uuid.uuid4().hex[:10]
     email=f"e2ee-{suffix}@example.com"
@@ -241,7 +241,7 @@ async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() ->
         assert row.envelope==envelope
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
     suffix = uuid.uuid4().hex[:10]
     email = f"mls-{suffix}@example.com"
