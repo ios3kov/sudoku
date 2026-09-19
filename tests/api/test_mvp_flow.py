@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import uuid
 
@@ -238,3 +239,100 @@ async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() ->
         row=(await db.execute(select(Message).where(Message.conversation_id==uuid.UUID(cid)))).scalar_one()
         assert row.body_text is None
         assert row.envelope==envelope
+
+
+@pytest.mark.asyncio
+async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    email = f"mls-{suffix}@example.com"
+    password = "correct horse battery staple"
+    device_id = uuid.uuid4()
+
+    async with SessionFactory() as db:
+        user = User(
+            email=email,
+            display_name="MLS",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        user_id = user.id
+
+    kp1 = b"mls-key-package-one-" + uuid.uuid4().bytes
+    kp2 = b"mls-key-package-two-" + uuid.uuid4().bytes
+    payload = {
+        "device_id": str(device_id),
+        "key_packages_b64": [
+            base64.b64encode(kp1).decode(),
+            base64.b64encode(kp2).decode(),
+        ],
+    }
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as client:
+        login = await client.post(
+            "/v1/auth/login",
+            json={"email": email, "password": password, "device_name": "mls-test"},
+        )
+        assert login.status_code == 200, login.text
+
+        published = await client.put(
+            f"/v1/e2ee/devices/{device_id}/key-packages",
+            json=payload,
+        )
+        assert published.status_code == 204, published.text
+
+        listed = await client.get(f"/v1/e2ee/users/{user_id}/devices")
+        assert listed.status_code == 200, listed.text
+        assert listed.json() == [
+            {"device_id": str(device_id), "available_key_packages": 2}
+        ]
+
+        first = await client.post(
+            f"/v1/e2ee/users/{user_id}/devices/{device_id}/key-package/claim"
+        )
+        second = await client.post(
+            f"/v1/e2ee/users/{user_id}/devices/{device_id}/key-package/claim"
+        )
+        exhausted = await client.post(
+            f"/v1/e2ee/users/{user_id}/devices/{device_id}/key-package/claim"
+        )
+
+        assert first.status_code == 200, first.text
+        assert second.status_code == 200, second.text
+        assert exhausted.status_code == 409
+        assert first.json()["package_ref"] != second.json()["package_ref"]
+        assert {
+            base64.b64decode(first.json()["key_package_b64"]),
+            base64.b64decode(second.json()["key_package_b64"]),
+        } == {kp1, kp2}
+
+        replay = await client.put(
+            f"/v1/e2ee/devices/{device_id}/key-packages",
+            json={
+                "device_id": str(device_id),
+                "key_packages_b64": [base64.b64encode(kp1).decode()],
+            },
+        )
+        assert replay.status_code == 409
+
+    async with SessionFactory() as db:
+        from app.models import MlsKeyPackage
+
+        rows = (
+            await db.execute(
+                select(MlsKeyPackage).where(
+                    MlsKeyPackage.user_id == user_id,
+                    MlsKeyPackage.device_id == device_id,
+                )
+            )
+        ).scalars().all()
+        assert len(rows) == 2
+        assert all(row.claimed_at is not None for row in rows)
