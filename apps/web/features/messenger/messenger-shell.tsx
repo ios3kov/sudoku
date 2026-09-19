@@ -34,6 +34,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const [showDevices, setShowDevices] = useState(false);
   const [secureSetupBusy, setSecureSetupBusy] = useState(false);
   const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
+  const [deviceRekeyError, setDeviceRekeyError] = useState<string | null>(null);
   const [e2eeState, setE2eeState] = useState<"initializing" | "ready" | "error">("initializing");
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
@@ -52,6 +53,34 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
   useEffect(() => {
     void loadConversations();
+  }, [loadConversations]);
+
+  const reconcileDeviceChange = useCallback(async (
+    adapter: OpenMlsProtocolAdapter,
+    conversationId: string,
+  ) => {
+    if (!adapter.trackedConversationIds().includes(conversationId)) return false;
+    const conversation = conversationsRef.current.find(
+      (item) =>
+        item.id === conversationId
+        && item.encryption_required
+        && item.e2ee_ready,
+    );
+    if (!conversation) return false;
+
+    try {
+      const changed = await adapter.reconcilePendingDeviceChange(conversation);
+      if (changed) {
+        setDeviceRekeyError(null);
+        await loadConversations();
+      }
+      return changed;
+    } catch (error) {
+      setDeviceRekeyError(
+        error instanceof Error ? error.message : "Secure device rekey is blocked",
+      );
+      return false;
+    }
   }, [loadConversations]);
 
   useEffect(() => {
@@ -74,14 +103,10 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         e2eeRef.current = adapter;
         setE2eeState("ready");
 
-        const trackedConversationIds = new Set([
-          ...adapter.trackedConversationIds(),
-          ...conversationsRef.current
-            .filter((conversation) => conversation.encryption_required)
-            .map((conversation) => conversation.id),
-        ]);
+        const trackedConversationIds = adapter.trackedConversationIds();
         for (const conversationId of trackedConversationIds) {
           await adapter.syncTransport(conversationId);
+          await reconcileDeviceChange(adapter, conversationId);
         }
       } catch {
         if (!cancelled) {
@@ -95,7 +120,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       cancelled = true;
       e2eeRef.current = null;
     };
-  }, [user.id]);
+  }, [reconcileDeviceChange, user.id]);
 
   useEffect(() => {
     const realtime = new RealtimeClient({
@@ -104,16 +129,13 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         setReconnectTick((value) => value + 1);
         const adapter = e2eeRef.current;
         if (adapter) {
-          const trackedConversationIds = new Set([
-            ...adapter.trackedConversationIds(),
-            ...conversationsRef.current
-              .filter((conversation) => conversation.encryption_required)
-              .map((conversation) => conversation.id),
-          ]);
+          const trackedConversationIds = adapter.trackedConversationIds();
           for (const conversationId of trackedConversationIds) {
-            void adapter.syncTransport(conversationId).catch(() => {
-              setE2eeState("error");
-            });
+            void adapter.syncTransport(conversationId)
+              .then(() => reconcileDeviceChange(adapter, conversationId))
+              .catch(() => {
+                setE2eeState("error");
+              });
           }
           void adapter.ensureKeyPackagePool(10).catch(() => {
             setE2eeState("error");
@@ -125,7 +147,11 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         setLatestEvent(event);
         if (["conversation.created", "conversation.updated", "conversation.members_added", "conversation.member_role_updated", "conversation.member_removed"].includes(event.type)) void loadConversations();
         if (
-          (event.type === "message.created" || event.type === "mls.control.created")
+          (
+            event.type === "message.created"
+            || event.type === "mls.control.created"
+            || event.type === "mls.device.rekeyed"
+          )
           && event.conversation_id
         ) {
           const adapter = e2eeRef.current;
@@ -151,7 +177,20 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
                 setE2eeState("error");
               });
             }
+            if (event.type === "mls.device.rekeyed") {
+              void reconcileDeviceChange(adapter, event.conversation_id);
+            }
           }
+        }
+        if (
+          event.type === "mls.device.changed"
+          && event.conversation_id
+          && e2eeRef.current
+        ) {
+          void reconcileDeviceChange(
+            e2eeRef.current,
+            event.conversation_id,
+          );
         }
         if (event.type === "conversation.member_removed" && event.conversation_id && (event.payload as { user_id?: string } | undefined)?.user_id === user.id) {
           setSelectedId((current) => current === event.conversation_id ? null : current);
@@ -172,7 +211,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       realtime.stop();
       realtimeRef.current = null;
     };
-  }, [loadConversations, user.id]);
+  }, [loadConversations, reconcileDeviceChange, user.id]);
 
   async function enablePush() {
     setPushState("enabling");
@@ -223,6 +262,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
 
   if (selected?.encryption_required) {
+    const selectedTracked =
+      e2eeRef.current?.trackedConversationIds().includes(selected.id) ?? false;
     if (
       !selected.e2ee_ready
       && selected.created_by === user.id
@@ -268,7 +309,12 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       );
     }
 
-    if (selected.e2ee_ready && e2eeState === "ready" && e2eeRef.current) {
+    if (
+      selected.e2ee_ready
+      && e2eeState === "ready"
+      && e2eeRef.current
+      && selectedTracked
+    ) {
       return (
         <main className="messenger-page">
           <section className="messenger-shell">
@@ -302,7 +348,12 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <button type="button" onClick={() => setSelectedId(null)}>Back</button>
           </header>
           <p className="muted center">
-            This encrypted conversation is unavailable until the local MLS state is ready.
+            {deviceRekeyError
+              ?? (
+                selected.e2ee_ready && !selectedTracked
+                  ? "This device is waiting to be added to the secure conversation."
+                  : "This encrypted conversation is unavailable until the local MLS state is ready."
+              )}
           </p>
         </section>
       </main>
