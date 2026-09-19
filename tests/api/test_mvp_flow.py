@@ -323,6 +323,8 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
         assert first.status_code == 200, first.text
         assert second.status_code == 200, second.text
         assert exhausted.status_code == 409
+        assert first.json()["user_id"] == str(user_id)
+        assert second.json()["user_id"] == str(user_id)
         assert first.json()["package_ref"] != second.json()["package_ref"]
         assert {
             base64.b64decode(first.json()["key_package_b64"]),

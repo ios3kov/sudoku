@@ -322,6 +322,7 @@ async def claim_key_package(
     item.claimed_at = datetime.now(UTC)
     await db.flush()
     response = {
+        "user_id": str(item.user_id),
         "device_id": str(item.device_id),
         "identity_public_key_b64": encode_bytes(device.identity_public_key),
         "package_ref": item.package_ref.hex(),

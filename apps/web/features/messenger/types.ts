@@ -105,6 +105,7 @@ export interface MlsDeviceAvailability {
 }
 
 export interface ClaimedMlsKeyPackage {
+  user_id: string;
   device_id: string;
   identity_public_key_b64: string;
   package_ref: string;
