@@ -103,10 +103,17 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         e2eeRef.current = adapter;
         setE2eeState("ready");
 
-        const trackedConversationIds = adapter.trackedConversationIds();
-        for (const conversationId of trackedConversationIds) {
-          await reconcileDeviceChange(adapter, conversationId);
-          await adapter.syncTransport(conversationId);
+        const encryptedConversations = conversationsRef.current.filter(
+          (conversation) => conversation.encryption_required && conversation.e2ee_ready,
+        );
+        for (const conversation of encryptedConversations) {
+          if (!adapter.trackedConversationIds().includes(conversation.id)) {
+            await adapter.syncControlEvents(conversation.id);
+          }
+          if (adapter.trackedConversationIds().includes(conversation.id)) {
+            await reconcileDeviceChange(adapter, conversation.id);
+            await adapter.syncTransport(conversation.id);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -129,13 +136,21 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         setReconnectTick((value) => value + 1);
         const adapter = e2eeRef.current;
         if (adapter) {
-          const trackedConversationIds = adapter.trackedConversationIds();
-          for (const conversationId of trackedConversationIds) {
-            void reconcileDeviceChange(adapter, conversationId)
-              .then(() => adapter.syncTransport(conversationId))
-              .catch(() => {
-                setE2eeState("error");
-              });
+          const encryptedConversations = conversationsRef.current.filter(
+            (conversation) => conversation.encryption_required && conversation.e2ee_ready,
+          );
+          for (const conversation of encryptedConversations) {
+            void (async () => {
+              if (!adapter.trackedConversationIds().includes(conversation.id)) {
+                await adapter.syncControlEvents(conversation.id);
+              }
+              if (adapter.trackedConversationIds().includes(conversation.id)) {
+                await reconcileDeviceChange(adapter, conversation.id);
+                await adapter.syncTransport(conversation.id);
+              }
+            })().catch(() => {
+              setE2eeState("error");
+            });
           }
           void adapter.ensureKeyPackagePool(10).catch(() => {
             setE2eeState("error");

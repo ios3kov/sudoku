@@ -1180,6 +1180,10 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
             if (joined !== conversationId) {
               throw new Error("MLS Welcome group id does not match conversation");
             }
+            this.localState!.trackedConversations = uniqueIds([
+              ...this.localState!.trackedConversations,
+              conversationId,
+            ]);
             this.provider!.validateGroupMemberIdentity(
               utf8(conversationId),
               expectedCredential,
