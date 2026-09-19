@@ -190,6 +190,7 @@ GET    /e2ee/users/{user_id}/devices
 POST   /e2ee/users/{user_id}/devices/{device_id}/key-package/claim
 
 POST   /e2ee/conversations/{conversation_id}/control-events
+POST   /e2ee/conversations/{conversation_id}/control-batches
 GET    /e2ee/conversations/{conversation_id}/devices/{device_id}/control-events?after=0
 POST   /e2ee/control-events/{event_id}/ack
 ```
@@ -201,3 +202,10 @@ KeyPackages are opaque public MLS bytes. Claimed packages remain as consumed tom
 MLS control events carry opaque serialized `commit` or `welcome` bytes. Recipient device pairs are snapshotted at event creation. Fetching an assigned control event therefore does not depend on the recipient still being a current server-side conversation member; this is required for delivery of removal commits.
 
 Realtime fan-out contains only control-event id/kind/sequence metadata. The MLS bytes remain durable in PostgreSQL and are fetched through the authenticated device-specific endpoint.
+
+
+### Atomic MLS control batch
+
+Membership changes that need both Commit and Welcome use `control-batches`. The request contains one sender device and 1–10 control events, each with its own stable client id and recipient-device snapshot.
+
+The whole batch is one database transaction. A retry with the same client ids/content returns the existing events; a partial or changed retry returns 409. This lets the browser persist a prepared MLS PendingCommit, retry network delivery safely after a crash, and merge the local pending epoch only after the durable batch is accepted.

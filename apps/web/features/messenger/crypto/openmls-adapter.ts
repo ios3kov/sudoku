@@ -2,13 +2,14 @@ import { messengerApi } from "../api";
 import type {
   ClaimedMlsKeyPackage,
   E2eeEnvelope,
+  MlsControlBatchItem,
   MlsControlEvent,
+  MlsControlRecipient,
 } from "../types";
 import { BrowserProtocolStateStore } from "./browser-state-store";
 import { loadOpenMlsWasm } from "./openmls-runtime";
 import type {
   DecryptedMessage,
-  MlsMembershipChange,
   OutboundPlaintext,
   ProtocolAdapter,
 } from "./protocol-adapter";
@@ -17,12 +18,18 @@ const STATE_VERSION = 1;
 const ENVELOPE_VERSION = 1;
 const PROTOCOL = "mls-rfc9420" as const;
 
+interface PendingOutboundTransition {
+  conversationId: string;
+  events: MlsControlBatchItem[];
+}
+
 interface LocalMlsStateV1 {
   version: 1;
   providerStateB64: string;
   credentialB64: string;
   publicKeyB64: string;
   pendingAckEventIds: string[];
+  pendingOutboundTransition: PendingOutboundTransition | null;
 }
 
 export interface OpenMlsAdapterOptions {
@@ -76,6 +83,41 @@ function envelopeBytes(envelope: E2eeEnvelope): Uint8Array {
   return base64ToBytes(envelope.ciphertext);
 }
 
+function isControlRecipient(value: unknown): value is MlsControlRecipient {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<MlsControlRecipient>;
+  return typeof item.user_id === "string" && typeof item.device_id === "string";
+}
+
+function isBatchItem(value: unknown): value is MlsControlBatchItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<MlsControlBatchItem>;
+  return (
+    typeof item.client_id === "string"
+    && (item.kind === "commit" || item.kind === "welcome")
+    && typeof item.payload_b64 === "string"
+    && Array.isArray(item.recipients)
+    && item.recipients.every(isControlRecipient)
+  );
+}
+
+function parsePendingOutbound(value: unknown): PendingOutboundTransition | null {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid pending MLS outbound transition");
+  }
+  const item = value as Partial<PendingOutboundTransition>;
+  if (
+    typeof item.conversationId !== "string"
+    || !Array.isArray(item.events)
+    || item.events.length < 1
+    || item.events.some((event) => !isBatchItem(event))
+  ) {
+    throw new Error("Invalid pending MLS outbound transition");
+  }
+  return item as PendingOutboundTransition;
+}
+
 function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
   const raw = JSON.parse(utf8String(bytes)) as Partial<LocalMlsStateV1>;
   if (
@@ -88,7 +130,14 @@ function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
   ) {
     throw new Error("Invalid local MLS state");
   }
-  return raw as LocalMlsStateV1;
+  return {
+    version: STATE_VERSION,
+    providerStateB64: raw.providerStateB64,
+    credentialB64: raw.credentialB64,
+    publicKeyB64: raw.publicKeyB64,
+    pendingAckEventIds: raw.pendingAckEventIds,
+    pendingOutboundTransition: parsePendingOutbound(raw.pendingOutboundTransition),
+  };
 }
 
 function serializeLocalState(state: LocalMlsStateV1): Uint8Array {
@@ -143,6 +192,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         credentialB64: bytesToBase64(identity.credentialBytes()),
         publicKeyB64: bytesToBase64(identity.publicKeyBytes()),
         pendingAckEventIds: [],
+        pendingOutboundTransition: null,
       };
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
     }
@@ -156,6 +206,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       this.options.deviceId,
       bytesToBase64(identity.publicKeyBytes()),
     );
+    await this.flushPendingOutboundTransition();
     await this.flushPendingAcks();
   }
 
@@ -186,35 +237,77 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     });
   }
 
-  async addMember(
+  async addMemberDurably(
     conversationId: string,
     keyPackage: ClaimedMlsKeyPackage,
-  ): Promise<MlsMembershipChange> {
-    return this.mutate((provider, identity) => {
-      const change = provider.addMember(
-        identity,
+    commitRecipients: MlsControlRecipient[],
+    welcomeRecipients: MlsControlRecipient[],
+  ): Promise<void> {
+    await this.enqueue(async () => {
+      this.assertReady();
+      this.assertNoPendingOutboundTransition();
+
+      const change = this.provider!.addMember(
+        this.identity!,
         utf8(conversationId),
         base64ToBytes(keyPackage.key_package_b64),
       );
-      return {
-        commit: makeEnvelope(change.commitBytes(), "commit"),
-        welcome: makeEnvelope(change.welcomeBytes(), "welcome"),
-      };
-    });
-  }
 
-  async joinGroup(conversationId: string, welcome: E2eeEnvelope): Promise<void> {
-    await this.mutate((provider) => {
-      const joined = utf8String(provider.joinGroup(envelopeBytes(welcome)));
-      if (joined !== conversationId) {
-        throw new Error("MLS Welcome group id does not match conversation");
+      const events: MlsControlBatchItem[] = [];
+      if (commitRecipients.length > 0) {
+        events.push({
+          client_id: crypto.randomUUID(),
+          kind: "commit",
+          payload_b64: bytesToBase64(change.commitBytes()),
+          recipients: commitRecipients,
+        });
       }
+      if (welcomeRecipients.length > 0) {
+        events.push({
+          client_id: crypto.randomUUID(),
+          kind: "welcome",
+          payload_b64: bytesToBase64(change.welcomeBytes()),
+          recipients: welcomeRecipients,
+        });
+      }
+      if (events.length === 0) {
+        throw new Error("MLS membership transition has no delivery recipients");
+      }
+
+      this.localState!.pendingOutboundTransition = { conversationId, events };
+      await this.persistCurrentState();
+      await this.flushPendingOutboundTransition();
     });
   }
 
-  async processHandshake(conversationId: string, message: E2eeEnvelope): Promise<void> {
-    await this.mutate((provider) => {
-      provider.processHandshake(utf8(conversationId), envelopeBytes(message));
+  async removeMemberDurably(
+    conversationId: string,
+    memberCredential: Uint8Array,
+    commitRecipients: MlsControlRecipient[],
+  ): Promise<void> {
+    await this.enqueue(async () => {
+      this.assertReady();
+      this.assertNoPendingOutboundTransition();
+      if (commitRecipients.length === 0) {
+        throw new Error("MLS removal transition has no delivery recipients");
+      }
+
+      const commit = this.provider!.removeMember(
+        this.identity!,
+        utf8(conversationId),
+        memberCredential,
+      );
+      this.localState!.pendingOutboundTransition = {
+        conversationId,
+        events: [{
+          client_id: crypto.randomUUID(),
+          kind: "commit",
+          payload_b64: bytesToBase64(commit),
+          recipients: commitRecipients,
+        }],
+      };
+      await this.persistCurrentState();
+      await this.flushPendingOutboundTransition();
     });
   }
 
@@ -312,22 +405,6 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     });
   }
 
-  async sendControlEvent(
-    conversationId: string,
-    kind: "commit" | "welcome",
-    bytes: Uint8Array,
-    recipients: Array<{ user_id: string; device_id: string }>,
-    clientId: string,
-  ): Promise<MlsControlEvent> {
-    return messengerApi.sendMlsControlEvent(conversationId, {
-      client_id: clientId,
-      sender_device_id: this.options.deviceId,
-      kind,
-      payload_b64: bytesToBase64(bytes),
-      recipients,
-    });
-  }
-
   private async mutate<T>(
     operation: (provider: Provider, identity: DeviceIdentity) => T | Promise<T>,
   ): Promise<T> {
@@ -345,6 +422,24 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     await this.stateStore.put(this.stateKey, serializeLocalState(this.localState!));
   }
 
+  private async flushPendingOutboundTransition(): Promise<void> {
+    this.assertReady();
+    const pending = this.localState!.pendingOutboundTransition;
+    if (!pending) return;
+
+    await messengerApi.sendMlsControlBatch(
+      pending.conversationId,
+      this.options.deviceId,
+      pending.events,
+    );
+
+    this.provider!.mergePendingCommit(utf8(pending.conversationId));
+    await this.persistCurrentState();
+
+    this.localState!.pendingOutboundTransition = null;
+    await this.persistCurrentState();
+  }
+
   private async flushPendingAcks(): Promise<void> {
     this.assertReady();
     for (const eventId of [...this.localState!.pendingAckEventIds]) {
@@ -360,6 +455,12 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     this.localState!.pendingAckEventIds =
       this.localState!.pendingAckEventIds.filter((item) => item !== event.id);
     await this.persistCurrentState();
+  }
+
+  private assertNoPendingOutboundTransition(): void {
+    if (this.localState!.pendingOutboundTransition) {
+      throw new Error("An MLS membership transition is already pending delivery");
+    }
   }
 
   private assertReady(): void {

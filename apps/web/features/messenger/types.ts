@@ -127,3 +127,14 @@ export interface MlsControlEvent {
   payload_b64: string;
   created_at: string;
 }
+
+export interface MlsControlBatchItem {
+  client_id: string;
+  kind: "commit" | "welcome";
+  payload_b64: string;
+  recipients: MlsControlRecipient[];
+}
+
+export interface MlsControlBatchResponse {
+  events: MlsControlEvent[];
+}

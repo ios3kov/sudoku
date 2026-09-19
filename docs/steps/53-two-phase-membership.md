@@ -3,40 +3,67 @@
 ## Goal
 Prevent the creator from advancing to a new MLS epoch before the corresponding Commit/Welcome is durably accepted by the delivery service.
 
-## OpenMLS behavior
-OpenMLS `stage_commit()` already persists `PendingCommit` in the provider storage. The epoch changes only when `merge_pending_commit()` succeeds.
+## OpenMLS phase split
+OpenMLS `stage_commit()` persists `PendingCommit` in provider storage. The epoch changes only at `merge_pending_commit()`.
 
-The binding now preserves that model instead of merging immediately.
+The binding now follows that model:
+- `addMember(...)` prepares Commit + Welcome and leaves PendingCommit;
+- `removeMember(...)` prepares Remove Commit and leaves PendingCommit;
+- `mergePendingCommit(groupId)` is explicit.
 
-## Binding changes
-- `addMember(...)` prepares Add Commit + Welcome and leaves the local group in PendingCommit.
-- `removeMember(...)` prepares Remove Commit and leaves PendingCommit.
-- `mergePendingCommit(groupId)` is a separate explicit operation.
+Application messages are blocked by OpenMLS while a membership transition is pending.
 
-Application-message creation is blocked by OpenMLS while a membership Commit is pending.
+## Rust crash/reload proof
+A native test prepares an Add commit, verifies application sends are blocked, exports provider state before merge, restores the provider, joins Bob from the prepared Welcome, merges Alice's restored PendingCommit and then proves messaging works.
 
-## Crash/reload invariant
-A new Rust test:
-1. creates Alice/Bob identities;
-2. prepares Alice's Add commit;
-3. verifies application sends are blocked while pending;
-4. exports provider state before merge;
-5. reconstructs Alice from that state;
-6. Bob joins from the prepared Welcome;
-7. restored Alice merges the pending Commit;
-8. messaging succeeds afterward.
+Existing 2-party and add/remove/rekey tests were updated to merge explicitly after their simulated durable-delivery point.
 
-This proves PendingCommit state survives reload and can safely bridge a durable-network handoff.
+## Atomic delivery-service batch
+The API adds:
 
-## Delivery requirement
-The browser must:
-1. prepare the transition;
-2. persist provider state + outbound Commit/Welcome bytes;
-3. durably submit the whole transition to the server;
-4. only after successful server acceptance call `mergePendingCommit`;
-5. persist merged provider state.
+`POST /v1/e2ee/conversations/{conversation_id}/control-batches`
 
-A crash at any point before step 4 leaves a retriable pending transition rather than a split epoch.
+A batch carries 1–10 opaque Commit/Welcome events and is written in one PostgreSQL transaction.
+
+Properties:
+- one sender MLS device;
+- stable per-event client ids;
+- recipient user/device snapshots;
+- monotonic crypto sequences;
+- all-or-nothing creation;
+- exact full-batch retry is idempotent;
+- partial client-id collision returns 409;
+- changed retry content/routing returns 409;
+- realtime outbox still contains only control metadata, never MLS wire bytes.
+
+## Browser crash-safe outbound transition
+The encrypted local MLS state now includes an optional pending outbound transition containing the already-generated Commit/Welcome bytes, stable client ids and recipient snapshots.
+
+Flow:
+1. prepare OpenMLS membership transition;
+2. persist provider PendingCommit + outbound batch in encrypted IndexedDB;
+3. submit atomic server batch;
+4. after success call `mergePendingCommit`;
+5. persist merged provider state while retaining the retry marker;
+6. clear the marker and persist again.
+
+Crash cases:
+- before server acceptance: restart retries the same batch;
+- after server acceptance but before merge: retry returns existing events, then merge proceeds;
+- after merge but before marker clear: retry is idempotent and OpenMLS merge on operational state is harmless.
+
+Initialization flushes a pending outbound transition before normal control-event ACK recovery.
+
+## API integration
+The integration suite verifies:
+- two-event Commit+Welcome batch receives consecutive crypto sequences;
+- exact retry returns the same event ids;
+- changed retry returns 409;
+- batch events can be ACKed independently;
+- the prior recipient-snapshot removal test still proves a removal Commit survives server membership deletion.
+
+## Production gate
+The visible composer is still not switched on. Remaining blockers include peer identity pinning/verification, encrypted attachments, device recovery/revocation UX and end-to-end browser smoke tests.
 
 ## Next
-Add an atomic server control-event batch endpoint and wire the browser adapter to persist/retry outbound membership transitions before merging.
+Step 54: bind validated KeyPackage credential/signature key to a locally pinned peer device identity and expose a human-verifiable fingerprint/QR payload. First contact remains unverified; key changes are blocked until explicitly re-verified.

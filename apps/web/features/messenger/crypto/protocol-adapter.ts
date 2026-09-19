@@ -1,6 +1,7 @@
 import type {
   ClaimedMlsKeyPackage,
   E2eeEnvelope,
+  MlsControlRecipient,
 } from "../types";
 
 export interface OutboundPlaintext {
@@ -31,14 +32,18 @@ export interface ProtocolAdapter {
 
   createGroup(conversationId: string): Promise<void>;
 
-  addMember(
+  addMemberDurably(
     conversationId: string,
     keyPackage: ClaimedMlsKeyPackage,
-  ): Promise<MlsMembershipChange>;
+    commitRecipients: MlsControlRecipient[],
+    welcomeRecipients: MlsControlRecipient[],
+  ): Promise<void>;
 
-  joinGroup(conversationId: string, welcome: E2eeEnvelope): Promise<void>;
-
-  processHandshake(conversationId: string, message: E2eeEnvelope): Promise<void>;
+  removeMemberDurably(
+    conversationId: string,
+    memberCredential: Uint8Array,
+    commitRecipients: MlsControlRecipient[],
+  ): Promise<void>;
 
   syncControlEvents?(conversationId: string): Promise<number>;
 
@@ -67,9 +72,8 @@ export const unavailableProtocolAdapter: ProtocolAdapter = {
   initialize: unavailable,
   createKeyPackages: unavailable,
   createGroup: unavailable,
-  addMember: unavailable,
-  joinGroup: unavailable,
-  processHandshake: unavailable,
+  addMemberDurably: unavailable,
+  removeMemberDurably: unavailable,
   encrypt: unavailable,
   decrypt: unavailable,
 };

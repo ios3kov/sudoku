@@ -50,6 +50,18 @@ class ControlEventCreateRequest(BaseModel):
     recipients: list[ControlRecipientRequest] = Field(min_length=1, max_length=200)
 
 
+class ControlEventBatchItemRequest(BaseModel):
+    client_id: uuid.UUID
+    kind: str = Field(pattern="^(commit|welcome)$")
+    payload_b64: str = Field(min_length=1, max_length=2 * MAX_CONTROL_EVENT_BYTES)
+    recipients: list[ControlRecipientRequest] = Field(min_length=1, max_length=200)
+
+
+class ControlEventBatchCreateRequest(BaseModel):
+    sender_device_id: uuid.UUID
+    events: list[ControlEventBatchItemRequest] = Field(min_length=1, max_length=10)
+
+
 class ControlEventAckRequest(BaseModel):
     device_id: uuid.UUID
 
@@ -474,6 +486,193 @@ async def create_control_event(
     await db.commit()
     await db.refresh(item)
     return serialize_control_event(item)
+
+
+@router.post("/conversations/{conversation_id}/control-batches", status_code=201)
+async def create_control_batch(
+    conversation_id: uuid.UUID,
+    payload: ControlEventBatchCreateRequest,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-control-batch-create", 60, 60)
+    await require_active_device(db, auth.user.id, payload.sender_device_id)
+
+    client_ids = [item.client_id for item in payload.events]
+    if len(set(client_ids)) != len(client_ids):
+        raise HTTPException(422, "Duplicate MLS control client id in batch")
+
+    decoded: list[tuple[ControlEventBatchItemRequest, bytes, set[tuple[uuid.UUID, uuid.UUID]]]] = []
+    for request_item in payload.events:
+        control_bytes = decode_control_payload(request_item.payload_b64)
+        recipient_pairs = {
+            (recipient.user_id, recipient.device_id)
+            for recipient in request_item.recipients
+        }
+        if len(recipient_pairs) != len(request_item.recipients):
+            raise HTTPException(422, "Duplicate MLS control recipient")
+        decoded.append((request_item, control_bytes, recipient_pairs))
+
+    existing_rows = (
+        await db.execute(
+            select(MlsControlEvent).where(
+                MlsControlEvent.sender_user_id == auth.user.id,
+                MlsControlEvent.sender_device_id == payload.sender_device_id,
+                MlsControlEvent.client_id.in_(client_ids),
+            )
+        )
+    ).scalars().all()
+    existing_by_client = {item.client_id: item for item in existing_rows}
+
+    if existing_by_client:
+        if len(existing_by_client) != len(payload.events):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Partial MLS control batch client-id collision",
+            )
+
+        recipient_rows = (
+            await db.execute(
+                select(
+                    MlsControlRecipient.event_id,
+                    MlsControlRecipient.user_id,
+                    MlsControlRecipient.device_id,
+                ).where(
+                    MlsControlRecipient.event_id.in_(
+                        [item.id for item in existing_rows]
+                    )
+                )
+            )
+        ).all()
+        recipients_by_event: dict[uuid.UUID, set[tuple[uuid.UUID, uuid.UUID]]] = {}
+        for event_id, user_id, device_id in recipient_rows:
+            recipients_by_event.setdefault(event_id, set()).add((user_id, device_id))
+
+        ordered_existing: list[MlsControlEvent] = []
+        for request_item, control_bytes, recipient_pairs in decoded:
+            existing = existing_by_client[request_item.client_id]
+            if (
+                existing.conversation_id != conversation_id
+                or existing.kind != request_item.kind
+                or existing.payload != control_bytes
+                or recipients_by_event.get(existing.id, set()) != recipient_pairs
+            ):
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "MLS control batch retry differs from stored content",
+                )
+            ordered_existing.append(existing)
+
+        return {"events": [serialize_control_event(item) for item in ordered_existing]}
+
+    conversation = (
+        await db.execute(
+            select(Conversation)
+            .where(Conversation.id == conversation_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if conversation is None or not conversation.encryption_required:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Encrypted conversation not found")
+
+    sender_member = (
+        await db.execute(
+            select(ConversationMember.user_id).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == auth.user.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if sender_member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Encrypted conversation not found")
+
+    all_recipient_pairs = set().union(
+        *(recipient_pairs for _, _, recipient_pairs in decoded)
+    )
+    all_recipient_user_ids = {
+        user_id for user_id, _ in all_recipient_pairs
+    }
+
+    member_user_ids = set(
+        (
+            await db.execute(
+                select(ConversationMember.user_id).where(
+                    ConversationMember.conversation_id == conversation_id,
+                    ConversationMember.user_id.in_(all_recipient_user_ids),
+                )
+            )
+        ).scalars().all()
+    )
+    if member_user_ids != all_recipient_user_ids:
+        raise HTTPException(422, "MLS control recipient is not a conversation member")
+
+    active_pairs = set(
+        (
+            await db.execute(
+                select(MlsDevice.user_id, MlsDevice.device_id).where(
+                    tuple_(MlsDevice.user_id, MlsDevice.device_id).in_(
+                        list(all_recipient_pairs)
+                    ),
+                    MlsDevice.revoked_at.is_(None),
+                )
+            )
+        ).all()
+    )
+    if active_pairs != all_recipient_pairs:
+        raise HTTPException(422, "MLS control recipient device is unavailable")
+
+    created: list[MlsControlEvent] = []
+    for request_item, control_bytes, recipient_pairs in decoded:
+        sequence = conversation.next_crypto_sequence
+        conversation.next_crypto_sequence += 1
+        item = MlsControlEvent(
+            conversation_id=conversation_id,
+            sender_user_id=auth.user.id,
+            sender_device_id=payload.sender_device_id,
+            client_id=request_item.client_id,
+            sequence=sequence,
+            kind=request_item.kind,
+            payload=control_bytes,
+        )
+        db.add(item)
+        await db.flush()
+
+        for user_id, device_id in sorted(
+            recipient_pairs,
+            key=lambda pair: (str(pair[0]), str(pair[1])),
+        ):
+            db.add(
+                MlsControlRecipient(
+                    event_id=item.id,
+                    user_id=user_id,
+                    device_id=device_id,
+                )
+            )
+
+        recipient_user_ids = {user_id for user_id, _ in recipient_pairs}
+        db.add(
+            OutboxEvent(
+                event_type="mls.control.created",
+                aggregate_type="mls_control",
+                aggregate_id=item.id,
+                conversation_id=conversation_id,
+                payload={
+                    "control_event_id": str(item.id),
+                    "kind": item.kind,
+                    "sequence": item.sequence,
+                    "_extra_recipient_ids": [
+                        str(user_id)
+                        for user_id in sorted(recipient_user_ids, key=str)
+                    ],
+                },
+            )
+        )
+        created.append(item)
+
+    await db.commit()
+    for item in created:
+        await db.refresh(item)
+    return {"events": [serialize_control_event(item) for item in created]}
 
 
 @router.get("/conversations/{conversation_id}/devices/{device_id}/control-events")

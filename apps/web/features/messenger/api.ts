@@ -1,4 +1,4 @@
-import type { ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability } from "./types";
+import type { ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
@@ -89,6 +89,19 @@ export const messengerApi = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
     }),
+  sendMlsControlBatch: (
+    conversationId: string,
+    senderDeviceId: string,
+    events: MlsControlBatchItem[],
+  ) =>
+    request<MlsControlBatchResponse>(
+      `/v1/e2ee/conversations/${conversationId}/control-batches`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sender_device_id: senderDeviceId, events }),
+      },
+    ),
   mlsControlEvents: (conversationId: string, deviceId: string, after = 0) =>
     request<MlsControlEvent[]>(
       `/v1/e2ee/conversations/${conversationId}/devices/${deviceId}/control-events?after=${after}`,

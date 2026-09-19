@@ -460,6 +460,75 @@ async def test_mls_control_event_snapshot_survives_membership_removal_and_ack() 
         event_id = created.json()["id"]
         assert created.json()["sequence"] == 1
 
+        batch_commit_id = str(uuid.uuid4())
+        batch_welcome_id = str(uuid.uuid4())
+        batch_payload = {
+            "sender_device_id": str(sender_device),
+            "events": [
+                {
+                    "client_id": batch_commit_id,
+                    "kind": "commit",
+                    "payload_b64": base64.b64encode(b"opaque-batch-commit").decode(),
+                    "recipients": [
+                        {
+                            "user_id": str(recipient_id),
+                            "device_id": str(recipient_device),
+                        }
+                    ],
+                },
+                {
+                    "client_id": batch_welcome_id,
+                    "kind": "welcome",
+                    "payload_b64": base64.b64encode(b"opaque-batch-welcome").decode(),
+                    "recipients": [
+                        {
+                            "user_id": str(recipient_id),
+                            "device_id": str(recipient_device),
+                        }
+                    ],
+                },
+            ],
+        }
+        batch = await sender_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/control-batches",
+            json=batch_payload,
+        )
+        assert batch.status_code == 201, batch.text
+        batch_events = batch.json()["events"]
+        assert [item["sequence"] for item in batch_events] == [2, 3]
+
+        batch_retry = await sender_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/control-batches",
+            json=batch_payload,
+        )
+        assert batch_retry.status_code == 201, batch_retry.text
+        assert [item["id"] for item in batch_retry.json()["events"]] == [
+            item["id"] for item in batch_events
+        ]
+
+        conflicting_batch = {
+            **batch_payload,
+            "events": [
+                batch_payload["events"][0],
+                {
+                    **batch_payload["events"][1],
+                    "payload_b64": base64.b64encode(b"different-welcome").decode(),
+                },
+            ],
+        }
+        conflict = await sender_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/control-batches",
+            json=conflicting_batch,
+        )
+        assert conflict.status_code == 409
+
+        for batch_event in batch_events:
+            batch_ack = await recipient_client.post(
+                f"/v1/e2ee/control-events/{batch_event['id']}/ack",
+                json={"device_id": str(recipient_device)},
+            )
+            assert batch_ack.status_code == 204, batch_ack.text
+
         async with SessionFactory() as db:
             from app.models import ConversationMember, MlsControlEvent, OutboxEvent
 
