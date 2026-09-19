@@ -9,3 +9,4 @@ __pycache__/
 .venv/
 .DS_Store
 coverage/
+.tools/\napps/web/generated/mls-wasm/\n

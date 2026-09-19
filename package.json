@@ -10,6 +10,7 @@
     "dev:web": "npm --workspace @sudoku/web run dev",
     "build:web": "npm --workspace @sudoku/web run build",
     "typecheck:domain": "npm --workspace @sudoku/domain run typecheck",
-    "test:domain": "npm --workspace @sudoku/domain run test"
+    "test:domain": "npm --workspace @sudoku/domain run test",
+    "build:mls-wasm": "node scripts/build-mls-wasm.mjs"
   }
 }
