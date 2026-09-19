@@ -25,6 +25,7 @@ from .models import (
     Session,
 )
 from .rate_limit import enforce_user_rate_limit
+from .mls_lifecycle import promote_next_mls_change, schedule_mls_device_change
 
 router = APIRouter(prefix="/v1/e2ee", tags=["e2ee"])
 
@@ -59,7 +60,7 @@ class ControlEventBatchItemRequest(BaseModel):
     client_id: uuid.UUID
     kind: str = Field(pattern="^(commit|welcome)$")
     payload_b64: str = Field(min_length=1, max_length=2 * MAX_CONTROL_EVENT_BYTES)
-    recipients: list[ControlRecipientRequest] = Field(min_length=1, max_length=200)
+    recipients: list[ControlRecipientRequest] = Field(default_factory=list, max_length=200)
 
 
 class ControlEventBatchCreateRequest(BaseModel):
@@ -167,6 +168,7 @@ def serialize_membership_change(item: ConversationMembershipChange) -> dict:
         "id": str(item.id),
         "conversation_id": str(item.conversation_id),
         "target_user_id": str(item.target_user_id),
+        "target_device_id": str(item.target_device_id) if item.target_device_id else None,
         "requested_by": str(item.requested_by),
         "kind": item.kind,
         "status": item.status,
@@ -476,6 +478,59 @@ async def prepare_membership_remove(
     return serialize_membership_change(change)
 
 
+@router.get("/conversations/{conversation_id}/membership-changes/pending")
+async def pending_membership_change(
+    conversation_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-change-pending", 120, 60)
+    member = (
+        await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == auth.user.id,
+                ConversationMember.e2ee_state != "pending_add",
+            )
+        )
+    ).scalar_one_or_none()
+    if member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Encrypted conversation not found")
+    change = (
+        await db.execute(
+            select(ConversationMembershipChange).where(
+                ConversationMembershipChange.conversation_id == conversation_id,
+                ConversationMembershipChange.status == "pending",
+            )
+        )
+    ).scalar_one_or_none()
+    if change is None:
+        return {"change": None, "target_device": None}
+
+    target_device = None
+    if change.target_device_id is not None:
+        device = (
+            await db.execute(
+                select(MlsDevice).where(
+                    MlsDevice.user_id == change.target_user_id,
+                    MlsDevice.device_id == change.target_device_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if device is not None:
+            target_device = {
+                "device_id": str(device.device_id),
+                "identity_public_key_b64": encode_bytes(device.identity_public_key),
+                "active": await active_device(
+                    db, device.user_id, device.device_id
+                ) is not None,
+            }
+    return {
+        "change": serialize_membership_change(change),
+        "target_device": target_device,
+    }
+
+
 @router.post("/membership-changes/{change_id}/finalize", status_code=204)
 async def finalize_membership_change(
     change_id: uuid.UUID,
@@ -494,7 +549,9 @@ async def finalize_membership_change(
         raise HTTPException(404, "MLS membership transition not found")
     if change.status == "completed":
         return
-    if change.status != "pending" or change.requested_by != auth.user.id:
+    if change.status != "pending":
+        raise HTTPException(403, "MLS membership transition cannot be finalized")
+    if change.kind not in {"device_add", "device_remove"} and change.requested_by != auth.user.id:
         raise HTTPException(403, "MLS membership transition cannot be finalized")
 
     conversation = (
@@ -512,13 +569,25 @@ async def finalize_membership_change(
             select(ConversationMember).where(
                 ConversationMember.conversation_id == change.conversation_id,
                 ConversationMember.user_id == change.target_user_id,
+                ConversationMember.e2ee_state != "pending_add",
             )
         )
     ).scalar_one_or_none()
-    if membership is None:
+    pending_add_membership = (
+        await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == change.conversation_id,
+                ConversationMember.user_id == change.target_user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if change.kind not in {"add"} and membership is None:
         raise HTTPException(409, "Target membership no longer exists")
 
     if change.kind == "add":
+        membership = pending_add_membership
+        if membership is None:
+            raise HTTPException(409, "Target membership no longer exists")
         if membership.e2ee_state != "pending_add":
             raise HTTPException(409, "Target is not pending MLS add")
 
@@ -567,11 +636,73 @@ async def finalize_membership_change(
             "user_id": str(change.target_user_id),
         }
         extra = [change.target_user_id]
+    elif change.kind == "device_add":
+        if change.target_device_id is None:
+            raise HTTPException(409, "MLS device-add target is missing")
+        device = await active_device(
+            db, change.target_user_id, change.target_device_id
+        )
+        if device is None:
+            raise HTTPException(409, "MLS device-add target is no longer active")
+        welcomed = await control_recipient_pairs_for_change(db, change.id, "welcome")
+        target_pair = (change.target_user_id, change.target_device_id)
+        if target_pair not in welcomed:
+            raise HTTPException(409, "MLS device add is missing Welcome delivery")
+        expected_commits = await current_active_device_pairs(
+            db, change.conversation_id, ("active", "pending_remove")
+        )
+        expected_commits.discard((auth.user.id, auth.session.id))
+        expected_commits.discard(target_pair)
+        committed = await control_recipient_pairs_for_change(db, change.id, "commit")
+        if not expected_commits.issubset(committed):
+            raise HTTPException(409, "MLS device add is missing Commit delivery")
+        event_type = "mls.device.rekeyed"
+        payload = {
+            "conversation_id": str(change.conversation_id),
+            "user_id": str(change.target_user_id),
+            "device_id": str(change.target_device_id),
+            "kind": "device_add",
+        }
+        extra = []
+    elif change.kind == "device_remove":
+        if change.target_device_id is None:
+            raise HTTPException(409, "MLS device-remove target is missing")
+        if await active_device(db, change.target_user_id, change.target_device_id) is not None:
+            raise HTTPException(409, "MLS device-remove target is still active")
+        expected_commits = await current_active_device_pairs(
+            db, change.conversation_id, ("active", "pending_remove")
+        )
+        expected_commits.discard((auth.user.id, auth.session.id))
+        committed = await control_recipient_pairs_for_change(db, change.id, "commit")
+        if not expected_commits.issubset(committed):
+            raise HTTPException(409, "MLS device removal is missing Commit delivery")
+        commit_count = int(
+            await db.scalar(
+                select(func.count())
+                .select_from(MlsControlEvent)
+                .where(
+                    MlsControlEvent.membership_change_id == change.id,
+                    MlsControlEvent.kind == "commit",
+                )
+            )
+            or 0
+        )
+        if commit_count < 1:
+            raise HTTPException(409, "MLS device removal has no durable Remove commit")
+        event_type = "mls.device.rekeyed"
+        payload = {
+            "conversation_id": str(change.conversation_id),
+            "user_id": str(change.target_user_id),
+            "device_id": str(change.target_device_id),
+            "kind": "device_remove",
+        }
+        extra = []
     else:
         raise HTTPException(409, "Unsupported membership transition")
 
     change.status = "completed"
     change.completed_at = datetime.now(UTC)
+    await promote_next_mls_change(db, change.conversation_id)
     db.add(
         OutboxEvent(
             event_type=event_type,
@@ -757,6 +888,9 @@ async def revoke_device(
     await enforce_user_rate_limit(auth.user.id, "mls-device-revoke", 20, 3600)
     device = await require_active_device(db, auth.user.id, device_id)
     device.revoked_at = datetime.now(UTC)
+    await schedule_mls_device_change(
+        db, auth.user.id, device.device_id, "device_remove"
+    )
     await db.execute(
         delete(MlsKeyPackage).where(
             MlsKeyPackage.user_id == auth.user.id,
@@ -779,7 +913,18 @@ async def publish_key_packages(
         raise HTTPException(422, "Device ID mismatch")
     if device_id != auth.session.id:
         raise HTTPException(403, "MLS KeyPackages can only be published by the current device")
-    await require_active_device(db, auth.user.id, device_id)
+    device = await require_active_device(db, auth.user.id, device_id)
+    had_any_key_package = int(
+        await db.scalar(
+            select(func.count())
+            .select_from(MlsKeyPackage)
+            .where(
+                MlsKeyPackage.user_id == auth.user.id,
+                MlsKeyPackage.device_id == device_id,
+            )
+        )
+        or 0
+    ) > 0
 
     decoded = [decode_key_package(item) for item in payload.key_packages_b64]
     refs = [hashlib.sha256(item).digest() for item in decoded]
@@ -816,6 +961,10 @@ async def publish_key_packages(
                 package_ref=package_ref,
                 key_package=key_package,
             )
+        )
+    if not had_any_key_package:
+        await schedule_mls_device_change(
+            db, auth.user.id, device.device_id, "device_add"
         )
     await db.commit()
 
@@ -1197,8 +1346,31 @@ async def create_control_batch(
                 status.HTTP_409_CONFLICT,
                 "MLS membership transition id is required for this control batch",
             )
-        if pending_change.requested_by != auth.user.id:
+        if (
+            pending_change.kind not in {"device_add", "device_remove"}
+            and pending_change.requested_by != auth.user.id
+        ):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Membership transition owner mismatch")
+        existing_transition_sender = (
+            await db.execute(
+                select(
+                    MlsControlEvent.sender_user_id,
+                    MlsControlEvent.sender_device_id,
+                )
+                .where(MlsControlEvent.membership_change_id == pending_change.id)
+                .order_by(MlsControlEvent.created_at, MlsControlEvent.id)
+                .limit(1)
+            )
+        ).first()
+        if (
+            existing_transition_sender is not None
+            and existing_transition_sender
+            != (auth.user.id, payload.sender_device_id)
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "MLS membership transition is already owned by another device",
+            )
     elif payload.membership_change_id is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Membership transition is no longer pending")
 
