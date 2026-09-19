@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.db import SessionFactory
 from app.main import app
-from app.models import Invite, User
+from app.models import Conversation, Invite, User
 from app.security import hash_password
 
 ORIGIN = "https://sudoku.test"
@@ -235,8 +235,16 @@ async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() ->
             json={"client_id":str(uuid.uuid4()),"type":"text","body":None,"envelope":{"version":1,"protocol":"mls-rfc9420","kind":"application","ciphertext":"AA=="},"asset_ids":[]},
         )
         assert pending_message.status_code==409
-        activated=await client.post(f"/v1/e2ee/conversations/{cid}/activate")
-        assert activated.status_code==204,activated.text
+        # This test isolates the post-activation ciphertext boundary. MLS activation
+        # itself is covered by the dedicated device/Welcome coverage integration test.
+        async with SessionFactory() as db:
+            conversation = (
+                await db.execute(
+                    select(Conversation).where(Conversation.id == uuid.UUID(cid))
+                )
+            ).scalar_one()
+            conversation.e2ee_ready = True
+            await db.commit()
         plaintext=await client.post(f"/v1/conversations/{cid}/messages",json={"client_id":str(uuid.uuid4()),"type":"text","body":"secret plaintext","asset_ids":[]})
         assert plaintext.status_code==422
         envelope={"version":1,"protocol":"test-envelope","ciphertext":"AAECAwQ="}
@@ -761,10 +769,18 @@ async def test_e2ee_legacy_message_mutations_fail_closed() -> None:
         )
         assert created.status_code == 201, created.text
         conversation_id = created.json()["id"]
-        activated = await client.post(
-            f"/v1/e2ee/conversations/{conversation_id}/activate"
-        )
-        assert activated.status_code == 204, activated.text
+        # This test targets fail-closed legacy mutation endpoints after an E2EE
+        # conversation is active; activation coverage lives in the dedicated MLS test.
+        async with SessionFactory() as db:
+            conversation = (
+                await db.execute(
+                    select(Conversation).where(
+                        Conversation.id == uuid.UUID(conversation_id)
+                    )
+                )
+            ).scalar_one()
+            conversation.e2ee_ready = True
+            await db.commit()
 
         envelope = {
             "version": 1,
