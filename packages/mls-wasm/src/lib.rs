@@ -155,6 +155,21 @@ impl Provider {
             .map_err(|message| JsError::new(&message))
     }
 
+    #[wasm_bindgen(js_name = validateKeyPackageIdentity)]
+    pub fn validate_key_package_identity(
+        &self,
+        bytes: &[u8],
+        expected_credential: &[u8],
+        expected_public_key: &[u8],
+    ) -> Result<(), JsError> {
+        self.validate_key_package_identity_inner(
+            bytes,
+            expected_credential,
+            expected_public_key,
+        )
+        .map_err(|message| JsError::new(&message))
+    }
+
     #[wasm_bindgen(js_name = createGroup)]
     pub fn create_group(
         &self,
@@ -420,6 +435,33 @@ impl Provider {
             .map_err(|_| "Failed to serialize validated MLS KeyPackage".to_owned())
     }
 
+    fn validate_key_package_identity_inner(
+        &self,
+        bytes: &[u8],
+        expected_credential: &[u8],
+        expected_public_key: &[u8],
+    ) -> Result<(), String> {
+        validate_credential(expected_credential)?;
+        if expected_public_key.len() != ED25519_PUBLIC_KEY_BYTES {
+            return Err("Expected MLS identity key must be 32-byte Ed25519".to_owned());
+        }
+
+        let key_package = self.parse_key_package_inner(bytes)?;
+        let leaf = key_package.leaf_node();
+        let basic = BasicCredential::try_from(leaf.credential().clone())
+            .map_err(|_| "MLS KeyPackage does not use a BasicCredential".to_owned())?;
+
+        if basic.identity() != expected_credential {
+            return Err("MLS KeyPackage credential does not match expected device".to_owned());
+        }
+        if leaf.signature_key().as_slice() != expected_public_key {
+            return Err(
+                "MLS KeyPackage signature key does not match pinned device identity".to_owned(),
+            );
+        }
+        Ok(())
+    }
+
     fn load_signer_inner(&self, identity: &DeviceIdentity) -> Result<SignatureKeyPair, String> {
         SignatureKeyPair::read(
             self.storage(),
@@ -456,7 +498,7 @@ pub fn openmls_version() -> String {
 
 #[wasm_bindgen]
 pub fn binding_capabilities() -> String {
-    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"membership_rekey":true,"two_phase_membership":true,"ui_ready":false}"#.to_owned()
+    r#"{"protocol":"mls-rfc9420","openmls":"0.9.0","state_blob_version":1,"persistent_state":true,"device_identity":true,"key_packages":true,"two_party_groups":true,"application_messages":true,"membership_rekey":true,"two_phase_membership":true,"key_package_identity_binding":true,"ui_ready":false}"#.to_owned()
 }
 
 fn validate_group_id(group_id: &[u8]) -> Result<(), String> {
@@ -698,6 +740,33 @@ mod tests {
             first
         );
         assert!(validator.validate_key_package_inner(b"invalid").is_err());
+        assert!(
+            validator
+                .validate_key_package_identity_inner(
+                    &first,
+                    b"user-1:device-1",
+                    &identity.public_key,
+                )
+                .is_ok()
+        );
+        assert!(
+            validator
+                .validate_key_package_identity_inner(
+                    &first,
+                    b"user-1:device-1",
+                    &[0u8; 32],
+                )
+                .is_err()
+        );
+        assert!(
+            validator
+                .validate_key_package_identity_inner(
+                    &first,
+                    b"different-user:device",
+                    &identity.public_key,
+                )
+                .is_err()
+        );
     }
 
     #[test]
