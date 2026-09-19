@@ -1,4 +1,6 @@
 name: ci
+permissions:
+  contents: write
 on:
   push:
     branches: [main]
@@ -79,12 +81,17 @@ jobs:
           rm -f packages/mls-wasm/Cargo.lock
           cargo +1.91.0 generate-lockfile --manifest-path packages/mls-wasm/Cargo.toml
           cargo +1.91.0 check --manifest-path packages/mls-wasm/Cargo.toml --target wasm32-unknown-unknown --locked
-      - name: Upload OpenMLS Cargo lock
-        uses: actions/upload-artifact@v4
-        with:
-          name: mls-wasm-cargo-lock
-          path: packages/mls-wasm/Cargo.lock
-          if-no-files-found: error
+      - name: Commit generated OpenMLS Cargo lock
+        run: |
+          if git diff --quiet -- packages/mls-wasm/Cargo.lock; then
+            echo "Cargo.lock already reproducible"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add packages/mls-wasm/Cargo.lock
+            git commit -m "build: lock OpenMLS WASM dependencies"
+            git push origin HEAD:main
+          fi
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com

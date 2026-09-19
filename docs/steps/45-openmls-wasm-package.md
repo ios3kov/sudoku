@@ -1,31 +1,23 @@
 # Step 45 — Pinned OpenMLS WASM package skeleton
 
 ## Goal
-Introduce OpenMLS as a separately testable Rust/WASM package without activating it in the messenger UI.
+Introduce OpenMLS as an isolated Rust/WASM package without activating it in the messenger UI.
 
-## Pinned dependency set
+## Verified baseline
+The bootstrap run successfully compiled the package for `wasm32-unknown-unknown` with Rust 1.91.0 and the pinned OpenMLS dependency set. All existing API, MLS delivery-service, web build and production-compose gates were green in the same run.
+
+## Pinned set
 - Rust 1.91.0
-- openmls 0.9.0 with `js` feature
+- openmls 0.9.0
 - openmls_rust_crypto 0.6.0
 - openmls_basic_credential 0.6.0
 - wasm-bindgen 0.2.105
-- getrandom 0.2.17 JS backend for transitive RustCrypto randomness
+- getrandom 0.2.17 JS backend
 
-## Surface
-The initial module exposes only:
-- protocol name;
-- pinned OpenMLS version;
-- capability JSON explicitly reporting `persistent_state=false` and `ui_ready=false`.
+## Lockfile bootstrap
+CI generates the lockfile from the pinned manifest, runs wasm32 `cargo check --locked`, then commits only `packages/mls-wasm/Cargo.lock` if it differs. This is a one-time bootstrap mechanism.
 
-No group creation, encryption, decryption or key generation is exposed yet.
+After the generated lock lands in main, the bootstrap self-commit step must be removed and CI must use the committed lockfile read-only with `cargo check --locked`.
 
-## CI gate
-CI installs Rust 1.91.0 + wasm32-unknown-unknown and runs `cargo check --locked` against this package.
-
-The committed lock file is intentionally not considered valid until generated from the manifest. CI is expected to fail at the lock/dependency stage first; that failure is used to capture the exact reproducible graph before enabling the package.
-
-## Security
-The package is isolated from the app. UI cannot import/use it yet. Production remains blocked.
-
-## Next
-Generate and commit the actual Cargo.lock from the pinned manifest, then implement only fallible state/provider primitives required by the Step 41 contract.
+## Current WASM surface
+Only protocol/version/capability reporting is exposed. `persistent_state=false` and `ui_ready=false`; there is no production crypto activation yet.
