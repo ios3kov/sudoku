@@ -216,13 +216,16 @@ async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() ->
     suffix=uuid.uuid4().hex[:10]
     email=f"e2ee-{suffix}@example.com"
     password="correct horse battery staple"
+    peer_email=f"e2ee-peer-{suffix}@example.com"
     async with SessionFactory() as db:
         user=User(email=email,display_name="E2EE",password_hash=hash_password(password),status="active",is_admin=False)
-        db.add(user);await db.commit()
+        peer=User(email=peer_email,display_name="E2EE Peer",password_hash=hash_password(password),status="active",is_admin=False)
+        db.add_all([user,peer]);await db.commit();await db.refresh(peer)
+        peer_id=peer.id
     transport=httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport,base_url=ORIGIN,headers=MUTATION_HEADERS) as client:
         assert (await client.post("/v1/auth/login",json={"email":email,"password":password,"device_name":"e2ee-test"})).status_code==200
-        created=await client.post("/v1/conversations",json={"type":"group","title":"Encrypted","member_ids":[],"encryption_required":True})
+        created=await client.post("/v1/conversations",json={"type":"direct","title":None,"member_ids":[str(peer_id)],"encryption_required":True})
         assert created.status_code==201,created.text
         cid=created.json()["id"]
         plaintext=await client.post(f"/v1/conversations/{cid}/messages",json={"client_id":str(uuid.uuid4()),"type":"text","body":"secret plaintext","asset_ids":[]})
