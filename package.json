@@ -1,0 +1,15 @@
+{
+  "name": "sudoku-private-messenger",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "packages/domain"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @sudoku/web run dev",
+    "build:web": "npm --workspace @sudoku/web run build",
+    "typecheck:domain": "npm --workspace @sudoku/domain run typecheck",
+    "test:domain": "npm --workspace @sudoku/domain run test"
+  }
+}
