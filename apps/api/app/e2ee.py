@@ -23,6 +23,7 @@ from .models import (
     MlsKeyPackage,
     OutboxEvent,
     Session,
+    User,
 )
 from .rate_limit import enforce_user_rate_limit
 from .mls_lifecycle import promote_next_mls_change, schedule_mls_device_change
