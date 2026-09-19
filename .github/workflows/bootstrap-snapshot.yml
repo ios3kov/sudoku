@@ -6,6 +6,9 @@ on:
     paths:
       - 'bootstrap/**'
       - '.github/workflows/bootstrap-snapshot.yml'
+  pull_request:
+    paths:
+      - 'bootstrap/**'
 
 permissions:
   contents: write
