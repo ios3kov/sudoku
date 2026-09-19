@@ -177,3 +177,27 @@ Client commands:
 ```
 
 Redis is fan-out only. After reconnect the client requests durable messages from PostgreSQL using `after=<last-sequence>`.
+
+
+## MLS E2EE delivery service
+
+```http
+PUT    /e2ee/devices/{device_id}
+DELETE /e2ee/devices/{device_id}
+PUT    /e2ee/devices/{device_id}/key-packages
+DELETE /e2ee/devices/{device_id}/key-packages
+GET    /e2ee/users/{user_id}/devices
+POST   /e2ee/users/{user_id}/devices/{device_id}/key-package/claim
+
+POST   /e2ee/conversations/{conversation_id}/control-events
+GET    /e2ee/conversations/{conversation_id}/devices/{device_id}/control-events?after=0
+POST   /e2ee/control-events/{event_id}/ack
+```
+
+An MLS device is registered once with an immutable public identity key. Changing that key requires a new device id. Private identity keys never reach the API.
+
+KeyPackages are opaque public MLS bytes. Claimed packages remain as consumed tombstones so they cannot be registered and used again.
+
+MLS control events carry opaque serialized `commit` or `welcome` bytes. Recipient device pairs are snapshotted at event creation. Fetching an assigned control event therefore does not depend on the recipient still being a current server-side conversation member; this is required for delivery of removal commits.
+
+Realtime fan-out contains only control-event id/kind/sequence metadata. The MLS bytes remain durable in PostgreSQL and are fetched through the authenticated device-specific endpoint.

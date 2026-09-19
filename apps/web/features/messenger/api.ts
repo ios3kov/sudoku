@@ -1,4 +1,4 @@
-import type { ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsDeviceAvailability } from "./types";
+import type { ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
@@ -51,6 +51,14 @@ export const messengerApi = {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ client_id: clientId, type, body: null, envelope, reply_to: replyTo, asset_ids: assetIds }),
   }),
+  registerMlsDevice: (deviceId: string, identityPublicKeyB64: string) =>
+    request<void>(`/v1/e2ee/devices/${deviceId}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ identity_public_key_b64: identityPublicKeyB64 }),
+    }),
+  revokeMlsDevice: (deviceId: string) =>
+    request<void>(`/v1/e2ee/devices/${deviceId}`, { method: "DELETE" }),
   publishMlsKeyPackages: (deviceId: string, keyPackagesB64: string[]) =>
     request<void>(`/v1/e2ee/devices/${deviceId}/key-packages`, {
       method: "PUT",
@@ -66,6 +74,31 @@ export const messengerApi = {
     ),
   discardMlsKeyPackages: (deviceId: string) =>
     request<void>(`/v1/e2ee/devices/${deviceId}/key-packages`, { method: "DELETE" }),
+  sendMlsControlEvent: (
+    conversationId: string,
+    input: {
+      client_id: string;
+      sender_device_id: string;
+      kind: "commit" | "welcome";
+      payload_b64: string;
+      recipients: MlsControlRecipient[];
+    },
+  ) =>
+    request<MlsControlEvent>(`/v1/e2ee/conversations/${conversationId}/control-events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+  mlsControlEvents: (conversationId: string, deviceId: string, after = 0) =>
+    request<MlsControlEvent[]>(
+      `/v1/e2ee/conversations/${conversationId}/devices/${deviceId}/control-events?after=${after}`,
+    ),
+  ackMlsControlEvent: (eventId: string, deviceId: string) =>
+    request<void>(`/v1/e2ee/control-events/${eventId}/ack`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ device_id: deviceId }),
+    }),
   markRead: (conversationId: string, sequence: number) => request<void>(`/v1/conversations/${conversationId}/read`, {
     method: "POST",
     headers: { "content-type": "application/json" },

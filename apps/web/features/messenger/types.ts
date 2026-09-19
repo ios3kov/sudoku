@@ -100,11 +100,30 @@ export interface E2eeEnvelope {
 
 export interface MlsDeviceAvailability {
   device_id: string;
+  identity_public_key_b64: string;
   available_key_packages: number;
 }
 
 export interface ClaimedMlsKeyPackage {
   device_id: string;
+  identity_public_key_b64: string;
   package_ref: string;
   key_package_b64: string;
+}
+
+export interface MlsControlRecipient {
+  user_id: string;
+  device_id: string;
+}
+
+export interface MlsControlEvent {
+  id: string;
+  conversation_id: string;
+  sender_user_id: string;
+  sender_device_id: string;
+  client_id: string;
+  sequence: number;
+  kind: "commit" | "welcome";
+  payload_b64: string;
+  created_at: string;
 }

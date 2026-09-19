@@ -267,6 +267,7 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
 
     kp1 = b"mls-key-package-one-" + uuid.uuid4().bytes
     kp2 = b"mls-key-package-two-" + uuid.uuid4().bytes
+    identity_public_key_b64 = base64.b64encode(b"K" * 32).decode()
     payload = {
         "device_id": str(device_id),
         "key_packages_b64": [
@@ -287,6 +288,12 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
         )
         assert login.status_code == 200, login.text
 
+        registered = await client.put(
+            f"/v1/e2ee/devices/{device_id}",
+            json={"identity_public_key_b64": identity_public_key_b64},
+        )
+        assert registered.status_code == 204, registered.text
+
         published = await client.put(
             f"/v1/e2ee/devices/{device_id}/key-packages",
             json=payload,
@@ -296,7 +303,11 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
         listed = await client.get(f"/v1/e2ee/users/{user_id}/devices")
         assert listed.status_code == 200, listed.text
         assert listed.json() == [
-            {"device_id": str(device_id), "available_key_packages": 2}
+            {
+                "device_id": str(device_id),
+                "identity_public_key_b64": identity_public_key_b64,
+                "available_key_packages": 2,
+            }
         ]
 
         first = await client.post(
@@ -340,3 +351,165 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
         ).scalars().all()
         assert len(rows) == 2
         assert all(row.claimed_at is not None for row in rows)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_mls_control_event_snapshot_survives_membership_removal_and_ack() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    sender_email = f"mls-control-sender-{suffix}@example.com"
+    recipient_email = f"mls-control-recipient-{suffix}@example.com"
+    password = "correct horse battery staple"
+    sender_device = uuid.uuid4()
+    recipient_device = uuid.uuid4()
+
+    async with SessionFactory() as db:
+        sender = User(
+            email=sender_email,
+            display_name="MLS Sender",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        recipient = User(
+            email=recipient_email,
+            display_name="MLS Recipient",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add_all([sender, recipient])
+        await db.commit()
+        await db.refresh(recipient)
+        recipient_id = recipient.id
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as sender_client, httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as recipient_client:
+        assert (
+            await sender_client.post(
+                "/v1/auth/login",
+                json={
+                    "email": sender_email,
+                    "password": password,
+                    "device_name": "sender-device",
+                },
+            )
+        ).status_code == 200
+        assert (
+            await recipient_client.post(
+                "/v1/auth/login",
+                json={
+                    "email": recipient_email,
+                    "password": password,
+                    "device_name": "recipient-device",
+                },
+            )
+        ).status_code == 200
+
+        sender_key_b64 = base64.b64encode(b"S" * 32).decode()
+        recipient_key_b64 = base64.b64encode(b"R" * 32).decode()
+        assert (
+            await sender_client.put(
+                f"/v1/e2ee/devices/{sender_device}",
+                json={"identity_public_key_b64": sender_key_b64},
+            )
+        ).status_code == 204
+        assert (
+            await recipient_client.put(
+                f"/v1/e2ee/devices/{recipient_device}",
+                json={"identity_public_key_b64": recipient_key_b64},
+            )
+        ).status_code == 204
+
+        conversation = await sender_client.post(
+            "/v1/conversations",
+            json={
+                "type": "direct",
+                "title": None,
+                "member_ids": [str(recipient_id)],
+                "encryption_required": True,
+            },
+        )
+        assert conversation.status_code == 201, conversation.text
+        conversation_id = conversation.json()["id"]
+
+        raw_control = b"opaque-mls-remove-commit"
+        created = await sender_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/control-events",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "sender_device_id": str(sender_device),
+                "kind": "commit",
+                "payload_b64": base64.b64encode(raw_control).decode(),
+                "recipients": [
+                    {
+                        "user_id": str(recipient_id),
+                        "device_id": str(recipient_device),
+                    }
+                ],
+            },
+        )
+        assert created.status_code == 201, created.text
+        event_id = created.json()["id"]
+        assert created.json()["sequence"] == 1
+
+        async with SessionFactory() as db:
+            from app.models import ConversationMember, MlsControlEvent, OutboxEvent
+
+            control_row = (
+                await db.execute(
+                    select(MlsControlEvent).where(
+                        MlsControlEvent.id == uuid.UUID(event_id)
+                    )
+                )
+            ).scalar_one()
+            assert control_row.payload == raw_control
+
+            outbox_row = (
+                await db.execute(
+                    select(OutboxEvent).where(
+                        OutboxEvent.aggregate_id == uuid.UUID(event_id),
+                        OutboxEvent.event_type == "mls.control.created",
+                    )
+                )
+            ).scalar_one()
+            assert "payload_b64" not in outbox_row.payload
+
+            membership = (
+                await db.execute(
+                    select(ConversationMember).where(
+                        ConversationMember.conversation_id
+                        == uuid.UUID(conversation_id),
+                        ConversationMember.user_id == recipient_id,
+                    )
+                )
+            ).scalar_one()
+            await db.delete(membership)
+            await db.commit()
+
+        pending = await recipient_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{recipient_device}/control-events"
+        )
+        assert pending.status_code == 200, pending.text
+        assert len(pending.json()) == 1
+        assert pending.json()[0]["id"] == event_id
+        assert base64.b64decode(pending.json()[0]["payload_b64"]) == raw_control
+
+        acked = await recipient_client.post(
+            f"/v1/e2ee/control-events/{event_id}/ack",
+            json={"device_id": str(recipient_device)},
+        )
+        assert acked.status_code == 204, acked.text
+
+        after_ack = await recipient_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{recipient_device}/control-events"
+        )
+        assert after_ack.status_code == 200, after_ack.text
+        assert after_ack.json() == []

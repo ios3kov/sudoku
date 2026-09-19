@@ -94,6 +94,7 @@ class Conversation(Base):
     direct_key: Mapped[str | None] = mapped_column(String(80), unique=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     next_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    next_crypto_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
     encryption_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -228,3 +229,84 @@ class MlsKeyPackage(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MlsDevice(Base):
+    __tablename__ = "mls_devices"
+    __table_args__ = (
+        UniqueConstraint("user_id", "device_id", name="uq_mls_device_user_device"),
+        UniqueConstraint("identity_public_key", name="uq_mls_device_identity_key"),
+        Index("ix_mls_devices_user_active", "user_id", "revoked_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    identity_public_key: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MlsControlEvent(Base):
+    __tablename__ = "mls_control_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "sender_user_id",
+            "sender_device_id",
+            "client_id",
+            name="uq_mls_control_sender_client",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            "sequence",
+            name="uq_mls_control_conversation_sequence",
+        ),
+        Index(
+            "ix_mls_control_conversation_sequence",
+            "conversation_id",
+            "sequence",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    sender_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    sender_device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class MlsControlRecipient(Base):
+    __tablename__ = "mls_control_recipients"
+    __table_args__ = (
+        Index(
+            "ix_mls_control_recipient_pending",
+            "user_id",
+            "device_id",
+            "acked_at",
+        ),
+    )
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("mls_control_events.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    acked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

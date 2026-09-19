@@ -41,6 +41,8 @@
 - `direct_key varchar(80) unique null`
 - `created_by uuid fk users`
 - `next_sequence bigint`
+- `next_crypto_sequence bigint`
+- `encryption_required boolean`
 - `created_at timestamptz`
 
 `direct_key` is a canonical pair key and direct-chat creation is additionally serialized with a PostgreSQL advisory transaction lock.
@@ -140,3 +142,52 @@ Message bodies are deliberately not stored in audit records.
 ## `login_attempts`
 
 Stores a SHA-256 email audit hash, success flag and timestamp; it does not store the submitted password.
+
+
+## `mls_devices`
+
+- `id uuid pk`
+- `user_id uuid fk users`
+- `device_id uuid`
+- `identity_public_key bytea(32) unique`
+- `created_at timestamptz`
+- `revoked_at timestamptz null`
+- unique `(user_id, device_id)`
+
+This is the durable MLS device identity registry. Private signing keys are client-only.
+
+## `mls_key_packages`
+
+- `id uuid pk`
+- `user_id uuid fk users`
+- `device_id uuid`
+- `package_ref bytea(32) unique`
+- `key_package bytea`
+- `created_at timestamptz`
+- `claimed_at timestamptz null`
+
+## `mls_control_events`
+
+- `id uuid pk`
+- `conversation_id uuid fk conversations`
+- `sender_user_id uuid fk users`
+- `sender_device_id uuid`
+- `client_id uuid`
+- `sequence bigint`
+- `kind varchar(16)` (`commit`, `welcome`)
+- `payload bytea`
+- `created_at timestamptz`
+- unique `(sender_user_id, sender_device_id, client_id)`
+- unique `(conversation_id, sequence)`
+
+The payload is opaque MLS wire data. The server stores and routes it but does not parse private MLS state.
+
+## `mls_control_recipients`
+
+- `event_id uuid fk mls_control_events`
+- `user_id uuid fk users`
+- `device_id uuid`
+- `acked_at timestamptz null`
+- primary key `(event_id, user_id, device_id)`
+
+Recipient rows are a creation-time delivery snapshot, so an already-issued removal commit is still retrievable after the corresponding server membership row is removed.
