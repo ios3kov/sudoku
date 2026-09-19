@@ -1,61 +1,104 @@
 name: ci
+
 on:
   push:
     branches: [main]
   pull_request:
-permissions:
-  contents: read
+
 jobs:
-  domain:
+  test:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - run: npm install
-      - run: npm run test:domain
-  web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - run: npm install
-      - run: npm --workspace @sudoku/domain run build
-      - run: npm --workspace @sudoku/web run typecheck
-      - run: npm --workspace @sudoku/web run build
-  api:
-    runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
-        image: postgres:17
+        image: postgres:17-alpine
         env:
-          POSTGRES_USER: sudoku
-          POSTGRES_PASSWORD: sudoku
           POSTGRES_DB: sudoku
-        ports: ["5432:5432"]
+          POSTGRES_USER: sudoku
+          POSTGRES_PASSWORD: sudoku-ci
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U sudoku -d sudoku"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
       redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
     env:
-      DATABASE_URL: postgresql+asyncpg://sudoku:sudoku@localhost:5432/sudoku
-      REDIS_URL: redis://localhost:6379/0
-      SECURE_COOKIES: "false"
-    defaults:
-      run:
-        working-directory: apps/api
+      DATABASE_URL: postgresql+asyncpg://sudoku:sudoku-ci@127.0.0.1:5432/sudoku
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PUBLIC_ORIGIN: https://sudoku.test
+      SESSION_COOKIE_NAME: sudoku_session
+      SESSION_TTL_DAYS: "30"
+      SECURE_COOKIES: "true"
+      S3_BUCKET: sudoku-assets
+      S3_REGION: us-east-1
+      S3_ENDPOINT_URL: http://127.0.0.1:9000
+      S3_PUBLIC_ENDPOINT_URL: http://127.0.0.1:9000
+      S3_ACCESS_KEY_ID: sudoku-ci
+      S3_SECRET_ACCESS_KEY: sudoku-ci-secret
+      WEB_PUSH_ALLOWED_HOSTS: push.apple.com,fcm.googleapis.com,push.services.mozilla.com
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
-        with: { python-version: "3.13" }
-      - run: pip install -r requirements.txt
-      - run: python -m compileall -q app tests migrations
-      - run: alembic upgrade head
-      - run: PYTHONPATH=. pytest -q tests/test_schema.py
-      - run: PYTHONPATH=. pytest -q tests/test_security.py tests/test_auth_integration.py
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install API + tests
+        run: python -m pip install -e "./apps/api[test]"
+
+      - name: Start S3 test service
+        run: |
+          docker run -d --name sudoku-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=sudoku-ci \
+            -e MINIO_ROOT_PASSWORD=sudoku-ci-secret \
+            minio/minio:RELEASE.2025-10-15T17-29-55Z \
+            server /data
+          python - <<'PY'
+          import time, boto3
+          s3 = boto3.client('s3', endpoint_url='http://127.0.0.1:9000', region_name='us-east-1', aws_access_key_id='sudoku-ci', aws_secret_access_key='sudoku-ci-secret')
+          for _ in range(60):
+              try:
+                  s3.list_buckets(); break
+              except Exception: time.sleep(1)
+          else: raise SystemExit('S3 test service did not start')
+          s3.create_bucket(Bucket='sudoku-assets')
+          PY
+
+      - name: Migrate database
+        working-directory: apps/api
+        run: alembic upgrade head
+
+      - name: API integration tests
+        env:
+          PYTHONPATH: apps/api
+        run: pytest -q tests/api
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install web dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Domain tests
+        run: npm run test:domain
+
+      - name: Web typecheck
+        run: npm --workspace @sudoku/web run typecheck
+
+      - name: Web production build
+        run: npm run build:web

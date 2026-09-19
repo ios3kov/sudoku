@@ -58,6 +58,8 @@ PATCH  /conversations/{conversation_id}                       # group owner
 POST   /conversations/{conversation_id}/members               # group owner
 PATCH  /conversations/{conversation_id}/members/{user_id}     # group owner role change
 DELETE /conversations/{conversation_id}/members/{user_id}     # owner remove / self leave
+PATCH  /conversations/{conversation_id}/preferences
+GET    /conversations/{conversation_id}/search?q=...&limit=30
 ```
 
 Create direct:
@@ -81,6 +83,8 @@ Create group:
 ```
 
 Groups are capped at 100 members. Roles are `owner` and `member`; the final owner cannot be demoted or removed. Direct-chat membership is not mutable through group endpoints.
+
+Conversation preferences are per-member. `is_pinned` changes only that user's ordering; `notifications_muted` suppresses server Web Push for that user/conversation while leaving durable messages and realtime delivery intact. Message search is membership-gated, rate-limited, text-only in the MVP, and excludes deleted messages.
 
 ## Messages
 

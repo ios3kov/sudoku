@@ -38,6 +38,7 @@ The data model will be encryption-version aware from the start. A proven protoco
 
 The shell contains a fully playable 9x9 puzzle with notes, conflict validation, persistence, reset, and completion state. A fake static Sudoku screen is explicitly rejected.
 
+
 ## ADR-009 — Invite issuance is administrative
 
 Only administrators may create/revoke invite codes. The raw token is returned once and only its digest is persisted. First-admin creation is a deliberate bootstrap operation, not an open registration path.
@@ -65,13 +66,3 @@ Group administration is controlled by `conversation_members.role`, not by global
 ## ADR-015 — Removed members receive a durable removal event
 
 Transactional outbox events may carry reserved server-only extra-recipient metadata. The dispatcher unions those recipients with current membership and strips the reserved field before fan-out. This lets a removed member learn that access was revoked without making Redis the durable source of truth.
-
-### ADR: synchronous privacy cover on background
-
-**Decision:** keep a neutral Sudoku cover mounted at all times and switch it on synchronously when the document is hidden.
-
-**Why:** waiting for React state/render after `visibilitychange` can expose the messenger in an app-switcher snapshot. A DOM attribute + pre-mounted cover removes that dependency.
-
-**Lock behavior:** the cover is immediate; the actual private mode is discarded after 30 seconds in background.
-
-**Limitation:** browser/PWA lifecycle callbacks are best-effort. This does not claim to prevent screenshots or OS-level capture while the app is foregrounded.

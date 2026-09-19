@@ -1,33 +1,202 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, ForeignKey, LargeBinary, String, func
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-class Base(DeclarativeBase): pass
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    pass
+
+
 class User(Base):
-    __tablename__="users"
-    id:Mapped[uuid.UUID]=mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
-    email:Mapped[str]=mapped_column(String(320),unique=True,index=True)
-    display_name:Mapped[str]=mapped_column(String(120))
-    password_hash:Mapped[str]=mapped_column(String(512))
-    is_admin:Mapped[bool]=mapped_column(Boolean,default=False)
-    active:Mapped[bool]=mapped_column(Boolean,default=True)
-    created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    sessions: Mapped[list[Session]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
 class Session(Base):
-    __tablename__="sessions"
-    id:Mapped[uuid.UUID]=mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
-    user_id:Mapped[uuid.UUID]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True)
-    token_hash:Mapped[bytes]=mapped_column(LargeBinary(32),unique=True,index=True)
-    device_name:Mapped[str]=mapped_column(String(160))
-    expires_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),index=True)
-    revoked_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
-    created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
+    __tablename__ = "sessions"
+    __table_args__ = (
+        Index("ix_sessions_user_active", "user_id", "revoked_at", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True, nullable=False)
+    device_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="sessions")
+
+
 class Invite(Base):
-    __tablename__="invites"
-    id:Mapped[uuid.UUID]=mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
-    token_hash:Mapped[bytes]=mapped_column(LargeBinary(32),unique=True,index=True)
-    email:Mapped[str|None]=mapped_column(String(320),nullable=True)
-    created_by:Mapped[uuid.UUID]=mapped_column(ForeignKey("users.id",ondelete="CASCADE"))
-    expires_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),index=True)
-    used_at:Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
+    __tablename__ = "invites"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    max_uses: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    uses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    __table_args__ = (Index("ix_audit_actor_created", "actor_user_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+    __table_args__ = (Index("ix_login_attempt_created", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    succeeded: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+from sqlalchemy.dialects.postgresql import JSONB
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        Index("ix_conversations_created", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(160))
+    direct_key: Mapped[str | None] = mapped_column(String(80), unique=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    next_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ConversationMember(Base):
+    __tablename__ = "conversation_members"
+    __table_args__ = (
+        Index("ix_conversation_members_user", "user_id", "conversation_id"),
+    )
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(24), nullable=False, default="member")
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_read_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notifications_muted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint("sender_id", "client_id", name="uq_messages_sender_client"),
+        UniqueConstraint("conversation_id", "sequence", name="uq_messages_conversation_sequence"),
+        Index("ix_messages_conversation_sequence_desc", "conversation_id", "sequence"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    sender_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    type: Mapped[str] = mapped_column(String(24), nullable=False, default="text")
+    body_text: Mapped[str | None] = mapped_column(Text)
+    body_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    encryption_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reply_to: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MessageReaction(Base):
+    __tablename__ = "message_reactions"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    emoji: Mapped[str] = mapped_column(String(32), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_events"
+    __table_args__ = (
+        Index("ix_outbox_unpublished", "published_at", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    aggregate_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    aggregate_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"))
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Asset(Base):
+    __tablename__ = "assets"
+    __table_args__ = (
+        Index("ix_assets_owner_created", "owner_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(1024), unique=True, nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(160), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MessageAsset(Base):
+    __tablename__ = "message_assets"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), primary_key=True)
+    asset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("assets.id", ondelete="RESTRICT"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+    __table_args__ = (
+        Index("ix_push_subscriptions_user", "user_id", "revoked_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
+    auth: Mapped[str] = mapped_column(Text, nullable=False)
+    device_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

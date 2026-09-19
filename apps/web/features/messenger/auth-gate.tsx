@@ -1,9 +1,157 @@
 "use client";
-import {FormEvent,useEffect,useState} from "react";
-export function AuthGate({onHide}:{onHide:()=>void}){const[checking,setChecking]=useState(true);const[ok,setOk]=useState(false);const[error,setError]=useState("");
-async function check(){try{const r=await fetch("/v1/me",{credentials:"include",cache:"no-store"});setOk(r.ok)}finally{setChecking(false)}}
-useEffect(()=>{void check()},[]);
-async function login(e:FormEvent<HTMLFormElement>){e.preventDefault();setError("");const fd=new FormData(e.currentTarget);const r=await fetch("/v1/auth/login",{method:"POST",credentials:"include",headers:{"content-type":"application/json"},body:JSON.stringify({email:fd.get("email"),password:fd.get("password"),device_name:"Web PWA"})});if(r.ok){setOk(true)}else setError("Sign in failed")}
-if(checking)return <main className="shell">Loading…</main>;
-if(ok)return <main className="shell"><section className="card"><div className="top"><h2>Messages</h2><button className="action" onClick={onHide}>Hide</button></div><p>Secure session active. Conversation UI is the next vertical slice.</p></section></main>;
-return <main className="shell"><form className="card auth" onSubmit={login}><div className="top"><h2>Sign in</h2><button type="button" className="action" onClick={onHide}>Hide</button></div><input name="email" type="email" autoComplete="username" required placeholder="Email"/><input name="password" type="password" autoComplete="current-password" required placeholder="Password"/>{error&&<p className="error">{error}</p>}<button className="action">Continue</button></form></main>}
+
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { MessengerShell } from "./messenger-shell";
+import type { CurrentUser } from "./types";
+
+type AuthView = "login" | "invite";
+
+export function AuthGate({ onHide }: { onHide: () => void }) {
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<AuthView>("login");
+  const [error, setError] = useState<string | null>(null);
+
+  const checkSession = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/v1/me", { credentials: "include", cache: "no-store" });
+      if (response.ok) {
+        setUser((await response.json()) as CurrentUser);
+      } else if (response.status === 401) {
+        setUser(null);
+      } else {
+        setError("Unable to verify session");
+      }
+    } catch {
+      setError("Network unavailable");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkSession();
+  }, [checkSession]);
+
+  if (loading) {
+    return (
+      <main className="page" aria-label="Private area">
+        <section className="messenger-lock"><p>Checking…</p><button type="button" onClick={onHide}>Return to Sudoku</button></section>
+      </main>
+    );
+  }
+
+  if (user) {
+    return <MessengerShell user={user} onHide={onHide} onLoggedOut={() => setUser(null)} />;
+  }
+
+  return (
+    <main className="page" aria-label="Private area locked">
+      <section className="messenger-lock auth-card">
+        <div className="private-header">
+          <div>
+            <h2>{view === "login" ? "Sign in" : "Join"}</h2>
+            <p>{view === "login" ? "Private access" : "Invite-only access"}</p>
+          </div>
+          <button className="text-button" type="button" onClick={onHide}>Hide</button>
+        </div>
+
+        {view === "login" ? (
+          <LoginForm onSuccess={setUser} onError={setError} />
+        ) : (
+          <InviteForm onSuccess={setUser} onError={setError} />
+        )}
+
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        <button className="secondary-button" type="button" onClick={() => { setError(null); setView(view === "login" ? "invite" : "login"); }}>
+          {view === "login" ? "Use an invite" : "I already have an account"}
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => void; onError: (message: string | null) => void }) {
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    onError(null);
+    const data = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/v1/auth/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: data.get("email"),
+          password: data.get("password"),
+          device_name: "Sudoku web app",
+        }),
+      });
+      if (!response.ok) {
+        onError(response.status === 429 ? "Too many attempts. Try later." : "Invalid email or password");
+        return;
+      }
+      onSuccess((await response.json()) as CurrentUser);
+    } catch {
+      onError("Network unavailable");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="auth-form" onSubmit={submit}>
+      <label>Email<input name="email" type="email" autoComplete="username" required /></label>
+      <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
+      <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
+    </form>
+  );
+}
+
+function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => void; onError: (message: string | null) => void }) {
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    onError(null);
+    const data = new FormData(event.currentTarget);
+    const token = String(data.get("invite") ?? "").trim();
+    try {
+      const response = await fetch(`/v1/invites/${encodeURIComponent(token)}/accept`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: data.get("email"),
+          display_name: data.get("display_name"),
+          password: data.get("password"),
+          device_name: "Sudoku web app",
+        }),
+      });
+      if (!response.ok) {
+        onError(response.status === 409 ? "Account already exists" : "Invite is invalid or expired");
+        return;
+      }
+      onSuccess((await response.json()) as CurrentUser);
+    } catch {
+      onError("Network unavailable");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="auth-form" onSubmit={submit}>
+      <label>Invite code<input name="invite" autoCapitalize="none" autoCorrect="off" required /></label>
+      <label>Name<input name="display_name" autoComplete="name" required maxLength={120} /></label>
+      <label>Email<input name="email" type="email" autoComplete="username" required /></label>
+      <label>Password<input name="password" type="password" autoComplete="new-password" minLength={12} required /></label>
+      <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Joining…" : "Join"}</button>
+    </form>
+  );
+}

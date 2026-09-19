@@ -52,6 +52,8 @@
 - `role varchar(24)`
 - `joined_at timestamptz`
 - `last_read_sequence bigint`
+- `is_pinned boolean`
+- `notifications_muted boolean`
 - primary key `(conversation_id, user_id)`
 
 Read state uses a monotonic per-conversation member watermark; there is no per-message receipt table in the MVP.

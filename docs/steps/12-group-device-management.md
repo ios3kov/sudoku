@@ -25,7 +25,7 @@ Close two MVP gaps that make a private messenger operationally incomplete: lifec
 
 - Mobile Devices panel lists active sessions.
 - Other sessions can be revoked remotely.
-- Revoking the current session clears the session cookie immediately and returns to Sudoku.
+- Revoking the current session clears the session cookie immediately and returns the UI to Sudoku.
 - Session listing/revocation are rate-limited.
 
 ## Permission model

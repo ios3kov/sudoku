@@ -1,9 +1,54 @@
-import hashlib,secrets
+import hashlib
+import secrets
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+
 from argon2 import PasswordHasher
-ph=PasswordHasher()
-def hash_password(value:str)->str:return ph.hash(value)
-def verify_password(digest:str,value:str)->bool:
-    try:return ph.verify(digest,value)
-    except Exception:return False
-def new_token()->str:return secrets.token_urlsafe(32)
-def token_digest(token:str)->bytes:return hashlib.sha256(token.encode()).digest()
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
+
+_PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
+
+
+@dataclass(frozen=True)
+class SessionSecret:
+    raw: str
+    digest: bytes
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().casefold()
+
+
+def hash_password(password: str) -> str:
+    if len(password) < 12:
+        raise ValueError("Password must be at least 12 characters")
+    return _PASSWORD_HASHER.hash(password)
+
+
+def verify_password(password_hash: str, password: str) -> bool:
+    try:
+        return _PASSWORD_HASHER.verify(password_hash, password)
+    except (VerifyMismatchError, InvalidHashError):
+        return False
+
+
+def generate_session_secret() -> SessionSecret:
+    raw = secrets.token_urlsafe(48)
+    return SessionSecret(raw=raw, digest=hash_secret(raw))
+
+
+def generate_invite_secret() -> SessionSecret:
+    raw = secrets.token_urlsafe(32)
+    return SessionSecret(raw=raw, digest=hash_secret(raw))
+
+
+def hash_secret(raw: str) -> bytes:
+    return hashlib.sha256(raw.encode("utf-8")).digest()
+
+
+def email_audit_hash(email: str) -> bytes:
+    return hashlib.sha256(normalize_email(email).encode("utf-8")).digest()
+
+
+def session_expiry(ttl_days: int) -> datetime:
+    return datetime.now(UTC) + timedelta(days=ttl_days)
