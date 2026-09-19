@@ -665,6 +665,14 @@ async def edit_message(
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found")
     await require_membership(db, message.conversation_id, auth.user.id)
+    conversation = (
+        await db.execute(select(Conversation).where(Conversation.id == message.conversation_id))
+    ).scalar_one()
+    if conversation.encryption_required:
+        raise HTTPException(
+            status_code=409,
+            detail="E2EE message edits must be sent as encrypted application events",
+        )
     if message.sender_id != auth.user.id or message.deleted_at is not None:
         raise HTTPException(status_code=403, detail="Message cannot be edited")
     message.body_text = payload.body
@@ -687,6 +695,14 @@ async def delete_message(
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found")
     await require_membership(db, message.conversation_id, auth.user.id)
+    conversation = (
+        await db.execute(select(Conversation).where(Conversation.id == message.conversation_id))
+    ).scalar_one()
+    if conversation.encryption_required:
+        raise HTTPException(
+            status_code=409,
+            detail="E2EE message deletes must be sent as encrypted application events",
+        )
     if message.sender_id != auth.user.id:
         raise HTTPException(status_code=403, detail="Message cannot be deleted")
     if message.deleted_at is None:
@@ -710,6 +726,14 @@ async def toggle_reaction(
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found")
     await require_membership(db, message.conversation_id, auth.user.id)
+    conversation = (
+        await db.execute(select(Conversation).where(Conversation.id == message.conversation_id))
+    ).scalar_one()
+    if conversation.encryption_required:
+        raise HTTPException(
+            status_code=409,
+            detail="E2EE reactions must be sent as encrypted application events",
+        )
     reaction = (
         await db.execute(
             select(MessageReaction).where(

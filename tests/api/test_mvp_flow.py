@@ -683,3 +683,109 @@ async def test_mls_control_event_snapshot_survives_membership_removal_and_ack() 
         )
         assert after_ack.status_code == 200, after_ack.text
         assert after_ack.json() == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_e2ee_legacy_message_mutations_fail_closed() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    email = f"e2ee-events-{suffix}@example.com"
+    peer_email = f"e2ee-events-peer-{suffix}@example.com"
+    password = "correct horse battery staple"
+
+    async with SessionFactory() as db:
+        user = User(
+            email=email,
+            display_name="E2EE Events",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        peer = User(
+            email=peer_email,
+            display_name="E2EE Events Peer",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add_all([user, peer])
+        await db.commit()
+        await db.refresh(peer)
+        peer_id = peer.id
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as client:
+        assert (
+            await client.post(
+                "/v1/auth/login",
+                json={
+                    "email": email,
+                    "password": password,
+                    "device_name": "e2ee-events",
+                },
+            )
+        ).status_code == 200
+
+        created = await client.post(
+            "/v1/conversations",
+            json={
+                "type": "direct",
+                "title": None,
+                "member_ids": [str(peer_id)],
+                "encryption_required": True,
+            },
+        )
+        assert created.status_code == 201, created.text
+        conversation_id = created.json()["id"]
+
+        envelope = {
+            "version": 1,
+            "protocol": "mls-rfc9420",
+            "kind": "application",
+            "ciphertext": "AAECAwQ=",
+        }
+        created_message = await client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "type": "text",
+                "body": None,
+                "envelope": envelope,
+                "asset_ids": [],
+            },
+        )
+        assert created_message.status_code == 201, created_message.text
+        message_id = created_message.json()["id"]
+
+        edited = await client.patch(
+            f"/v1/messages/{message_id}",
+            json={"body": "plaintext edit must not be stored"},
+        )
+        reacted = await client.post(
+            f"/v1/messages/{message_id}/reactions",
+            json={"emoji": "❤️"},
+        )
+        deleted = await client.delete(f"/v1/messages/{message_id}")
+
+        assert edited.status_code == 409
+        assert reacted.status_code == 409
+        assert deleted.status_code == 409
+
+    async with SessionFactory() as db:
+        from app.models import Message, MessageReaction
+
+        row = (
+            await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
+        ).scalar_one()
+        assert row.body_text is None
+        assert row.envelope == envelope
+        assert row.deleted_at is None
+        reactions = (
+            await db.execute(
+                select(MessageReaction).where(MessageReaction.message_id == row.id)
+            )
+        ).scalars().all()
+        assert reactions == []

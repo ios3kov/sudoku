@@ -411,6 +411,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   async encrypt(input: OutboundPlaintext): Promise<E2eeEnvelope> {
     const payload = utf8(JSON.stringify({
       version: 1,
+      kind: "message",
       messageType: input.messageType,
       body: input.body,
       replyTo: input.replyTo,
@@ -428,6 +429,48 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     });
   }
 
+  async encryptEdit(
+    conversationId: string,
+    targetMessageId: string,
+    body: string,
+  ): Promise<E2eeEnvelope> {
+    if (!targetMessageId || !body) throw new Error("Invalid encrypted edit event");
+    return this.encryptApplicationEvent(conversationId, {
+      version: 1,
+      kind: "edit",
+      targetMessageId,
+      body,
+    });
+  }
+
+  async encryptReaction(
+    conversationId: string,
+    targetMessageId: string,
+    emoji: string,
+    active: boolean,
+  ): Promise<E2eeEnvelope> {
+    if (!targetMessageId || !emoji) throw new Error("Invalid encrypted reaction event");
+    return this.encryptApplicationEvent(conversationId, {
+      version: 1,
+      kind: "reaction",
+      targetMessageId,
+      emoji,
+      active,
+    });
+  }
+
+  async encryptDelete(
+    conversationId: string,
+    targetMessageId: string,
+  ): Promise<E2eeEnvelope> {
+    if (!targetMessageId) throw new Error("Invalid encrypted delete event");
+    return this.encryptApplicationEvent(conversationId, {
+      version: 1,
+      kind: "delete",
+      targetMessageId,
+    });
+  }
+
   async decrypt(
     conversationId: string,
     envelope: E2eeEnvelope,
@@ -441,37 +484,83 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         utf8(conversationId),
         envelopeBytes(envelope),
       );
-      const decoded = JSON.parse(utf8String(plaintext)) as {
-        version?: unknown;
-        messageType?: unknown;
-        body?: unknown;
-        replyTo?: unknown;
-        assetIds?: unknown;
-        attachments?: unknown;
-      };
-
-      if (
-        decoded.version !== 1
-        || !["text", "image", "file", "voice"].includes(String(decoded.messageType))
-        || !(typeof decoded.body === "string" || decoded.body === null)
-        || !(typeof decoded.replyTo === "string" || decoded.replyTo === null)
-        || !Array.isArray(decoded.assetIds)
-        || decoded.assetIds.some((item) => typeof item !== "string")
-        || !Array.isArray(decoded.attachments)
-        || decoded.attachments.some((item) => !isEncryptedAttachmentMetadata(item))
-      ) {
+      const decoded = JSON.parse(utf8String(plaintext)) as Record<string, unknown>;
+      if (decoded.version !== 1 || typeof decoded.kind !== "string") {
         throw new Error("Invalid decrypted MLS application payload");
       }
 
-      return {
-        body: decoded.body,
-        metadata: {
-          messageType: decoded.messageType,
-          replyTo: decoded.replyTo,
-          assetIds: decoded.assetIds,
-          attachments: decoded.attachments,
-        },
-      };
+      if (decoded.kind === "message") {
+        if (
+          !["text", "image", "file", "voice"].includes(String(decoded.messageType))
+          || !(typeof decoded.body === "string" || decoded.body === null)
+          || !(typeof decoded.replyTo === "string" || decoded.replyTo === null)
+          || !Array.isArray(decoded.assetIds)
+          || decoded.assetIds.some((item) => typeof item !== "string")
+          || !Array.isArray(decoded.attachments)
+          || decoded.attachments.some((item) => !isEncryptedAttachmentMetadata(item))
+        ) {
+          throw new Error("Invalid decrypted MLS message event");
+        }
+        return {
+          body: decoded.body,
+          event: {
+            kind: "message",
+            messageType: decoded.messageType as "text" | "image" | "file" | "voice",
+            body: decoded.body,
+            replyTo: decoded.replyTo,
+            assetIds: decoded.assetIds as string[],
+            attachments: decoded.attachments as EncryptedAttachmentMetadata[],
+          },
+        };
+      }
+
+      if (decoded.kind === "edit") {
+        if (typeof decoded.targetMessageId !== "string" || typeof decoded.body !== "string") {
+          throw new Error("Invalid decrypted MLS edit event");
+        }
+        return {
+          body: null,
+          event: {
+            kind: "edit",
+            targetMessageId: decoded.targetMessageId,
+            body: decoded.body,
+          },
+        };
+      }
+
+      if (decoded.kind === "reaction") {
+        if (
+          typeof decoded.targetMessageId !== "string"
+          || typeof decoded.emoji !== "string"
+          || typeof decoded.active !== "boolean"
+        ) {
+          throw new Error("Invalid decrypted MLS reaction event");
+        }
+        return {
+          body: null,
+          event: {
+            kind: "reaction",
+            targetMessageId: decoded.targetMessageId,
+            emoji: decoded.emoji,
+            active: decoded.active,
+          },
+        };
+      }
+
+      if (decoded.kind === "delete") {
+        if (typeof decoded.targetMessageId !== "string") {
+          throw new Error("Invalid decrypted MLS delete event");
+        }
+        return {
+          body: null,
+          event: {
+            kind: "delete",
+            targetMessageId: decoded.targetMessageId,
+          },
+        };
+      }
+
+      throw new Error("Unsupported decrypted MLS application event");
     });
   }
 
@@ -633,6 +722,20 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
   private peerPinKey(userId: string, deviceId: string): string {
     return userId + ":" + deviceId;
+  }
+
+  private async encryptApplicationEvent(
+    conversationId: string,
+    payload: Record<string, unknown>,
+  ): Promise<E2eeEnvelope> {
+    return this.mutate((provider, identity) => {
+      const ciphertext = provider.encryptApplication(
+        identity,
+        utf8(conversationId),
+        utf8(JSON.stringify(payload)),
+      );
+      return makeEnvelope(ciphertext, "application");
+    });
   }
 
   private async mutate<T>(

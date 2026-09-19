@@ -14,9 +14,22 @@ export interface OutboundPlaintext {
   attachments?: EncryptedAttachmentMetadata[];
 }
 
+export type DecryptedApplicationEvent =
+  | {
+      kind: "message";
+      messageType: "text" | "image" | "file" | "voice";
+      body: string | null;
+      replyTo: string | null;
+      assetIds: string[];
+      attachments: EncryptedAttachmentMetadata[];
+    }
+  | { kind: "edit"; targetMessageId: string; body: string }
+  | { kind: "reaction"; targetMessageId: string; emoji: string; active: boolean }
+  | { kind: "delete"; targetMessageId: string };
+
 export interface DecryptedMessage {
   body: string | null;
-  metadata?: Record<string, unknown>;
+  event: DecryptedApplicationEvent;
 }
 
 export interface MlsMembershipChange {
@@ -51,6 +64,24 @@ export interface ProtocolAdapter {
 
   encrypt(input: OutboundPlaintext): Promise<E2eeEnvelope>;
 
+  encryptEdit(
+    conversationId: string,
+    targetMessageId: string,
+    body: string,
+  ): Promise<E2eeEnvelope>;
+
+  encryptReaction(
+    conversationId: string,
+    targetMessageId: string,
+    emoji: string,
+    active: boolean,
+  ): Promise<E2eeEnvelope>;
+
+  encryptDelete(
+    conversationId: string,
+    targetMessageId: string,
+  ): Promise<E2eeEnvelope>;
+
   decrypt(
     conversationId: string,
     envelope: E2eeEnvelope,
@@ -77,5 +108,8 @@ export const unavailableProtocolAdapter: ProtocolAdapter = {
   addMemberDurably: unavailable,
   removeMemberDurably: unavailable,
   encrypt: unavailable,
+  encryptEdit: unavailable,
+  encryptReaction: unavailable,
+  encryptDelete: unavailable,
   decrypt: unavailable,
 };
