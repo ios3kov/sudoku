@@ -227,6 +227,7 @@ async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() ->
         assert (await client.post("/v1/auth/login",json={"email":email,"password":password,"device_name":"e2ee-test"})).status_code==200
         created=await client.post("/v1/conversations",json={"type":"direct","title":None,"member_ids":[str(peer_id)],"encryption_required":True})
         assert created.status_code==201,created.text
+        assert created.json()["encryption_required"] is True
         cid=created.json()["id"]
         plaintext=await client.post(f"/v1/conversations/{cid}/messages",json={"client_id":str(uuid.uuid4()),"type":"text","body":"secret plaintext","asset_ids":[]})
         assert plaintext.status_code==422

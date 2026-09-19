@@ -226,6 +226,11 @@ async def create_conversation(
         await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:direct_key, 0))"), {"direct_key": direct_key})
         existing = (await db.execute(select(Conversation).where(Conversation.direct_key == direct_key))).scalar_one_or_none()
         if existing is not None:
+            if existing.encryption_required != payload.encryption_required:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Existing direct conversation encryption mode does not match request",
+                )
             membership = await require_membership(db, existing.id, auth.user.id)
             return await conversation_response(db, existing, membership)
 
@@ -235,6 +240,7 @@ async def create_conversation(
         direct_key=direct_key,
         created_by=auth.user.id,
         next_sequence=1,
+        encryption_required=payload.encryption_required,
     )
     db.add(conversation)
     await db.flush()
