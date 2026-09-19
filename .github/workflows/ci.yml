@@ -12,5 +12,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: npm install --workspace @sudoku/domain --include-workspace-root
+      - run: npm install
       - run: npm run test:domain
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+      - run: npm --workspace @sudoku/web run typecheck
+      - run: npm --workspace @sudoku/web run build

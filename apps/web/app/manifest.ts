@@ -1,0 +1,1 @@
+import type {MetadataRoute} from "next"; export default function manifest():MetadataRoute.Manifest{return{name:"Sudoku",short_name:"Sudoku",description:"Sudoku puzzle",start_url:"/",scope:"/",display:"standalone",background_color:"#f7f5ef",theme_color:"#f7f5ef",orientation:"portrait-primary"}}
