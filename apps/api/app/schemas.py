@@ -88,6 +88,7 @@ class ConversationResponse(BaseModel):
     latest_sequence: int
     is_pinned: bool
     notifications_muted: bool
+    encryption_required: bool
     members: list[ConversationMemberResponse]
 
 
@@ -143,6 +144,7 @@ class MessageResponse(BaseModel):
     sequence: int
     type: str
     body: str | None
+    envelope: dict | None = None
     reply_to: uuid.UUID | None
     created_at: datetime
     edited_at: datetime | None

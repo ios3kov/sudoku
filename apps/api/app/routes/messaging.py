@@ -491,6 +491,17 @@ async def search_messages(
     term = q.strip()
     if len(term) < 2:
         raise HTTPException(status_code=422, detail="Search query is too short")
+    conversation = (
+        await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    ).scalar_one_or_none()
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.encryption_required:
+        raise HTTPException(
+            status_code=409,
+            detail="Server-side content search is unavailable for E2EE conversations",
+        )
+
     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     messages = (
         await db.execute(
@@ -551,7 +562,7 @@ async def create_message(
             raise HTTPException(status_code=422, detail="E2EE conversation requires ciphertext envelope and forbids plaintext body")
     elif payload.envelope is not None:
         raise HTTPException(status_code=422, detail="Ciphertext envelope requires an E2EE conversation")
-    if payload.type == "text" and not body:
+    if payload.type == "text" and not body and not conversation_for_policy.encryption_required:
         raise HTTPException(status_code=422, detail="Text message body is required")
     if payload.type != "text" and not payload.asset_ids:
         raise HTTPException(status_code=422, detail="Attachment message requires at least one asset")
@@ -611,8 +622,9 @@ async def create_message(
         client_id=payload.client_id,
         sequence=sequence,
         type=payload.type,
-        body_text=body,
-        encryption_version=0,
+        body_text=None if conversation.encryption_required else body,
+        envelope=payload.envelope if conversation.encryption_required else None,
+        encryption_version=1 if conversation.encryption_required else 0,
         reply_to=payload.reply_to,
     )
     db.add(message)
