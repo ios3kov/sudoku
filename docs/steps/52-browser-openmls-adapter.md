@@ -1,62 +1,47 @@
-# Step 52 — Concrete browser OpenMLS adapter and crash-safe ACK
+# Step 52 — Crash-safe browser OpenMLS adapter
 
 ## Goal
-Connect the generated OpenMLS WASM runtime to the web application's durable local state and MLS delivery-service API without enabling the production composer yet.
+Connect the generated OpenMLS WASM runtime to the real browser transport/state layer without enabling plaintext fallback.
 
-## Initialization
-The adapter is scoped to one authenticated application user/device id.
-
-On first use it:
-1. loads the pinned OpenMLS WASM runtime;
-2. creates the OpenMLS provider and persistent device identity;
-3. stores one encrypted local state bundle in IndexedDB;
-4. registers only the public MLS identity key with the server.
-
-On later use it restores both provider state and the public identity handle from the encrypted local state bundle.
-
-## Local state
-One AES-GCM protected IndexedDB value contains:
-- opaque OpenMLS provider state;
-- public credential bytes;
-- public identity key;
-- IDs of control events that were processed locally but whose ACK may still need retry.
-
-Private signer and KeyPackage private material remain inside the opaque OpenMLS provider state.
-
-## Serialization and crash safety
-All OpenMLS mutations are serialized through a per-adapter operation queue.
-
-For a received Commit/Welcome:
-1. apply the OpenMLS mutation;
-2. add the event id to local pending-ACK state;
-3. export OpenMLS state;
-4. durably encrypt/store the combined state in IndexedDB;
-5. ACK the server event;
-6. remove the pending-ACK marker and persist again.
-
-If the app crashes between steps 4 and 5, restart sends the ACK before fetching more control events and does not apply the MLS message twice.
+## Existing crash-safe foundation reviewed
+The current adapter already provides:
+- encrypted IndexedDB persistence through BrowserProtocolStateStore;
+- persistent device identity + device registration;
+- durable KeyPackage generation/publication;
+- two-phase membership transitions;
+- atomic Commit+Welcome control batches;
+- pending transition retry across reload;
+- ACK only after successful OpenMLS mutation + local encrypted persistence;
+- rollback to the previous provider snapshot when local persistence fails;
+- serialization of application traffic behind a pending membership transition.
 
 ## Application messages
-The adapter encrypts a small versioned JSON application payload containing message body/type/reply/asset identifiers. The whole payload is inside MLS ciphertext.
+The missing ProtocolAdapter methods are now implemented.
 
-Encrypt and decrypt both persist provider state after success because MLS sender/receiver ratchets advance.
+`encrypt()` serializes the complete private application payload inside MLS:
+- message type;
+- body;
+- reply target;
+- asset ids.
 
-## KeyPackages and groups
-The adapter can:
-- create and publish KeyPackages;
-- create an MLS group using the conversation id as group id;
-- add a member from a claimed KeyPackage;
-- join from Welcome;
-- process Commit messages.
+The server receives only the serialized MLS application ciphertext envelope.
 
-## Server transport
-Control-event payload bytes are base64 only at the HTTP boundary. Server realtime notification wakes the browser; the adapter fetches durable control events and ACKs only after local state persistence.
+`decrypt()`:
+1. requires an `application` MLS envelope;
+2. processes it through OpenMLS;
+3. validates the decrypted payload schema;
+4. persists the advanced receive-ratchet state;
+5. rolls back the in-memory provider if persistence or payload validation fails.
 
-## Production gate
-This adapter is compiled and usable but is not yet wired to the visible production messenger composer. Identity pinning/verification, encrypted attachments, and UI migration remain blockers before `ui_ready=true`.
+This is important because decrypting an MLS PrivateMessage advances receiver ratchet state and must be durable before the operation is considered successful.
 
-## First generated-typing CI finding
-The wasm-bindgen `DeviceIdentity` export intentionally has no public JavaScript constructor; it is created through `Provider.createDeviceIdentity()` or `DeviceIdentity.fromPublic()`. The adapter now derives its TypeScript identity type from `ReturnType<Provider["createDeviceIdentity"]>` instead of assuming a constructible class.
+## No plaintext fallback
+The concrete adapter still fails closed if the WASM runtime/capabilities/state cannot load. The legacy UI is not yet switched to production E2EE, and `ui_ready` remains false.
 
-## Next
-Step 53: local identity pinning + human-verifiable fingerprint/QR data and explicit identity-change blocking, so a malicious/compromised delivery service cannot silently replace a peer device identity.
+## Remaining production gates
+Before UI activation:
+- identity pinning / safety-number verification independent of the server;
+- encrypted attachments and encrypted edit/reaction events;
+- end-to-end browser integration tests for reload/network failure/control-event retry;
+- switch conversation creation and composer/history rendering to the concrete adapter;
+- final security review and mobile/PWA smoke tests.

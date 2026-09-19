@@ -337,6 +337,68 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     });
   }
 
+  async encrypt(input: OutboundPlaintext): Promise<E2eeEnvelope> {
+    const payload = utf8(JSON.stringify({
+      version: 1,
+      messageType: input.messageType,
+      body: input.body,
+      replyTo: input.replyTo,
+      assetIds: input.assetIds,
+    }));
+
+    return this.mutate((provider, identity) => {
+      const ciphertext = provider.encryptApplication(
+        identity,
+        utf8(input.conversationId),
+        payload,
+      );
+      return makeEnvelope(ciphertext, "application");
+    });
+  }
+
+  async decrypt(
+    conversationId: string,
+    envelope: E2eeEnvelope,
+  ): Promise<DecryptedMessage> {
+    if (envelope.kind !== "application") {
+      throw new Error("Expected an MLS application envelope");
+    }
+
+    return this.mutate((provider) => {
+      const plaintext = provider.decryptApplication(
+        utf8(conversationId),
+        envelopeBytes(envelope),
+      );
+      const decoded = JSON.parse(utf8String(plaintext)) as {
+        version?: unknown;
+        messageType?: unknown;
+        body?: unknown;
+        replyTo?: unknown;
+        assetIds?: unknown;
+      };
+
+      if (
+        decoded.version !== 1
+        || !["text", "image", "file", "voice"].includes(String(decoded.messageType))
+        || !(typeof decoded.body === "string" || decoded.body === null)
+        || !(typeof decoded.replyTo === "string" || decoded.replyTo === null)
+        || !Array.isArray(decoded.assetIds)
+        || decoded.assetIds.some((item) => typeof item !== "string")
+      ) {
+        throw new Error("Invalid decrypted MLS application payload");
+      }
+
+      return {
+        body: decoded.body,
+        metadata: {
+          messageType: decoded.messageType,
+          replyTo: decoded.replyTo,
+          assetIds: decoded.assetIds,
+        },
+      };
+    });
+  }
+
   async syncControlEvents(conversationId: string): Promise<number> {
     return this.enqueue(async () => {
       this.assertReady();
