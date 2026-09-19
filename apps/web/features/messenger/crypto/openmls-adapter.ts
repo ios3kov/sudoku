@@ -7,6 +7,7 @@ import type {
   MlsControlBatchItem,
   MlsControlEvent,
   MlsControlRecipient,
+  Message,
 } from "../types";
 import { BrowserProtocolStateStore } from "./browser-state-store";
 import { loadOpenMlsWasm } from "./openmls-runtime";
@@ -26,6 +27,15 @@ interface PendingOutboundTransition {
   events: MlsControlBatchItem[];
 }
 
+interface PendingApplicationSend {
+  conversationId: string;
+  clientId: string;
+  envelope: E2eeEnvelope;
+  event: EncryptedEventRecord["event"];
+  serverType: "text" | "image" | "file" | "voice";
+  assetIds: string[];
+}
+
 interface PeerIdentityPin {
   userId: string;
   deviceId: string;
@@ -43,6 +53,7 @@ interface LocalMlsStateV1 {
   pendingOutboundTransition: PendingOutboundTransition | null;
   peerIdentityPins: Record<string, PeerIdentityPin>;
   eventJournal: Record<string, EncryptedEventRecord[]>;
+  pendingApplicationSends: PendingApplicationSend[];
 }
 
 export interface OpenMlsAdapterOptions {
@@ -152,6 +163,22 @@ function parsePendingOutbound(value: unknown): PendingOutboundTransition | null 
   return item as PendingOutboundTransition;
 }
 
+function isPendingApplicationSend(value: unknown): value is PendingApplicationSend {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<PendingApplicationSend>;
+  return (
+    typeof item.conversationId === "string"
+    && typeof item.clientId === "string"
+    && Boolean(item.envelope)
+    && typeof item.envelope === "object"
+    && Array.isArray(item.assetIds)
+    && item.assetIds.every((assetId) => typeof assetId === "string")
+    && ["text", "image", "file", "voice"].includes(String(item.serverType))
+    && Boolean(item.event)
+    && typeof item.event === "object"
+  );
+}
+
 function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
   const raw = JSON.parse(utf8String(bytes)) as Partial<LocalMlsStateV1>;
   if (
@@ -179,6 +206,10 @@ function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
       raw.eventJournal && typeof raw.eventJournal === "object"
         ? raw.eventJournal as Record<string, EncryptedEventRecord[]>
         : {},
+    pendingApplicationSends:
+      Array.isArray(raw.pendingApplicationSends)
+        ? raw.pendingApplicationSends.filter(isPendingApplicationSend)
+        : [],
   };
 }
 
@@ -254,6 +285,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         pendingOutboundTransition: null,
         peerIdentityPins: {},
         eventJournal: {},
+        pendingApplicationSends: [],
       };
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
     }
@@ -268,6 +300,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       bytesToBase64(identity.publicKeyBytes()),
     );
     await this.flushPendingOutboundTransition();
+    await this.flushPendingApplicationSends();
     await this.flushPendingAcks();
   }
 
@@ -306,6 +339,8 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   ): Promise<void> {
     await this.enqueue(async () => {
       this.assertReady();
+      await this.flushPendingApplicationSends();
+      this.assertNoPendingApplicationSends();
       this.assertNoPendingOutboundTransition();
 
       const snapshot = this.snapshotRuntime();
@@ -385,6 +420,8 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   ): Promise<void> {
     await this.enqueue(async () => {
       this.assertReady();
+      await this.flushPendingApplicationSends();
+      this.assertNoPendingApplicationSends();
       this.assertNoPendingOutboundTransition();
       if (commitRecipients.length === 0) {
         throw new Error("MLS removal transition has no delivery recipients");
@@ -488,6 +525,83 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     );
   }
 
+  async sendMessageDurably(
+    input: OutboundPlaintext,
+    clientId = crypto.randomUUID(),
+  ): Promise<Message> {
+    const event: EncryptedEventRecord["event"] = {
+      kind: "message",
+      messageType: input.messageType,
+      body: input.body,
+      replyTo: input.replyTo,
+      assetIds: [...input.assetIds],
+      attachments: (input.attachments ?? []).map((item) => ({ ...item })),
+    };
+    return this.queueApplicationSend(
+      input.conversationId,
+      clientId,
+      event,
+      input.messageType,
+      input.assetIds,
+    );
+  }
+
+  async sendEditDurably(
+    conversationId: string,
+    targetMessageId: string,
+    body: string,
+    clientId = crypto.randomUUID(),
+  ): Promise<Message> {
+    if (!targetMessageId || !body) throw new Error("Invalid encrypted edit event");
+    return this.queueApplicationSend(
+      conversationId,
+      clientId,
+      { kind: "edit", targetMessageId, body },
+      "text",
+      [],
+    );
+  }
+
+  async sendReactionDurably(
+    conversationId: string,
+    targetMessageId: string,
+    emoji: string,
+    active: boolean,
+    clientId = crypto.randomUUID(),
+  ): Promise<Message> {
+    if (!targetMessageId || !emoji) throw new Error("Invalid encrypted reaction event");
+    return this.queueApplicationSend(
+      conversationId,
+      clientId,
+      { kind: "reaction", targetMessageId, emoji, active },
+      "text",
+      [],
+    );
+  }
+
+  async sendDeleteDurably(
+    conversationId: string,
+    targetMessageId: string,
+    clientId = crypto.randomUUID(),
+  ): Promise<Message> {
+    if (!targetMessageId) throw new Error("Invalid encrypted delete event");
+    return this.queueApplicationSend(
+      conversationId,
+      clientId,
+      { kind: "delete", targetMessageId },
+      "text",
+      [],
+    );
+  }
+
+  pendingApplicationCount(conversationId?: string): number {
+    this.assertReady();
+    if (!conversationId) return this.localState!.pendingApplicationSends.length;
+    return this.localState!.pendingApplicationSends.filter(
+      (item) => item.conversationId === conversationId,
+    ).length;
+  }
+
   async decryptAndJournal(
     conversationId: string,
     record: EncryptedTransportRecord,
@@ -540,6 +654,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return this.enqueue(async () => {
       this.assertReady();
       await this.flushPendingOutboundTransition();
+      await this.flushPendingApplicationSends();
       await this.flushPendingAcks();
       const events = await messengerApi.mlsControlEvents(
         conversationId,
@@ -812,6 +927,103 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return { body: null, event };
   }
 
+  private async queueApplicationSend(
+    conversationId: string,
+    clientId: string,
+    event: EncryptedEventRecord["event"],
+    serverType: "text" | "image" | "file" | "voice",
+    assetIds: string[],
+  ): Promise<Message> {
+    return this.enqueue(async () => {
+      this.assertReady();
+      await this.flushPendingOutboundTransition();
+
+      const existing = this.localState!.pendingApplicationSends.find(
+        (item) => item.clientId === clientId,
+      );
+      if (!existing) {
+        const snapshot = this.snapshotRuntime();
+        try {
+          const ciphertext = this.provider!.encryptApplication(
+            this.identity!,
+            utf8(conversationId),
+            utf8(JSON.stringify({ version: 1, ...event })),
+          );
+          this.localState!.pendingApplicationSends.push({
+            conversationId,
+            clientId,
+            envelope: makeEnvelope(ciphertext, "application"),
+            event: this.cloneDomainEvent(event),
+            serverType,
+            assetIds: [...assetIds],
+          });
+          await this.persistCurrentState();
+        } catch (error) {
+          this.restoreRuntime(snapshot);
+          throw error;
+        }
+      } else if (existing.conversationId !== conversationId) {
+        throw new Error("Encrypted client id is already queued for another conversation");
+      }
+
+      const delivered = await this.flushPendingApplicationSends();
+      const result = delivered.get(clientId);
+      if (!result) {
+        throw new Error("Encrypted message remains queued for delivery");
+      }
+      return result;
+    });
+  }
+
+  private async flushPendingApplicationSends(): Promise<Map<string, Message>> {
+    this.assertReady();
+    if (this.localState!.pendingOutboundTransition) {
+      throw new Error("Cannot deliver application messages while MLS membership transition is pending");
+    }
+
+    const delivered = new Map<string, Message>();
+    for (const pending of [...this.localState!.pendingApplicationSends]) {
+      const response = await messengerApi.sendEncryptedMessage(
+        pending.conversationId,
+        pending.clientId,
+        pending.envelope,
+        pending.serverType,
+        pending.assetIds,
+        null,
+      );
+
+      const snapshot = this.snapshotRuntime();
+      try {
+        const journal = this.localState!.eventJournal[pending.conversationId] ?? [];
+        if (!journal.some((item) => item.eventId === response.id)) {
+          journal.push({
+            eventId: response.id,
+            senderId: response.sender_id,
+            sequence: response.sequence,
+            event: this.cloneDomainEvent(pending.event),
+          });
+          this.localState!.eventJournal[pending.conversationId] = journal;
+        }
+        this.localState!.pendingApplicationSends =
+          this.localState!.pendingApplicationSends.filter(
+            (item) => item.clientId !== pending.clientId,
+          );
+        await this.persistCurrentState();
+        delivered.set(pending.clientId, response);
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
+      }
+    }
+    return delivered;
+  }
+
+  private cloneDomainEvent(
+    event: EncryptedEventRecord["event"],
+  ): EncryptedEventRecord["event"] {
+    return JSON.parse(JSON.stringify(event)) as EncryptedEventRecord["event"];
+  }
+
   private async encryptApplicationEvent(
     conversationId: string,
     payload: Record<string, unknown>,
@@ -832,6 +1044,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return this.enqueue(async () => {
       this.assertReady();
       await this.flushPendingOutboundTransition();
+      await this.flushPendingApplicationSends();
       const snapshot = this.snapshotRuntime();
       try {
         const result = await operation(this.provider!, this.identity!);
@@ -924,6 +1137,12 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     if (!this.module) throw new Error("OpenMLS runtime is not initialized");
     this.provider = this.module.Provider.fromState(snapshot.providerState);
     this.localState = cloneLocalState(snapshot.localState);
+  }
+
+  private assertNoPendingApplicationSends(): void {
+    if (this.localState!.pendingApplicationSends.length > 0) {
+      throw new Error("Encrypted application messages are still pending delivery");
+    }
   }
 
   private assertNoPendingOutboundTransition(): void {
