@@ -22,7 +22,7 @@ class SameOriginMutationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
-            if origin is not None and origin != self.expected_origin:
+            if origin != self.expected_origin:
                 return JSONResponse({"detail": "Invalid origin"}, status_code=403)
         return await call_next(request)
 

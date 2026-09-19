@@ -138,6 +138,13 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
             )
             assert bad_origin.status_code == 403
 
+            missing_origin = await admin_client.post(
+                f"/v1/conversations/{conversation_id}/messages",
+                headers={"origin": ""},
+                json={"client_id": str(uuid.uuid4()), "type": "text", "body": "blocked", "asset_ids": []},
+            )
+            assert missing_origin.status_code == 403
+
             raw_file = b"private attachment\n"
             digest = hashlib.sha256(raw_file).hexdigest()
             intent = await admin_client.post(
