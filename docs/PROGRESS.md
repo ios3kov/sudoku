@@ -17,13 +17,14 @@ Through Step 65 the repository has verified:
 - offline removal catch-up for locally tracked MLS groups;
 - encrypted ConversationView text/mutation UI;
 - encrypted image/file/voice upload, download, local decryption and rendering;
-- server activation rejects missing Welcome coverage for any active participant MLS device.
+- server activation rejects missing Welcome coverage for any active participant MLS device;
+- GroupSettings uses crash-safe MLS membership-change ids for add/remove/finalize transitions.
 
 ## Current step
-Step 67 routes group membership add/remove through MLS before server membership changes.
+Step 68 reconciles revoked/new devices in existing MLS groups and exposes safety-number verification UI.
 
 ## Production blockers after Step 64
-- MLS-safe group membership changes and production API E2EE-only enforcement;
+- device/session rekey reconciliation and production API E2EE-only enforcement;
 - safety-number verification UI;
 - browser retry/reload end-to-end tests;
 - final security review;

@@ -64,3 +64,10 @@ For first-contact protection against a malicious delivery service, clients expos
 Secure activation is not trusted to client choreography alone. Before `e2ee_ready` can flip true, the server derives every active registered MLS device for current conversation members from live authenticated sessions. The creator's current device is the initial group leaf; every other active device must have a persisted MLS Welcome recipient record for this conversation.
 
 If any active device is missing Welcome coverage, activation returns 409 and no `conversation.created` event is emitted.
+
+
+## Crash-safe group membership UI
+
+The browser persists the server membership_change_id together with each pending outbound MLS transition. Commit/Welcome retry after reload therefore remains attached to the exact server-side transition.
+
+Encrypted GroupSettings uses prepare -> device-level OpenMLS transition -> finalize. Active devices of existing members are reconciled before the requested membership change so finalization never expects Commit coverage from a device that has not yet joined the local MLS group.
