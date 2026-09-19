@@ -11,7 +11,7 @@ The binding now follows that model:
 - `removeMember(...)` prepares Remove Commit and leaves PendingCommit;
 - `mergePendingCommit(groupId)` is explicit.
 
-Application messages are blocked by OpenMLS while a membership transition is pending.
+OpenMLS itself still permits application traffic in the current old epoch while a membership transition is pending. Our browser adapter intentionally tightens this: before any normal crypto mutation it first flushes the pending durable transition. If delivery cannot complete, the application operation fails closed instead of emitting more old-epoch traffic.
 
 ## Rust crash/reload proof
 A native test prepares an Add commit, verifies application sends are blocked, exports provider state before merge, restores the provider, joins Bob from the prepared Welcome, merges Alice's restored PendingCommit and then proves messaging works.

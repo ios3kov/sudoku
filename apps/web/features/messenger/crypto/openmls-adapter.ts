@@ -367,6 +367,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   async syncControlEvents(conversationId: string): Promise<number> {
     return this.enqueue(async () => {
       this.assertReady();
+      await this.flushPendingOutboundTransition();
       await this.flushPendingAcks();
       const events = await messengerApi.mlsControlEvents(
         conversationId,
@@ -410,6 +411,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   ): Promise<T> {
     return this.enqueue(async () => {
       this.assertReady();
+      await this.flushPendingOutboundTransition();
       const result = await operation(this.provider!, this.identity!);
       await this.persistCurrentState();
       return result;
