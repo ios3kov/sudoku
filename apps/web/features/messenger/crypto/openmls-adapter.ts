@@ -916,11 +916,17 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     event: EncryptedEventRecord["event"],
   ): DecryptedMessage {
     if (event.kind === "message") {
+      const attachments = event.attachments.map((item) => {
+        if (!isEncryptedAttachmentMetadata(item)) {
+          throw new Error("Invalid journaled encrypted attachment metadata");
+        }
+        return item;
+      });
       return {
         body: event.body,
         event: {
           ...event,
-          attachments: event.attachments as EncryptedAttachmentMetadata[],
+          attachments,
         },
       };
     }
