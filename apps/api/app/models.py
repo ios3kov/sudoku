@@ -93,7 +93,8 @@ class Conversation(Base):
     title: Mapped[str | None] = mapped_column(String(160))
     direct_key: Mapped[str | None] = mapped_column(String(80), unique=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    next_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)\n    encryption_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    next_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    encryption_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

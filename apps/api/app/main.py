@@ -13,7 +13,8 @@ from .routes.auth import router as auth_router
 from .routes.messaging import router as messaging_router
 from .routes.assets import router as assets_router
 from .routes.push import router as push_router
-from .realtime import router as realtime_router\nfrom .e2ee import router as e2ee_router
+from .realtime import router as realtime_router
+from .e2ee import router as e2ee_router
 from .schemas import HealthResponse, ReadinessResponse
 from .storage import s3_client
 
@@ -29,7 +30,8 @@ app.include_router(auth_router)
 app.include_router(messaging_router)
 app.include_router(assets_router)
 app.include_router(push_router)
-app.include_router(realtime_router)\napp.include_router(e2ee_router)
+app.include_router(realtime_router)
+app.include_router(e2ee_router)
 FastAPIInstrumentor.instrument_app(app, excluded_urls="/v1/health")
 
 

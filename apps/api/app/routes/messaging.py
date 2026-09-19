@@ -75,7 +75,8 @@ async def serialize_message(db: AsyncSession, message: Message) -> dict:
         "client_id": str(message.client_id),
         "sequence": message.sequence,
         "type": message.type,
-        "body": None if message.deleted_at else message.body_text,\n        "envelope": None if message.deleted_at else message.envelope,
+        "body": None if message.deleted_at else message.body_text,
+        "envelope": None if message.deleted_at else message.envelope,
         "reply_to": str(message.reply_to) if message.reply_to else None,
         "created_at": message.created_at.isoformat(),
         "edited_at": message.edited_at.isoformat() if message.edited_at else None,
@@ -122,7 +123,8 @@ async def conversation_response(
         last_read_sequence=membership.last_read_sequence,
         latest_sequence=max(0, conversation.next_sequence - 1),
         is_pinned=membership.is_pinned,
-        notifications_muted=membership.notifications_muted,\n        encryption_required=conversation.encryption_required,
+        notifications_muted=membership.notifications_muted,
+        encryption_required=conversation.encryption_required,
         members=await conversation_members_response(db, conversation.id),
     )
 
@@ -534,7 +536,15 @@ async def create_message(
 ):
     await enforce_user_rate_limit(auth.user.id, "message-create", 120, 60)
     await require_membership(db, conversation_id, auth.user.id)
-    body = payload.body.strip() if payload.body is not None else None\n    conversation_for_policy = (await db.execute(select(Conversation).where(Conversation.id == conversation_id))).scalar_one_or_none()\n    if conversation_for_policy is None:\n        raise HTTPException(status_code=404, detail="Conversation not found")\n    if conversation_for_policy.encryption_required:\n        if body is not None or payload.envelope is None:\n            raise HTTPException(status_code=422, detail="E2EE conversation requires ciphertext envelope and forbids plaintext body")\n    elif payload.envelope is not None:\n        raise HTTPException(status_code=422, detail="Ciphertext envelope requires an E2EE conversation")
+    body = payload.body.strip() if payload.body is not None else None
+    conversation_for_policy = (await db.execute(select(Conversation).where(Conversation.id == conversation_id))).scalar_one_or_none()
+    if conversation_for_policy is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_for_policy.encryption_required:
+        if body is not None or payload.envelope is None:
+            raise HTTPException(status_code=422, detail="E2EE conversation requires ciphertext envelope and forbids plaintext body")
+    elif payload.envelope is not None:
+        raise HTTPException(status_code=422, detail="Ciphertext envelope requires an E2EE conversation")
     if payload.type == "text" and not body:
         raise HTTPException(status_code=422, detail="Text message body is required")
     if payload.type != "text" and not payload.asset_ids:

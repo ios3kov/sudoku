@@ -4,24 +4,21 @@
 Make the API capable of ciphertext-only conversations before client cryptography is introduced.
 
 ## Implemented
-- Migration `0006_e2ee_boundary`.
-- `conversations.encryption_required`.
-- Versioned JSON ciphertext envelope on messages.
-- Public per-device identity/signed-prekey/one-time-prekey registry; private keys are never accepted.
-- E2EE message creation rejects plaintext `body` and requires an envelope.
-- Legacy conversations reject an E2EE envelope.
-- Server-side content search returns 409 for E2EE conversations.
-- Device key bundles can be revoked.
+Migration 0006, E2EE conversation policy, ciphertext envelope, public device key registry and negative plaintext/search invariants.
 
-## First CI finding
-The initial commit contained a generated-source defect: an automated string patch inserted a literal `\\n` into `models.py`, so Python failed to parse before Alembic could run. The E2EE migration itself had not executed.
+## CI findings
+The first generated patch inserted literal backslash-n sequences into multiple Python files. The original workflow had no syntax compilation stage, so the first failure appeared while Alembic imported models. After adding `compileall`, the guardrail correctly identified all remaining affected files: models, main, schemas and messaging.
 
 ## Fix
-- Replaced the literal escape with a real newline.
-- CI now runs `python -m compileall -q app alembic` before migrations so source-generation/syntax defects fail immediately.
+All literal generated newline escapes in the affected Python source are replaced with real newlines. CI now compiles `app` and `alembic` before database migration.
 
-## Integration invariants
-Plaintext send must return 422; ciphertext envelope succeeds; API/DB plaintext body remains null; server search is unavailable.
+## Required verification
+1. compileall passes;
+2. migration 0006 passes on clean PostgreSQL;
+3. plaintext E2EE send is rejected;
+4. ciphertext envelope persists with null body_text;
+5. server search is disabled for E2EE;
+6. legacy MVP/domain/web/production-compose gates remain green.
 
 ## Next
-Repeat full CI through migration/integration before proceeding to atomic one-time-prekey consumption.
+Only after these gates pass: Step 36 atomic one-time-prekey consumption.
