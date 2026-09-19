@@ -25,7 +25,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat bootstrap/part-*.b64 | base64 --decode > /tmp/snapshot.tar.gz
+          : > /tmp/snapshot.tar.gz
+          for part in bootstrap/part-*.b64; do
+            base64 --decode "$part" >> /tmp/snapshot.tar.gz
+          done
           echo "e1e0b708613b7eff45b41fabf2f05c1470dd96ea65b8cde8330094fb7688c097  /tmp/snapshot.tar.gz" | sha256sum -c -
           tar -xzf /tmp/snapshot.tar.gz -C .
           rm -rf bootstrap .github/workflows/bootstrap-snapshot.yml
