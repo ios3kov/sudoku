@@ -17,8 +17,8 @@ MUTATION_HEADERS = {"origin": ORIGIN}
 @pytest.mark.asyncio
 async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
     suffix = uuid.uuid4().hex[:10]
-    admin_email = f"admin-{suffix}@example.test"
-    member_email = f"member-{suffix}@example.test"
+    admin_email = f"admin-{suffix}@example.com"
+    member_email = f"member-{suffix}@example.com"
     password = "correct horse battery staple"
 
     async with SessionFactory() as db:

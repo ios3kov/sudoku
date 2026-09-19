@@ -6,18 +6,22 @@ Full restored MVP acceptance and hardening.
 ## Repository truth
 
 ### Steps 17–20
-Direct-source recovery, Sudoku/auth shell, PostgreSQL auth/session migration and rate limiting are restored. Step 20 service-backed CI is green.
+Direct-source recovery, Sudoku/auth shell, PostgreSQL auth/session migration and rate limiting are restored and service-backed verified.
 
 ### Step 21 — Full source import
-Complete locally verified MVP source is now present as ordinary files: API, web messenger, realtime, assets/push, groups/devices, search/preferences, infrastructure, observability and integration tests.
+Complete MVP source is present as ordinary files: API, web messenger, realtime, assets/push, groups/devices, search/preferences, infrastructure, observability and integration tests.
 
 ### Step 22 — CI packaging + S3 hardening
-First full-tree acceptance failed at API editable installation because setuptools auto-discovered `app` and `alembic`. Package discovery is explicit now. S3 integration was also moved to an in-process test server to remove external image availability from the CI critical path.
+API package discovery fixed; S3 integration moved to an in-process test server. Acceptance now reaches real API integration tests.
+
+### Step 23 — Valid integration identities
+Acceptance exposed a test-fixture defect: reserved `.test` email domains are correctly rejected by production `EmailStr` validation. Production validation remains unchanged; randomized `example.com` identities are used in integration tests.
 
 ## Verification
-- Step 20: PostgreSQL migration/schema assertion ✓ auth/session integration ✓ domain ✓ web typecheck/build ✓.
-- Full-tree run `35465183161`: failed at API package installation; later stages skipped.
-- Corrected full-tree acceptance CI pending on current `main`.
+- Step 20 service-backed gate: fully green.
+- Full-tree packaging/S3 stages: now pass.
+- Latest acceptance reached API integration and failed only at invalid test email fixture before the rest of the scenario.
+- Step 23 acceptance pending.
 
 ## Next step
-Drive the complete acceptance pipeline to green, then perform code/security review and production deployment preparation.
+Continue acceptance until API integration, domain, web typecheck and production build are all green; then perform code/security review.
