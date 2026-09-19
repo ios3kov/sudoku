@@ -789,3 +789,163 @@ async def test_e2ee_legacy_message_mutations_fail_closed() -> None:
             )
         ).scalars().all()
         assert reactions == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    sender_email = f"transport-sender-{suffix}@example.com"
+    recipient_email = f"transport-recipient-{suffix}@example.com"
+    password = "correct horse battery staple"
+    sender_device = uuid.uuid4()
+    recipient_device = uuid.uuid4()
+
+    async with SessionFactory() as db:
+        sender = User(
+            email=sender_email,
+            display_name="Transport Sender",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        recipient = User(
+            email=recipient_email,
+            display_name="Transport Recipient",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add_all([sender, recipient])
+        await db.commit()
+        await db.refresh(recipient)
+        recipient_id = recipient.id
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as sender_client, httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as recipient_client:
+        assert (
+            await sender_client.post(
+                "/v1/auth/login",
+                json={
+                    "email": sender_email,
+                    "password": password,
+                    "device_name": "transport-sender",
+                },
+            )
+        ).status_code == 200
+        assert (
+            await recipient_client.post(
+                "/v1/auth/login",
+                json={
+                    "email": recipient_email,
+                    "password": password,
+                    "device_name": "transport-recipient",
+                },
+            )
+        ).status_code == 200
+
+        assert (
+            await sender_client.put(
+                f"/v1/e2ee/devices/{sender_device}",
+                json={
+                    "identity_public_key_b64": base64.b64encode(b"T" * 32).decode()
+                },
+            )
+        ).status_code == 204
+        assert (
+            await recipient_client.put(
+                f"/v1/e2ee/devices/{recipient_device}",
+                json={
+                    "identity_public_key_b64": base64.b64encode(b"U" * 32).decode()
+                },
+            )
+        ).status_code == 204
+
+        created = await sender_client.post(
+            "/v1/conversations",
+            json={
+                "type": "direct",
+                "title": None,
+                "member_ids": [str(recipient_id)],
+                "encryption_required": True,
+            },
+        )
+        assert created.status_code == 201, created.text
+        conversation_id = created.json()["id"]
+
+        def envelope(label: str) -> dict:
+            return {
+                "version": 1,
+                "protocol": "mls-rfc9420",
+                "kind": "application",
+                "ciphertext": base64.b64encode(label.encode()).decode(),
+            }
+
+        first = await sender_client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "type": "text",
+                "body": None,
+                "envelope": envelope("old-epoch"),
+                "asset_ids": [],
+            },
+        )
+        assert first.status_code == 201, first.text
+
+        control = await sender_client.post(
+            f"/v1/e2ee/conversations/{conversation_id}/control-events",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "sender_device_id": str(sender_device),
+                "kind": "commit",
+                "payload_b64": base64.b64encode(b"opaque-commit").decode(),
+                "recipients": [
+                    {
+                        "user_id": str(recipient_id),
+                        "device_id": str(recipient_device),
+                    }
+                ],
+            },
+        )
+        assert control.status_code == 201, control.text
+
+        second = await sender_client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "type": "text",
+                "body": None,
+                "envelope": envelope("new-epoch"),
+                "asset_ids": [],
+            },
+        )
+        assert second.status_code == 201, second.text
+
+        feed = await recipient_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{recipient_device}/transport-events"
+        )
+        assert feed.status_code == 200, feed.text
+        items = feed.json()
+        assert [item["kind"] for item in items] == [
+            "message",
+            "mls_control",
+            "message",
+        ]
+        assert [item["transport_sequence"] for item in items] == [1, 2, 3]
+        assert items[0]["message_id"] == first.json()["id"]
+        assert items[1]["control"]["id"] == control.json()["id"]
+        assert items[2]["message_id"] == second.json()["id"]
+
+        after_two = await recipient_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{recipient_device}/transport-events?after=2"
+        )
+        assert after_two.status_code == 200
+        assert [item["transport_sequence"] for item in after_two.json()] == [3]

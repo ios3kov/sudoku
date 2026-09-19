@@ -12,6 +12,7 @@ from ..metrics import record_message_created
 from ..models import (
     Conversation,
     ConversationMember,
+    ConversationTransportEvent,
     Message,
     MessageReaction,
     OutboxEvent,
@@ -642,6 +643,16 @@ async def create_message(
     )
     db.add(message)
     await db.flush()
+    transport_sequence = conversation.next_transport_sequence
+    conversation.next_transport_sequence += 1
+    db.add(
+        ConversationTransportEvent(
+            conversation_id=conversation_id,
+            sequence=transport_sequence,
+            kind="message",
+            message_id=message.id,
+        )
+    )
     for position, asset_id in enumerate(unique_asset_ids):
         db.add(MessageAsset(message_id=message.id, asset_id=asset_id, position=position))
     await db.flush()

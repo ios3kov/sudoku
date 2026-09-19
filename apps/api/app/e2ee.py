@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select, tuple_
+from sqlalchemy import and_, delete, exists, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db
@@ -13,6 +13,7 @@ from .deps import AuthContext, get_auth_context
 from .models import (
     Conversation,
     ConversationMember,
+    ConversationTransportEvent,
     MlsControlEvent,
     MlsControlRecipient,
     MlsDevice,
@@ -461,6 +462,17 @@ async def create_control_event(
     db.add(item)
     await db.flush()
 
+    transport_sequence = conversation.next_transport_sequence
+    conversation.next_transport_sequence += 1
+    db.add(
+        ConversationTransportEvent(
+            conversation_id=conversation_id,
+            sequence=transport_sequence,
+            kind="mls_control",
+            control_event_id=item.id,
+        )
+    )
+
     for user_id, device_id in sorted(recipient_pairs, key=lambda pair: (str(pair[0]), str(pair[1]))):
         db.add(
             MlsControlRecipient(
@@ -637,6 +649,16 @@ async def create_control_batch(
         )
         db.add(item)
         await db.flush()
+        transport_sequence = conversation.next_transport_sequence
+        conversation.next_transport_sequence += 1
+        db.add(
+            ConversationTransportEvent(
+                conversation_id=conversation_id,
+                sequence=transport_sequence,
+                kind="mls_control",
+                control_event_id=item.id,
+            )
+        )
 
         for user_id, device_id in sorted(
             recipient_pairs,
@@ -674,6 +696,100 @@ async def create_control_batch(
     for item in created:
         await db.refresh(item)
     return {"events": [serialize_control_event(item) for item in created]}
+
+
+
+
+@router.get("/conversations/{conversation_id}/devices/{device_id}/transport-events")
+async def list_transport_events(
+    conversation_id: uuid.UUID,
+    device_id: uuid.UUID,
+    after: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "mls-transport-list", 240, 60)
+    await require_active_device(db, auth.user.id, device_id)
+
+    is_member = (
+        await db.execute(
+            select(ConversationMember.user_id).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == auth.user.id,
+            )
+        )
+    ).scalar_one_or_none() is not None
+
+    control_assigned = exists(
+        select(MlsControlRecipient.event_id).where(
+            MlsControlRecipient.event_id == ConversationTransportEvent.control_event_id,
+            MlsControlRecipient.user_id == auth.user.id,
+            MlsControlRecipient.device_id == device_id,
+        )
+    )
+    visibility = and_(
+        ConversationTransportEvent.kind == "mls_control",
+        control_assigned,
+    )
+    if is_member:
+        visibility = or_(
+            ConversationTransportEvent.kind == "message",
+            visibility,
+        )
+
+    rows = (
+        await db.execute(
+            select(ConversationTransportEvent)
+            .where(
+                ConversationTransportEvent.conversation_id == conversation_id,
+                ConversationTransportEvent.sequence > after,
+                visibility,
+            )
+            .order_by(ConversationTransportEvent.sequence)
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    output: list[dict] = []
+    for row in rows:
+        if row.kind == "message" and row.message_id is not None:
+            message = (
+                await db.execute(select(Message).where(Message.id == row.message_id))
+            ).scalar_one_or_none()
+            if message is None:
+                continue
+            output.append(
+                {
+                    "transport_sequence": row.sequence,
+                    "kind": "message",
+                    "message_id": str(message.id),
+                    "sender_user_id": str(message.sender_id),
+                    "message_sequence": message.sequence,
+                    "envelope": message.envelope,
+                }
+            )
+            continue
+
+        if row.kind == "mls_control" and row.control_event_id is not None:
+            control = (
+                await db.execute(
+                    select(MlsControlEvent).where(
+                        MlsControlEvent.id == row.control_event_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if control is None:
+                continue
+            output.append(
+                {
+                    "transport_sequence": row.sequence,
+                    "kind": "mls_control",
+                    "control": serialize_control_event(control),
+                }
+            )
+
+    return output
 
 
 @router.get("/conversations/{conversation_id}/devices/{device_id}/control-events")

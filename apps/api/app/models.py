@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -95,6 +95,7 @@ class Conversation(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     next_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
     next_crypto_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    next_transport_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
     encryption_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -311,3 +312,49 @@ class MlsControlRecipient(Base):
     )
     device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     acked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ConversationTransportEvent(Base):
+    __tablename__ = "conversation_transport_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "sequence",
+            name="uq_conversation_transport_sequence",
+        ),
+        UniqueConstraint("message_id", name="uq_conversation_transport_message"),
+        UniqueConstraint(
+            "control_event_id",
+            name="uq_conversation_transport_control",
+        ),
+        CheckConstraint(
+            "(message_id IS NOT NULL) <> (control_event_id IS NOT NULL)",
+            name="ck_conversation_transport_exactly_one_ref",
+        ),
+        Index(
+            "ix_conversation_transport_sequence",
+            "conversation_id",
+            "sequence",
+        ),
+    )
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    sequence: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+    )
+    control_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("mls_control_events.id", ondelete="CASCADE"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )

@@ -154,3 +154,19 @@ export interface MlsControlBatchItem {
 export interface MlsControlBatchResponse {
   events: MlsControlEvent[];
 }
+
+
+export type MlsTransportEvent =
+  | {
+      transport_sequence: number;
+      kind: "message";
+      message_id: string;
+      sender_user_id: string;
+      message_sequence: number;
+      envelope: E2eeEnvelope;
+    }
+  | {
+      transport_sequence: number;
+      kind: "mls_control";
+      control: MlsControlEvent;
+    };
