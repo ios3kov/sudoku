@@ -208,3 +208,33 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
 
     # The admin ID is used to ensure the setup row existed and avoids linting it as accidental state.
     assert isinstance(admin_id, uuid.UUID)
+
+
+@pytest.mark.asyncio
+async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() -> None:
+    suffix=uuid.uuid4().hex[:10]
+    email=f"e2ee-{suffix}@example.com"
+    password="correct horse battery staple"
+    async with SessionFactory() as db:
+        user=User(email=email,display_name="E2EE",password_hash=hash_password(password),status="active",is_admin=False)
+        db.add(user);await db.commit()
+    transport=httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport,base_url=ORIGIN,headers=MUTATION_HEADERS) as client:
+        assert (await client.post("/v1/auth/login",json={"email":email,"password":password,"device_name":"e2ee-test"})).status_code==200
+        created=await client.post("/v1/conversations",json={"type":"group","title":"Encrypted","member_ids":[],"encryption_required":True})
+        assert created.status_code==201,created.text
+        cid=created.json()["id"]
+        plaintext=await client.post(f"/v1/conversations/{cid}/messages",json={"client_id":str(uuid.uuid4()),"type":"text","body":"secret plaintext","asset_ids":[]})
+        assert plaintext.status_code==422
+        envelope={"version":1,"protocol":"test-envelope","ciphertext":"AAECAwQ="}
+        encrypted=await client.post(f"/v1/conversations/{cid}/messages",json={"client_id":str(uuid.uuid4()),"type":"text","body":None,"envelope":envelope,"asset_ids":[]})
+        assert encrypted.status_code==201,encrypted.text
+        assert encrypted.json()["body"] is None
+        assert encrypted.json()["envelope"]==envelope
+        search=await client.get(f"/v1/conversations/{cid}/search?q=secret")
+        assert search.status_code==409
+    async with SessionFactory() as db:
+        from app.models import Message
+        row=(await db.execute(select(Message).where(Message.conversation_id==uuid.UUID(cid)))).scalar_one()
+        assert row.body_text is None
+        assert row.envelope==envelope

@@ -93,7 +93,7 @@ class Conversation(Base):
     title: Mapped[str | None] = mapped_column(String(160))
     direct_key: Mapped[str | None] = mapped_column(String(80), unique=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    next_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    next_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)\n    encryption_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -199,4 +199,23 @@ class PushSubscription(Base):
     auth: Mapped[str] = mapped_column(Text, nullable=False)
     device_name: Mapped[str] = mapped_column(String(160), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DeviceKeyBundle(Base):
+    __tablename__ = "device_key_bundles"
+    __table_args__ = (
+        UniqueConstraint("user_id","device_id",name="uq_device_key_user_device"),
+        Index("ix_device_key_bundles_user_active","user_id","revoked_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
+    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),nullable=False)
+    protocol: Mapped[str] = mapped_column(String(32),nullable=False)
+    identity_key: Mapped[bytes] = mapped_column(LargeBinary,nullable=False)
+    signed_prekey: Mapped[bytes] = mapped_column(LargeBinary,nullable=False)
+    signed_prekey_signature: Mapped[bytes] = mapped_column(LargeBinary,nullable=False)
+    one_time_prekeys: Mapped[list] = mapped_column(JSONB,nullable=False,default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(),nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

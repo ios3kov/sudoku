@@ -66,7 +66,7 @@ class UserDirectoryItem(BaseModel):
 class CreateConversationRequest(BaseModel):
     type: str = Field(pattern="^(direct|group)$")
     title: str | None = Field(default=None, max_length=160)
-    member_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    member_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)\n    encryption_required: bool = False
 
 
 class ConversationMemberResponse(BaseModel):
@@ -126,7 +126,7 @@ class CreateMessageRequest(BaseModel):
     type: str = Field(default="text", pattern="^(text|image|file|voice)$")
     body: str | None = Field(default=None, max_length=20000)
     reply_to: uuid.UUID | None = None
-    asset_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10)
+    asset_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10)\n    envelope: dict | None = None
 
 
 class EditMessageRequest(BaseModel):
