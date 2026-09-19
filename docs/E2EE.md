@@ -43,3 +43,17 @@ Attachments are encrypted client-side before upload. The attachment content key 
 - local MLS state survives reload and offline reconnect;
 - corrupt/hostile MLS messages return errors and cannot panic the WASM module;
 - dependency versions and security advisories are reviewed before release.
+
+## Device identity authentication
+
+MLS authenticates messages cryptographically, but the application must bind MLS credentials to account/device identities.
+
+Before adding a claimed KeyPackage, the browser:
+1. validates the KeyPackage with OpenMLS;
+2. verifies its BasicCredential equals the expected application device credential;
+3. verifies its signature key equals the device identity key returned by discovery;
+4. compares that key with the locally encrypted TOFU pin for the same user/device.
+
+An unexpected key change is fail-closed and requires explicit recovery/new-device handling.
+
+For first-contact protection against a malicious delivery service, clients expose a symmetric SHA-256 safety number derived from both device identities. Users can compare this value over an independent channel. The local verified marker is stored only in encrypted browser state; the server cannot mark itself trusted.

@@ -10,6 +10,7 @@ export interface MlsWasmCapabilities {
   two_party_groups: boolean;
   application_messages: boolean;
   membership_rekey: boolean;
+  key_package_identity_binding: boolean;
   ui_ready: boolean;
 }
 
@@ -29,6 +30,7 @@ function validateCapabilities(raw: string): MlsWasmCapabilities {
     || value.two_party_groups !== true
     || value.application_messages !== true
     || value.membership_rekey !== true
+    || value.key_package_identity_binding !== true
   ) {
     throw new Error("OpenMLS WASM capabilities do not match the required production contract");
   }
