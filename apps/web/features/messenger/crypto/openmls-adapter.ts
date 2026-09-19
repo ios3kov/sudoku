@@ -783,8 +783,8 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   ): Promise<void> {
     await this.enqueue(async () => {
       this.assertReady();
-      await this.flushPendingApplicationSends();
-      this.assertNoPendingApplicationSends();
+      await this.flushPendingApplicationSends(conversationId);
+      this.assertNoPendingApplicationSends(conversationId);
       this.assertNoPendingOutboundTransition();
 
       const snapshot = this.snapshotRuntime();
@@ -869,8 +869,8 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   ): Promise<void> {
     await this.enqueue(async () => {
       this.assertReady();
-      await this.flushPendingApplicationSends();
-      this.assertNoPendingApplicationSends();
+      await this.flushPendingApplicationSends(conversationId);
+      this.assertNoPendingApplicationSends(conversationId);
       this.assertNoPendingOutboundTransition();
       const snapshot = this.snapshotRuntime();
       try {
@@ -1375,6 +1375,96 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   }
 
 
+
+  async reconcilePendingDeviceChange(
+    conversation: Conversation,
+  ): Promise<boolean> {
+    this.assertReady();
+    if (
+      !conversation.encryption_required
+      || !conversation.e2ee_ready
+      || !this.localState!.trackedConversations.includes(conversation.id)
+    ) {
+      return false;
+    }
+
+    const pending = await messengerApi.pendingMlsMembershipChange(
+      conversation.id,
+    );
+    const change = pending.change;
+    if (
+      !change
+      || (change.kind !== "device_add" && change.kind !== "device_remove")
+      || !change.target_device_id
+    ) {
+      return false;
+    }
+
+    if (change.kind === "device_add") {
+      if (!pending.target_device?.active) {
+        await messengerApi.finalizeMlsMembershipChange(change.id);
+        return true;
+      }
+      await this.reconcileActiveDevices(conversation, change.id);
+      await messengerApi.finalizeMlsMembershipChange(change.id);
+      return true;
+    }
+
+    await this.discardPendingApplicationSends(conversation.id);
+    const recipients = await this.reconcileActiveDevices(
+      conversation,
+      change.id,
+    );
+    const target = pending.target_device;
+    if (!target) {
+      throw new Error("Revoked MLS device identity is unavailable");
+    }
+
+    if (
+      this.groupHasDevice(
+        conversation.id,
+        change.target_user_id,
+        change.target_device_id,
+        target.identity_public_key_b64,
+      )
+    ) {
+      await this.removeMemberDurably(
+        conversation.id,
+        utf8(
+          "sudoku-v1:"
+          + change.target_user_id
+          + ":"
+          + change.target_device_id,
+        ),
+        recipients,
+        change.id,
+      );
+    }
+
+    await messengerApi.finalizeMlsMembershipChange(change.id);
+    return true;
+  }
+
+  private async discardPendingApplicationSends(
+    conversationId: string,
+  ): Promise<number> {
+    return this.enqueue(async () => {
+      this.assertReady();
+      const before = this.localState!.pendingApplicationSends.length;
+      this.localState!.pendingApplicationSends =
+        this.localState!.pendingApplicationSends.filter(
+          (item) => item.conversationId !== conversationId,
+        );
+      const discarded =
+        before - this.localState!.pendingApplicationSends.length;
+      if (discarded > 0) {
+        await this.persistCurrentState();
+      }
+      return discarded;
+    });
+  }
+
+
   async peerVerificationDetails(
     conversationId: string,
     peerUserId: string,
@@ -1691,14 +1781,25 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     }
   }
 
-  private async flushPendingApplicationSends(): Promise<Map<string, Message>> {
+  private async flushPendingApplicationSends(
+    conversationId?: string,
+  ): Promise<Map<string, Message>> {
     this.assertReady();
-    if (this.localState!.pendingOutboundTransition) {
+    if (
+      this.localState!.pendingOutboundTransition
+      && (
+        conversationId === undefined
+        || this.localState!.pendingOutboundTransition.conversationId === conversationId
+      )
+    ) {
       throw new Error("Cannot deliver application messages while MLS membership transition is pending");
     }
 
     const delivered = new Map<string, Message>();
-    for (const pending of [...this.localState!.pendingApplicationSends]) {
+    const pendingItems = this.localState!.pendingApplicationSends.filter(
+      (item) => conversationId === undefined || item.conversationId === conversationId,
+    );
+    for (const pending of [...pendingItems]) {
       const response = await messengerApi.sendEncryptedMessage(
         pending.conversationId,
         pending.clientId,
@@ -1856,8 +1957,12 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     this.localState = cloneLocalState(snapshot.localState);
   }
 
-  private assertNoPendingApplicationSends(): void {
-    if (this.localState!.pendingApplicationSends.length > 0) {
+  private assertNoPendingApplicationSends(conversationId?: string): void {
+    if (
+      this.localState!.pendingApplicationSends.some(
+        (item) => conversationId === undefined || item.conversationId === conversationId,
+      )
+    ) {
       throw new Error("Encrypted application messages are still pending delivery");
     }
   }
