@@ -17,6 +17,7 @@ import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 import { conversationTitle } from "./conversation-view";
 import { uploadEncryptedAsset } from "./uploads";
 import { GroupSettings } from "./group-settings";
+import { SecurityVerification } from "./security-verification";
 
 const MAX_VOICE_SECONDS = 5 * 60;
 
@@ -55,6 +56,7 @@ export function EncryptedConversationView({
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showGroupSettings, setShowGroupSettings] = useState(false);
+  const [showSecurity, setShowSecurity] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -406,6 +408,9 @@ export function EncryptedConversationView({
               Group
             </button>
           ) : null}
+          <button type="button" onClick={() => setShowSecurity((value) => !value)}>
+            Verify
+          </button>
           <button type="button" onClick={onHide}>Hide</button>
         </div>
       </header>
@@ -418,6 +423,14 @@ export function EncryptedConversationView({
           onUpdated={onConversationUpdated}
           onLeft={onConversationLeft}
           onClose={() => setShowGroupSettings(false)}
+        />
+      ) : null}
+      {showSecurity ? (
+        <SecurityVerification
+          conversation={conversation}
+          user={user}
+          adapter={adapter}
+          onClose={() => setShowSecurity(false)}
         />
       ) : null}
 

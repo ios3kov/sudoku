@@ -1374,6 +1374,78 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     };
   }
 
+
+  async peerVerificationDetails(
+    conversationId: string,
+    peerUserId: string,
+  ): Promise<Array<{
+    deviceId: string;
+    safetyNumber: string;
+    verified: boolean;
+  }>> {
+    const devices = await messengerApi.mlsDevices(peerUserId);
+    await this.enqueue(async () => {
+      this.assertReady();
+      const snapshot = this.snapshotRuntime();
+      let changed = false;
+      try {
+        for (const device of devices) {
+          const pinKey = this.peerPinKey(peerUserId, device.device_id);
+          const existing = this.localState!.peerIdentityPins[pinKey];
+          if (
+            existing
+            && existing.publicKeyB64 !== device.identity_public_key_b64
+          ) {
+            throw new PeerIdentityChangedError(peerUserId, device.device_id);
+          }
+          if (
+            !this.groupHasDevice(
+              conversationId,
+              peerUserId,
+              device.device_id,
+              device.identity_public_key_b64,
+            )
+          ) {
+            continue;
+          }
+          if (!existing) {
+            this.localState!.peerIdentityPins[pinKey] = {
+              userId: peerUserId,
+              deviceId: device.device_id,
+              publicKeyB64: device.identity_public_key_b64,
+              firstSeenAt: Date.now(),
+              verifiedAt: null,
+            };
+            changed = true;
+          }
+        }
+        if (changed) await this.persistCurrentState();
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
+      }
+    });
+
+    const output: Array<{
+      deviceId: string;
+      safetyNumber: string;
+      verified: boolean;
+    }> = [];
+    for (const device of devices) {
+      const pin = this.localState!.peerIdentityPins[
+        this.peerPinKey(peerUserId, device.device_id)
+      ];
+      if (!pin) continue;
+      output.push({
+        deviceId: device.device_id,
+        safetyNumber: await this.safetyNumber(peerUserId, device.device_id),
+        verified: pin.verifiedAt !== null,
+      });
+    }
+    return output.sort((left, right) => left.deviceId.localeCompare(right.deviceId));
+  }
+
+
   async safetyNumber(peerUserId: string, peerDeviceId: string): Promise<string> {
     this.assertReady();
     const pin = this.localState!.peerIdentityPins[this.peerPinKey(peerUserId, peerDeviceId)];
