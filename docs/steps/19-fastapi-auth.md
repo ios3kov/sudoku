@@ -13,17 +13,14 @@ Restore the first server-side security boundary directly in the repository.
 - Invite acceptance row-locks the invite and enforces expiry/email/one-use semantics.
 - Unit tests cover password hashing and session-token digest behavior.
 
-## Security boundary
-The hidden Sudoku gesture has no server authority. `/v1/me` and all future messenger APIs require a valid non-revoked server session.
-
-## Deferred to Step 20
-- Redis login/action rate limiting.
-- Device-session list/revocation UI/API.
-- Conversations/messages and transactional outbox.
-- Full PostgreSQL integration test in CI.
-
 ## Verification
-CI adds Python dependency install, bytecode compilation and security unit tests.
+- API dependency install, Python bytecode compilation and security tests passed in CI.
+- Domain tests passed in CI.
+- Web CI exposed a repository-tree regression: the Step 18 workspace fix was accidentally omitted while constructing Step 19. A corrective commit restores the domain declarations/build-before-web rule.
+- `skipLibCheck` is enabled for third-party Next declarations because Next 16 currently references URLPattern globals not present in this TypeScript lib set; application source remains strict.
+
+## Process correction
+Every subsequent tree mutation must first read current `main` HEAD/tree and use that exact tree as `base_tree_sha`. Never reuse a pre-fix tree SHA.
 
 ## Next
-Add PostgreSQL service-backed migration/integration tests, then conversations/messages.
+Step 20: PostgreSQL migration/integration + session revocation + rate limiting.
