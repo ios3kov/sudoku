@@ -105,8 +105,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
         const trackedConversationIds = adapter.trackedConversationIds();
         for (const conversationId of trackedConversationIds) {
-          await adapter.syncTransport(conversationId);
           await reconcileDeviceChange(adapter, conversationId);
+          await adapter.syncTransport(conversationId);
         }
       } catch {
         if (!cancelled) {
@@ -131,8 +131,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         if (adapter) {
           const trackedConversationIds = adapter.trackedConversationIds();
           for (const conversationId of trackedConversationIds) {
-            void adapter.syncTransport(conversationId)
-              .then(() => reconcileDeviceChange(adapter, conversationId))
+            void reconcileDeviceChange(adapter, conversationId)
+              .then(() => adapter.syncTransport(conversationId))
               .catch(() => {
                 setE2eeState("error");
               });
