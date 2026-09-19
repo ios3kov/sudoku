@@ -69,3 +69,25 @@ jobs:
         run: npm --workspace @sudoku/web run typecheck
       - name: Web production build
         run: npm run build:web
+
+      - name: Validate production Compose merge
+        env:
+          APP_DOMAIN: sudoku.example.com
+          POSTGRES_PASSWORD: ci-production-password
+          MINIO_ROOT_USER: ci-minio
+          MINIO_ROOT_PASSWORD: ci-minio-password
+          S3_ENDPOINT_URL: https://s3-internal.example.com
+          S3_PUBLIC_ENDPOINT_URL: https://s3.example.com
+          S3_ACCESS_KEY_ID: ci-key
+          S3_SECRET_ACCESS_KEY: ci-secret
+          VAPID_PUBLIC_KEY: ci-public
+          VAPID_PRIVATE_KEY: ci-private
+          VAPID_SUBJECT: mailto:admin@example.com
+        run: |
+          docker compose -f compose.yaml -f compose.production.yaml config > /tmp/production-compose.yml
+          grep -q 'PUBLIC_ORIGIN: https://sudoku.example.com' /tmp/production-compose.yml
+          grep -q 'SECURE_COOKIES: "true"' /tmp/production-compose.yml
+          if grep -q 'PUBLIC_ORIGIN: http://localhost:8080' /tmp/production-compose.yml; then
+            echo "local origin leaked into production config" >&2
+            exit 1
+          fi
