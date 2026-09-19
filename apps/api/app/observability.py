@@ -89,6 +89,10 @@ def configure_structured_logging(service_name: str) -> None:
         logger.propagate = True
     # RequestObservabilityMiddleware produces normalized access logs.
     logging.getLogger("uvicorn.access").disabled = True
+    # HTTP client libraries may log full request URLs; invite secrets are carried in one route path.
+    # Keep transport internals below INFO so raw secret-bearing URLs cannot enter normal structured logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     structlog.configure(
         processors=[
