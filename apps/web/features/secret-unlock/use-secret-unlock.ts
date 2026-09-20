@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   armFromFive,
   beginSwipe,
@@ -9,11 +9,30 @@ import {
   type GestureState,
 } from "@sudoku/domain";
 
+const UNLOCK_DISTANCE_PX = 80;
+const MAX_VISUAL_DRAG_PX = 120;
+const UNLOCK_FINISH_MS = 150;
+
 export function useSecretUnlock(onUnlock: () => void) {
   const state = useRef<GestureState>(createGestureState());
+  const pointerActive = useRef(false);
+  const startY = useRef<number | null>(null);
+  const dragOffsetRef = useRef(0);
   const suppressNextFiveClick = useRef(false);
+  const unlockTimer = useRef<number | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (unlockTimer.current !== null) window.clearTimeout(unlockTimer.current);
+    };
+  }, []);
 
   const onFivePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (unlocking) return;
+
     const now = performance.now();
     const armed = armFromFive(createGestureState(), now);
     state.current = beginSwipe(
@@ -21,27 +40,70 @@ export function useSecretUnlock(onUnlock: () => void) {
       { x: event.clientX, y: event.clientY },
       now,
     );
+    pointerActive.current = true;
+    startY.current = event.clientY;
+    dragOffsetRef.current = 0;
     suppressNextFiveClick.current = false;
+    setDragOffsetY(0);
+    setDragging(true);
+
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId);
     } catch {
       // Synthetic test events may not register an active pointer.
     }
+  }, [unlocking]);
+
+  const onFivePointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!pointerActive.current || startY.current === null) return;
+    const upwardDistance = Math.max(0, startY.current - event.clientY);
+    const nextOffset = Math.min(MAX_VISUAL_DRAG_PX, upwardDistance);
+    dragOffsetRef.current = nextOffset;
+    setDragOffsetY(nextOffset);
+  }, []);
+
+  const resetVisual = useCallback(() => {
+    pointerActive.current = false;
+    startY.current = null;
+    setDragging(false);
+    setUnlocking(false);
+    setDragOffsetY(0);
   }, []);
 
   const onFivePointerUp = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (!pointerActive.current) return;
+
       const result = finishSwipe(
         state.current,
         { x: event.clientX, y: event.clientY },
         performance.now(),
       );
       state.current = result.state;
-      if (result.unlocked) {
-        suppressNextFiveClick.current = true;
-        event.preventDefault();
-        onUnlock();
+      pointerActive.current = false;
+      startY.current = null;
+      setDragging(false);
+
+      if (!result.unlocked) {
+        suppressNextFiveClick.current = dragOffsetRef.current > 12;
+        dragOffsetRef.current = 0;
+        setDragOffsetY(0);
+        return;
       }
+
+      dragOffsetRef.current = MAX_VISUAL_DRAG_PX;
+      suppressNextFiveClick.current = true;
+      setUnlocking(true);
+      setDragOffsetY(MAX_VISUAL_DRAG_PX);
+      event.preventDefault();
+
+      if (unlockTimer.current !== null) window.clearTimeout(unlockTimer.current);
+      unlockTimer.current = window.setTimeout(() => {
+        dragOffsetRef.current = 0;
+        setUnlocking(false);
+        setDragOffsetY(0);
+        onUnlock();
+      }, UNLOCK_FINISH_MS);
     },
     [onUnlock],
   );
@@ -54,8 +116,25 @@ export function useSecretUnlock(onUnlock: () => void) {
 
   const cancel = useCallback(() => {
     state.current = createGestureState();
+    dragOffsetRef.current = 0;
     suppressNextFiveClick.current = false;
-  }, []);
+    if (unlockTimer.current !== null) {
+      window.clearTimeout(unlockTimer.current);
+      unlockTimer.current = null;
+    }
+    resetVisual();
+  }, [resetVisual]);
 
-  return { onFivePointerDown, onFivePointerUp, consumeFiveClick, cancel };
+  return {
+    onFivePointerDown,
+    onFivePointerMove,
+    onFivePointerUp,
+    consumeFiveClick,
+    cancel,
+    dragOffsetY,
+    progress: Math.min(1, dragOffsetY / UNLOCK_DISTANCE_PX),
+    dragging,
+    unlocking,
+    active: dragging || unlocking,
+  };
 }

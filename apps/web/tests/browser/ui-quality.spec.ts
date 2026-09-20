@@ -10,6 +10,27 @@ async function unlockPrivate(page: Page) {
     isPrimary: true,
     buttons: 1,
   });
+  await five.dispatchEvent("pointermove", {
+    clientX: 191,
+    clientY: 680,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
+
+  await expect(five).toHaveClass(/is-dragging/);
+  await expect(page.locator(".unlock-gesture-visual")).toBeVisible();
+  expect(await five.evaluate((element) => getComputedStyle(element).transform)).not.toBe("none");
+
+  await five.dispatchEvent("pointermove", {
+    clientX: 192,
+    clientY: 620,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
   await five.dispatchEvent("pointerup", {
     clientX: 192,
     clientY: 620,

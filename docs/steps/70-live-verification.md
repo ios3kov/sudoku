@@ -195,7 +195,7 @@ Second production deploy:
 - first administrator bootstrap succeeded through the hidden password prompt.
 
 Device testing then identified Sudoku-shell UX corrections before continuing the two-device gate:
-- private unlock must begin by pressing digit 5 in the keypad and swiping upward without releasing;
+- private unlock must begin by pressing digit 5 in the keypad and swiping upward without releasing; the 5 must visibly track the finger with a short unlock-progress animation, then complete or spring back;
 - mobile keypad must keep all digits 1–9 on one row at board width;
 - fixed `Level 1` copy must be replaced by a stable puzzle number;
 - add visible Sudoku branding and compact timer/mistakes/progress HUD.
