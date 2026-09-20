@@ -5,7 +5,6 @@ from app.models import User
 from app.security import hash_password
 from sqlalchemy import select
 
-
 USERS = (
     ("browser-owner@example.com", "Browser Owner"),
     ("browser-peer@example.com", "Browser Peer"),
