@@ -66,6 +66,13 @@ jobs:
         run: pytest -q tests/api
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
+      - name: Capture npm lockfile for repository
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          echo "LOCKFILE_B64_BEGIN"
+          base64 -w0 package-lock.json | fold -w 10000
+          echo "LOCKFILE_B64_END"
+          exit 1
       - name: Test and build pinned OpenMLS browser package
         run: |
           rustup toolchain install 1.91.0 --profile minimal --target wasm32-unknown-unknown
