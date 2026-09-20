@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
   canPlace,
@@ -184,7 +185,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
       <section className="sudoku-shell" aria-label="Sudoku">
         <header className="topbar sudoku-topbar">
           <div className="sudoku-brand">
-            <img className="sudoku-logo" src="/icon.svg" alt="" aria-hidden="true" />
+            <Image className="sudoku-logo" src="/icon.svg" alt="" width={42} height={42} priority aria-hidden="true" />
             <div>
               <h1>Sudoku</h1>
               <span>Classic · Puzzle #{PUZZLE_NUMBER}</span>
