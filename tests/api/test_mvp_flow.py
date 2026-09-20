@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import uuid
@@ -1570,3 +1571,61 @@ async def test_e2ee_device_add_and_revoke_require_durable_rekey() -> None:
             },
         )
         assert after_remove.status_code == 201, after_remove.text
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_concurrent_mls_device_registration_is_idempotent() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    email = f"mls-register-race-{suffix}@example.com"
+    password = "correct horse battery staple"
+
+    async with SessionFactory() as db:
+        user = User(
+            email=email,
+            display_name="MLS Register Race",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add(user)
+        await db.commit()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as client:
+        login = await client.post(
+            "/v1/auth/login",
+            json={
+                "email": email,
+                "password": password,
+                "device_name": "registration-race",
+            },
+        )
+        assert login.status_code == 200, login.text
+
+        sessions = await client.get("/v1/sessions")
+        assert sessions.status_code == 200, sessions.text
+        device_id = next(item["id"] for item in sessions.json() if item["current"])
+        identity = base64.b64encode(b"R" * 32).decode()
+
+        responses = await asyncio.gather(*[
+            client.put(
+                f"/v1/e2ee/devices/{device_id}",
+                json={"identity_public_key_b64": identity},
+            )
+            for _ in range(6)
+        ])
+        assert [response.status_code for response in responses] == [204] * 6
+
+    async with SessionFactory() as db:
+        from app.models import MlsDevice
+
+        rows = (
+            await db.execute(
+                select(MlsDevice).where(MlsDevice.device_id == uuid.UUID(device_id))
+            )
+        ).scalars().all()
+        assert len(rows) == 1

@@ -39,3 +39,11 @@ Production remains blocked until those external checks are completed.
 
 ## Browser fixture correction
 The browser acceptance users originally used the reserved `.test` TLD. The API login schema uses Pydantic `EmailStr`, which correctly rejects that address with HTTP 422 before credential verification. The browser seed and test now use syntactically deliverable `@example.com` fixture addresses. This was a test-fixture bug, not an MLS initialization failure.
+
+
+## MLS device registration race
+Browser acceptance exposed a real server race: concurrent initialization of the same authenticated browser device could execute two SELECT-then-INSERT registration paths and hit the `uq_mls_device_user_device` constraint.
+
+Device registration now uses PostgreSQL `INSERT ... ON CONFLICT DO NOTHING RETURNING` and then re-reads the authoritative row. Identical concurrent registrations are idempotent; a changed identity or identity-key reuse by another device still fails closed with 409.
+
+API integration coverage now issues concurrent identical registrations and verifies all calls succeed while exactly one MLS device row exists.

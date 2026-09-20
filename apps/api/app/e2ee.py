@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, exists, func, or_, select, tuple_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db
@@ -861,6 +862,28 @@ async def register_device(
         raise HTTPException(403, "MLS device id must match the current session")
     identity_key = decode_identity_key(payload.identity_public_key_b64)
 
+    # Registration may be triggered concurrently by duplicate browser mounts
+    # (for example React Strict Mode). Make the database write itself
+    # idempotent instead of relying on a racy SELECT-then-INSERT sequence.
+    inserted_id = (
+        await db.execute(
+            pg_insert(MlsDevice)
+            .values(
+                user_id=auth.user.id,
+                device_id=device_id,
+                identity_public_key=identity_key,
+            )
+            .on_conflict_do_nothing()
+            .returning(MlsDevice.id)
+        )
+    ).scalar_one_or_none()
+
+    if inserted_id is not None:
+        await db.commit()
+        return
+
+    # A concurrent request or another unique key already won. Re-read the
+    # authoritative row and accept only the exact same active device identity.
     existing = (
         await db.execute(
             select(MlsDevice).where(
@@ -877,27 +900,13 @@ async def register_device(
                 status.HTTP_409_CONFLICT,
                 "MLS device identity key change requires a new device id",
             )
+        await db.commit()
         return
 
-    key_owner = (
-        await db.execute(
-            select(MlsDevice).where(MlsDevice.identity_public_key == identity_key)
-        )
-    ).scalar_one_or_none()
-    if key_owner is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "MLS identity key is already registered",
-        )
-
-    db.add(
-        MlsDevice(
-            user_id=auth.user.id,
-            device_id=device_id,
-            identity_public_key=identity_key,
-        )
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        "MLS identity key is already registered",
     )
-    await db.commit()
 
 
 @router.delete("/devices/{device_id}", status_code=204)
