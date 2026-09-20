@@ -72,6 +72,12 @@ jobs:
           test -s apps/web/generated/mls-wasm/sudoku_mls_wasm.d.ts
       - name: Install web dependencies
         run: npm install --no-audit --no-fund
+      - name: Upload generated npm lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-lockfile
+          path: package-lock.json
+          if-no-files-found: error
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=high
       - name: UI class contract
@@ -121,6 +127,9 @@ jobs:
                   raise SystemExit(f"browser acceptance service did not start: {url}")
           PY
           npm --workspace @sudoku/web run test:browser
+
+      - name: Validate production maintenance scripts
+        run: bash -n scripts/backup-production.sh scripts/restore-production.sh
 
       - name: Validate production Compose merge
         env:
