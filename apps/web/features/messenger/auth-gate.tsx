@@ -86,7 +86,6 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => v
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          token,
           email: data.get("email"),
           password: data.get("password"),
           device_name: "Sudoku web app",
@@ -128,6 +127,7 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          token,
           email: data.get("email"),
           display_name: data.get("display_name"),
           password: data.get("password"),
