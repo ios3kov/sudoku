@@ -10,5 +10,8 @@ __pycache__/
 .DS_Store
 coverage/
 .tools/
-apps/web/generated/mls-wasm/\nplaywright-report/
+apps/web/generated/mls-wasm/
+playwright-report/
 test-results/
+backups/
+*.partial
