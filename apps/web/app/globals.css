@@ -55,7 +55,7 @@ code{overflow-wrap:anywhere}
 .topbar button{border:0;background:transparent;color:var(--muted);padding:0 8px}
 .sudoku-topbar{min-height:48px}
 .sudoku-brand{display:flex;align-items:center;gap:10px;min-width:0}
-.sudoku-logo{width:42px;height:42px;border-radius:12px;box-shadow:0 5px 18px rgba(25,35,39,.10);flex:none}
+.sudoku-logo{display:block;width:42px;height:42px;border-radius:12px;background:url("/icon.svg") center/cover no-repeat;box-shadow:0 5px 18px rgba(25,35,39,.10);flex:none}
 .sudoku-brand>div{min-width:0}
 .sudoku-brand span{display:block;margin-top:4px;color:var(--muted);font-size:12px;font-weight:650;white-space:nowrap}
 .sudoku-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
