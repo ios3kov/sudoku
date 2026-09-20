@@ -65,4 +65,4 @@ Redis fixed-window limits exist for login IP/account buckets and authenticated a
 
 The hidden UI is privacy-of-presentation, not a security boundary or anti-forensics mechanism. A determined person with developer tooling can discover bundled messenger code. Network/DNS/device-management history can also expose the service.
 
-MVP transport uses TLS and server-side access control; full E2EE is not yet enabled. The schema reserves ciphertext/version fields, but production E2EE must use a reviewed existing protocol/library rather than custom cryptography.
+Private conversation content now uses MLS/RFC 9420 through the pinned OpenMLS browser package. Message bodies, encrypted mutations and attachment keys/metadata are carried inside MLS application traffic; attachment bytes are AES-256-GCM ciphertext before upload. Production configuration rejects creation of new plaintext conversations. Remaining risk is endpoint/origin compromise: active browser XSS or a compromised device can still read plaintext after local decryption.
