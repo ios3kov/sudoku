@@ -38,11 +38,15 @@ async function unlockPrivate(page: Page) {
 async function login(page: Page, email: string) {
   await unlockPrivate(page);
   const emailInput = page.getByLabel("Email");
-  if (await emailInput.count()) {
-    await emailInput.fill(email);
-    await page.getByLabel("Password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Sign in" }).click();
-  }
+
+  // Fresh browser contexts are always unauthenticated. AuthGate first probes
+  // /v1/me asynchronously, so count() here is racy: wait for the actual login
+  // form before entering credentials.
+  await expect(emailInput).toBeVisible({ timeout: 30_000 });
+  await emailInput.fill(email);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
   const newChat = page.getByRole("button", { name: "New secure chat" });
   await expect(newChat).toBeVisible({ timeout: 60_000 });
   await expect(newChat).toBeEnabled({ timeout: 60_000 });
