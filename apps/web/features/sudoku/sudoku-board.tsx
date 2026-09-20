@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
   canPlace,
@@ -118,8 +117,9 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
   }, [completedAt, grid, hydrated, mistakes, notes, startedAt]);
 
   const selectedValue = selected === null ? 0 : grid[selected] ?? 0;
-  const correctCells = grid.reduce(
-    (total, value, index) => total + (value !== 0 && value === SOLUTION[index] ? 1 : 0),
+  const playableCells = givens.reduce((total, given) => total + (given ? 0 : 1), 0);
+  const completedPlayableCells = grid.reduce(
+    (total, value, index) => total + (!givens[index] && value === SOLUTION[index] ? 1 : 0),
     0,
   );
   const elapsedSeconds =
@@ -189,7 +189,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
       <section className="sudoku-shell" aria-label="Sudoku">
         <header className="topbar sudoku-topbar">
           <div className="sudoku-brand">
-            <Image className="sudoku-logo" src="/icon.svg" alt="" width={42} height={42} priority aria-hidden="true" />
+            <span className="sudoku-logo" aria-hidden="true" />
             <div>
               <h1>Sudoku</h1>
               <span>Classic · Puzzle #{PUZZLE_NUMBER}</span>
@@ -201,7 +201,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
         <div className="sudoku-stats" aria-label="Puzzle status">
           <div><span>Time</span><strong>{formatElapsed(elapsedSeconds)}</strong></div>
           <div><span>Mistakes</span><strong>{mistakes}</strong></div>
-          <div><span>Progress</span><strong>{correctCells}/81</strong></div>
+          <div><span>Progress</span><strong>{completedPlayableCells}/{playableCells}</strong></div>
         </div>
 
         <div className="status" aria-live="polite">
