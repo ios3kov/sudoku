@@ -20,14 +20,14 @@ The hidden gesture is presentation privacy only. Server authentication and autho
 
 ## Verification
 
-The complete acceptance pipeline has passed with real PostgreSQL + Redis + in-process S3-compatible storage:
+The complete automated acceptance pipeline has passed with real PostgreSQL + Redis + in-process S3-compatible storage:
 
-- migrations
-- API MVP integration
-- domain tests
-- TypeScript declarations
-- web typecheck
-- Next production build
+- migrations + API integration
+- pinned OpenMLS Rust tests + browser WASM build
+- domain tests + TypeScript declarations
+- web typecheck + Next production build
+- Chromium E2EE reload/offline/retry acceptance
+- production Compose policy validation
 
 Security hardening after the baseline includes strict mutation/WebSocket Origin checks, app-switcher privacy cover, serialized session rotation, realtime session revalidation, connection-scoped presence, push SSRF allowlisting and sensitive URL log suppression.
 

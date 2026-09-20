@@ -74,3 +74,17 @@ The diagnostic browser run showed:
 Root cause: reload recovery used the control-only feed first. That path joined and ACKed the Welcome but did not advance the unified transport cursor. The subsequent unified sync started at sequence 0 and replayed the already-consumed Welcome, causing OpenMLS to fail closed.
 
 MessengerShell startup/reconnect recovery now uses only the unified transport ledger. Control and application events are processed exactly once in transport order, and the durable transport cursor advances with the Welcome. The control-only endpoint remains available for compatibility/targeted recovery but is no longer composed with a zero-cursor unified sync.
+
+
+## Automated gate result
+After the recovery fixes, GitHub Actions run for commit `5b451e35` completed successfully end to end.
+
+Passed:
+- API compile/migrations/integration;
+- OpenMLS Rust tests and browser WASM build;
+- domain tests and declarations;
+- web typecheck and production build;
+- Chromium E2EE reload/offline/retry/fail-closed acceptance;
+- production Compose merge/policy validation.
+
+The temporary browser diagnostic dump used to isolate duplicate Welcome replay was removed after the green run.
