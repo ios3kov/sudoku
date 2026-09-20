@@ -30,7 +30,7 @@ interface PersistedGame {
   grid: CellValue[];
   notes: NotesMap;
   mistakes?: number;
-  startedAt?: number;
+  startedAt?: number | null;
   completedAt?: number | null;
 }
 
@@ -118,7 +118,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
 
   const selectedValue = selected === null ? 0 : grid[selected] ?? 0;
   const playableCells = givens.reduce((total, given) => total + (given ? 0 : 1), 0);
-  const completedPlayableCells = grid.reduce(
+  const completedPlayableCells = grid.reduce<number>(
     (total, value, index) => total + (!givens[index] && value === SOLUTION[index] ? 1 : 0),
     0,
   );
