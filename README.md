@@ -50,9 +50,9 @@ Create `.env.production` from `.env.production.example`, replace every placehold
 
 ```bash
 chmod 600 .env.production
-ENV_FILE=.env.production ./scripts/preflight-production.sh
+ENV_FILE=.env.production bash scripts/preflight-production.sh
 docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml up -d --build --remove-orphans
-APP_DOMAIN=<host> ./scripts/smoke-production.sh
+APP_DOMAIN=<host> bash scripts/smoke-production.sh
 ```
 
 Only Caddy ports 80/443 should be publicly exposed by the production Compose stack. Production is not verified until the physical-device and live-infrastructure checklist in `docs/steps/70-live-verification.md` passes. See `docs/steps/31-production-compose.md` and `docs/PROGRESS.md` for the security boundary and current status.
