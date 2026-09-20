@@ -17,6 +17,7 @@ export function useSecretUnlock(onUnlock: () => void) {
   const state = useRef<GestureState>(createGestureState());
   const pointerActive = useRef(false);
   const startY = useRef<number | null>(null);
+  const dragOffsetRef = useRef(0);
   const suppressNextFiveClick = useRef(false);
   const unlockTimer = useRef<number | null>(null);
   const [dragOffsetY, setDragOffsetY] = useState(0);
@@ -41,6 +42,7 @@ export function useSecretUnlock(onUnlock: () => void) {
     );
     pointerActive.current = true;
     startY.current = event.clientY;
+    dragOffsetRef.current = 0;
     suppressNextFiveClick.current = false;
     setDragOffsetY(0);
     setDragging(true);
@@ -55,7 +57,9 @@ export function useSecretUnlock(onUnlock: () => void) {
   const onFivePointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (!pointerActive.current || startY.current === null) return;
     const upwardDistance = Math.max(0, startY.current - event.clientY);
-    setDragOffsetY(Math.min(MAX_VISUAL_DRAG_PX, upwardDistance));
+    const nextOffset = Math.min(MAX_VISUAL_DRAG_PX, upwardDistance);
+    dragOffsetRef.current = nextOffset;
+    setDragOffsetY(nextOffset);
   }, []);
 
   const resetVisual = useCallback(() => {
@@ -81,10 +85,13 @@ export function useSecretUnlock(onUnlock: () => void) {
       setDragging(false);
 
       if (!result.unlocked) {
+        suppressNextFiveClick.current = dragOffsetRef.current > 12;
+        dragOffsetRef.current = 0;
         setDragOffsetY(0);
         return;
       }
 
+      dragOffsetRef.current = MAX_VISUAL_DRAG_PX;
       suppressNextFiveClick.current = true;
       setUnlocking(true);
       setDragOffsetY(MAX_VISUAL_DRAG_PX);
@@ -92,6 +99,7 @@ export function useSecretUnlock(onUnlock: () => void) {
 
       if (unlockTimer.current !== null) window.clearTimeout(unlockTimer.current);
       unlockTimer.current = window.setTimeout(() => {
+        dragOffsetRef.current = 0;
         setUnlocking(false);
         setDragOffsetY(0);
         onUnlock();
@@ -108,6 +116,7 @@ export function useSecretUnlock(onUnlock: () => void) {
 
   const cancel = useCallback(() => {
     state.current = createGestureState();
+    dragOffsetRef.current = 0;
     suppressNextFiveClick.current = false;
     if (unlockTimer.current !== null) {
       window.clearTimeout(unlockTimer.current);
