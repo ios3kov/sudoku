@@ -354,6 +354,11 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     await this.flushPendingOutboundTransition();
     await this.flushPendingApplicationSends();
     await this.flushPendingAcks();
+
+    // Keep initial KeyPackage generation inside the same cross-instance
+    // initialization lock. Otherwise a cancelled Strict-Mode mount can publish
+    // KeyPackages from provider state that a later mount overwrites.
+    await this.ensureKeyPackagePool(10);
   }
 
   async createKeyPackages(count: number): Promise<Uint8Array[]> {

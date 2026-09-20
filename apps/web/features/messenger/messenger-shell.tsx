@@ -97,7 +97,6 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           deviceId: current.id,
         });
         await adapter.initialize();
-        await adapter.ensureKeyPackagePool(10);
 
         if (cancelled) return;
         e2eeRef.current = adapter;

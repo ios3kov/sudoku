@@ -53,3 +53,11 @@ API integration coverage now issues concurrent identical registrations and verif
 After the server registration race was fixed, Chromium acceptance still showed the secure-chat button permanently disabled. Root cause: React development Strict Mode can mount MessengerShell twice quickly enough for two OpenMLS adapter instances to read an empty IndexedDB state and create different identities for the same authenticated session.
 
 OpenMlsProtocolAdapter initialization is now serialized by its durable `stateKey`. A second same-device initializer waits for the first to persist the identity, then reloads that exact state instead of generating another identity. The server keeps its fail-closed identity mismatch check; this fix removes the client race rather than weakening that check.
+
+
+## KeyPackage startup race
+The next browser acceptance run reached conversation creation but the peer could not recover the Welcome after reload.
+
+Root cause: the Strict-Mode initialization lock covered identity creation/registration but not the immediately-following KeyPackage pool refill in MessengerShell. A cancelled first mount could therefore generate/publish KeyPackages from one provider state while the surviving mount loaded or persisted another provider state. The server could hand out a KeyPackage whose corresponding private material was no longer present in the surviving browser state.
+
+Initial KeyPackage pool refill now runs inside the same per-stateKey serialized OpenMLS initialization. MessengerShell no longer performs a second unsynchronized startup refill. Reconnect-time pool maintenance remains serialized on the live adapter.
