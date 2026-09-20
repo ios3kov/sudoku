@@ -34,7 +34,8 @@ RUN npm ci --include=dev --workspaces --include-workspace-root
 COPY apps/web ./apps/web
 COPY packages/domain ./packages/domain
 COPY --from=mls-build /out ./apps/web/generated/mls-wasm
-RUN npm run build:web \
+RUN npm --workspace @sudoku/domain run build \
+    && npm run build:web \
     && npm prune --omit=dev --workspaces --include-workspace-root \
     && chown -R node:node /srv/app
 
