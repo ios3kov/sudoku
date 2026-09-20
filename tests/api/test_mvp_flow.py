@@ -1609,7 +1609,7 @@ async def test_concurrent_mls_device_registration_is_idempotent() -> None:
         sessions = await client.get("/v1/sessions")
         assert sessions.status_code == 200, sessions.text
         device_id = next(item["id"] for item in sessions.json() if item["current"])
-        identity = base64.b64encode(b"R" * 32).decode()
+        identity = base64.b64encode(hashlib.sha256(suffix.encode()).digest()).decode()
 
         responses = await asyncio.gather(*[
             client.put(
