@@ -32,7 +32,6 @@ from .e2ee_support import (
     ControlEventBatchCreateRequest,
     ControlEventBatchItemRequest,
     ControlEventCreateRequest,
-    ControlRecipientRequest,
     DeviceRegistrationRequest,
     KeyPackagePublishRequest,
     active_device,
