@@ -165,6 +165,11 @@ jobs:
           fi
           rm -f .env.production.ci .env.production.bad
 
+      - name: Verify pinned infrastructure images are pullable
+        run: |
+          docker pull quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z
+          docker pull quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com
