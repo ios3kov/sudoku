@@ -31,6 +31,9 @@ export function useSecretUnlock({
 }: SecretUnlockOptions) {
   const screenRef = useRef<HTMLElement | null>(null);
   const state = useRef<GestureState>(createGestureState());
+  const setScreenElement = useCallback((node: HTMLElement | null) => {
+    screenRef.current = node;
+  }, []);
   const pointerActive = useRef(false);
   const startY = useRef<number | null>(null);
   const currentOffset = useRef(0);
@@ -190,7 +193,7 @@ export function useSecretUnlock({
   }, [finishReturn]);
 
   return {
-    screenRef,
+    setScreenElement,
     onFivePointerDown,
     onFivePointerMove,
     onFivePointerUp,
