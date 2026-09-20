@@ -61,6 +61,7 @@ async def _can_access_asset(db: AsyncSession, asset: Asset, user_id: uuid.UUID) 
                 Message.id == MessageAsset.message_id,
                 ConversationMember.conversation_id == Message.conversation_id,
                 ConversationMember.user_id == user_id,
+                ConversationMember.e2ee_state != "pending_add",
             )
         )
     )
