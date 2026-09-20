@@ -8,8 +8,8 @@ from app.security import hash_password
 
 
 USERS = (
-    ("browser-owner@example.test", "Browser Owner"),
-    ("browser-peer@example.test", "Browser Peer"),
+    ("browser-owner@example.com", "Browser Owner"),
+    ("browser-peer@example.com", "Browser Peer"),
 )
 PASSWORD = "browser acceptance password"
 

@@ -35,3 +35,7 @@ Automated CI cannot substitute for:
 - final smoke test on the deployed hostname.
 
 Production remains blocked until those external checks are completed.
+
+
+## Browser fixture correction
+The browser acceptance users originally used the reserved `.test` TLD. The API login schema uses Pydantic `EmailStr`, which correctly rejects that address with HTTP 422 before credential verification. The browser seed and test now use syntactically deliverable `@example.com` fixture addresses. This was a test-fixture bug, not an MLS initialization failure.
