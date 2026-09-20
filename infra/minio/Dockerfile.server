@@ -1,0 +1,15 @@
+FROM golang:1.24-alpine AS build
+ARG MINIO_VERSION
+ENV CGO_ENABLED=0
+RUN apk add --no-cache ca-certificates git
+RUN test -n "$MINIO_VERSION" && GOBIN=/out go install "github.com/minio/minio@$MINIO_VERSION"
+
+FROM alpine:3.22
+ARG MINIO_VERSION
+LABEL org.opencontainers.image.version="$MINIO_VERSION"
+RUN apk add --no-cache ca-certificates && addgroup -S minio && adduser -S -G minio minio
+COPY --from=build /out/minio /usr/local/bin/minio
+RUN mkdir -p /data && chown minio:minio /data
+USER minio
+VOLUME ["/data"]
+ENTRYPOINT ["minio"]
