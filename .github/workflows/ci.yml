@@ -156,7 +156,7 @@ jobs:
           REQUIRE_E2EE_NEW_CONVERSATIONS=true
           EOF
           chmod 600 .env.production.ci
-          SKIP_DNS=1 ENV_FILE=.env.production.ci ./scripts/preflight-production.sh
+          SKIP_DNS=1 ENV_FILE=.env.production.ci bash scripts/preflight-production.sh
           rm -f .env.production.ci
 
       - name: Validate production Compose merge
