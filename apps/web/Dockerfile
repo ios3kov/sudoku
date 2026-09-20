@@ -1,4 +1,4 @@
-FROM rust:1.91-bookworm AS mls-build
+FROM rust:1.97-bookworm AS mls-build
 
 WORKDIR /src
 COPY packages/mls-wasm ./packages/mls-wasm
