@@ -120,14 +120,15 @@ export function ConversationView({
 
   useEffect(() => {
     const syncOnline = () => setOnline(navigator.onLine);
+    const typingTimers = remoteTypingTimers.current;
     syncOnline();
     window.addEventListener("online", syncOnline);
     window.addEventListener("offline", syncOnline);
     return () => {
       window.removeEventListener("online", syncOnline);
       window.removeEventListener("offline", syncOnline);
-      for (const timer of remoteTypingTimers.current.values()) window.clearTimeout(timer);
-      remoteTypingTimers.current.clear();
+      for (const timer of typingTimers.values()) window.clearTimeout(timer);
+      typingTimers.clear();
       if (typingTimer.current !== null) window.clearTimeout(typingTimer.current);
       if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
       stopRecorderResources(true);

@@ -36,6 +36,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
   const [deviceRekeyError, setDeviceRekeyError] = useState<string | null>(null);
   const [e2eeState, setE2eeState] = useState<"initializing" | "ready" | "error">("initializing");
+  const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
+  const [e2eeAdapter, setE2eeAdapter] = useState<OpenMlsProtocolAdapter | null>(null);
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
@@ -100,6 +102,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
         if (cancelled) return;
         e2eeRef.current = adapter;
+        setE2eeAdapter(adapter);
         setE2eeState("ready");
 
         const latestConversations = sortConversations(
@@ -126,6 +129,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       } catch {
         if (!cancelled) {
           e2eeRef.current = null;
+          setE2eeAdapter(null);
           setE2eeState("error");
         }
       }
@@ -227,10 +231,12 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       },
     });
     realtimeRef.current = realtime;
+    setRealtimeClient(realtime);
     realtime.start();
     return () => {
       realtime.stop();
       realtimeRef.current = null;
+      setRealtimeClient(null);
     };
   }, [loadConversations, reconcileDeviceChange, user.id]);
 
@@ -284,12 +290,12 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
   if (selected?.encryption_required) {
     const selectedTracked =
-      e2eeRef.current?.trackedConversationIds().includes(selected.id) ?? false;
+      e2eeAdapter?.trackedConversationIds().includes(selected.id) ?? false;
     if (
       !selected.e2ee_ready
       && selected.created_by === user.id
       && e2eeState === "ready"
-      && e2eeRef.current
+      && e2eeAdapter
     ) {
       return (
         <main className="messenger-page">
@@ -308,7 +314,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
                 type="button"
                 disabled={secureSetupBusy}
                 onClick={() => {
-                  const adapter = e2eeRef.current;
+                  const adapter = e2eeAdapter;
                   if (!adapter) return;
                   setSecureSetupBusy(true);
                   setSecureSetupError(null);
@@ -333,7 +339,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     if (
       selected.e2ee_ready
       && e2eeState === "ready"
-      && e2eeRef.current
+      && e2eeAdapter
       && selectedTracked
     ) {
       return (
@@ -342,7 +348,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <EncryptedConversationView
               conversation={selected}
               user={user}
-              adapter={e2eeRef.current}
+              adapter={e2eeAdapter}
               realtimeEvent={latestEvent}
               reconnectTick={reconnectTick}
               onBack={() => setSelectedId(null)}
@@ -388,7 +394,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           <ConversationView
             conversation={selected}
             user={user}
-            realtime={realtimeRef.current}
+            realtime={realtimeClient}
             realtimeEvent={latestEvent}
             reconnectTick={reconnectTick}
             onBack={() => setSelectedId(null)}
@@ -419,7 +425,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           <NewChat
             onCreated={addConversation}
             onCancel={() => setCreating(false)}
-            adapter={e2eeState === "ready" ? e2eeRef.current : null}
+            adapter={e2eeState === "ready" ? e2eeAdapter : null}
           />
         ) : (
           <div className="conversation-list">

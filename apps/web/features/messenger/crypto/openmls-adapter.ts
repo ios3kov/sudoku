@@ -306,7 +306,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   }
 
   private async initializeUnlocked(): Promise<void> {
-    const module = await loadOpenMlsWasm();
+    const wasm = await loadOpenMlsWasm();
     const stored = await this.stateStore.get(this.stateKey);
 
     let provider: Provider;
@@ -315,13 +315,13 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
     if (stored) {
       state = parseLocalState(stored);
-      provider = module.Provider.fromState(base64ToBytes(state.providerStateB64));
-      identity = module.DeviceIdentity.fromPublic(
+      provider = wasm.Provider.fromState(base64ToBytes(state.providerStateB64));
+      identity = wasm.DeviceIdentity.fromPublic(
         base64ToBytes(state.credentialB64),
         base64ToBytes(state.publicKeyB64),
       );
     } else {
-      provider = new module.Provider();
+      provider = new wasm.Provider();
       const credential = utf8(`sudoku-v1:${this.options.userId}:${this.options.deviceId}`);
       identity = provider.createDeviceIdentity(credential);
       state = {

@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const OWNER_EMAIL = "browser-owner@example.com";
 const PEER_EMAIL = "browser-peer@example.com";

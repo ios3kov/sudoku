@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser } from "./types";
 
@@ -28,7 +28,7 @@ export function SecurityVerification({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -59,11 +59,11 @@ export function SecurityVerification({
     } finally {
       setLoading(false);
     }
-  }
+  }, [adapter, conversation.id, conversation.members, user.id]);
 
   useEffect(() => {
     void load();
-  }, [conversation.id]);
+  }, [load]);
 
   async function verify(row: VerificationRow) {
     const key = row.userId + ":" + row.deviceId;

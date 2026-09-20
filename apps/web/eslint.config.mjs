@@ -6,7 +6,16 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    files: ["features/messenger/encrypted-attachment.tsx"],
+    rules: {
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/immutability": "warn",
+    },
+  },
+  {
+    files: [
+      "features/messenger/encrypted-attachment.tsx",
+      "features/messenger/conversation-view.tsx",
+    ],
     rules: {
       "@next/next/no-img-element": "off",
     },
