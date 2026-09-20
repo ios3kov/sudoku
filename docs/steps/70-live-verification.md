@@ -195,9 +195,19 @@ Second production deploy:
 - first administrator bootstrap succeeded through the hidden password prompt.
 
 Device testing then identified Sudoku-shell UX corrections before continuing the two-device gate:
-- private unlock must begin by pressing digit 5 in the keypad and swiping upward without releasing; the 5 must visibly track the finger with a short unlock-progress animation, then complete or spring back;
+- private unlock must begin by pressing digit 5 in the keypad and swiping upward without releasing; the **whole Sudoku screen** must track the finger upward, revealing the actual private surface underneath, then either complete offscreen or spring back;
 - mobile keypad must keep all digits 1–9 on one row at board width;
 - fixed `Level 1` copy must be replaced by a stable puzzle number;
 - add visible Sudoku branding and compact timer/mistakes/progress HUD.
 
 Two-device invite acceptance has not yet passed and remains open. Do not continue to persistence/restore completion claims until the current UX patch is deployed and the invite flow is verified.
+
+
+### Follow-up interaction correction
+The moving-digit/progress-rail implementation was rejected during live UX review because it did not match the intended iPhone-style unlock metaphor.
+
+The replacement implementation is tracked in the Sudoku unlock audit:
+- `docs/audits/sudoku-unlock-ux-2026-09-20.md`;
+- drag path uses compositor transform updates via `requestAnimationFrame`, not React state per pointer move;
+- private underlay is lazy-mounted only after real drag movement;
+- privacy/background concealment explicitly covers a partial reveal.
