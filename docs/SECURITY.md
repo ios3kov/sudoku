@@ -10,19 +10,19 @@ Protect against unauthorized access after discovery of the hidden gesture, sessi
 - Opaque random sessions; only SHA-256 session-token digests are persisted.
 - Secure, HttpOnly, SameSite=Lax cookie.
 - Rotatable/revocable per-device sessions.
-- Invite-only account creation.
+- Invite-only account creation. Invite secrets are submitted in JSON request bodies and never placed in request URLs.
 - Only `is_admin` users can issue/revoke invites.
 - First administrator is created by an explicit bootstrap CLI; the password is read from a hidden prompt, not argv.
 - Every conversation/message/asset path performs server-side membership/ownership checks.
 - Group administration uses conversation-local owner roles; a global app admin does not bypass group membership authorization.
 - The last group owner cannot be demoted/removed, preventing ownerless groups.
-- Active device sessions are user-visible and remotely revocable; revoking the current session clears its cookie.
+- Active device sessions are user-visible and remotely revocable. A remotely revoked browser session is concealed immediately when the authenticated realtime channel closes, local MLS state/outbox are cleared, and the UI returns to Sudoku.
 
 ## Browser request boundaries
 
 - State-changing HTTP methods reject mismatched `Origin`.
 - Cookie-authenticated WebSocket connections require exact `PUBLIC_ORIGIN` before authentication/accept.
-- Private `/v1/*` responses are never cached by the service worker.
+- Private `/v1/*` responses are never cached by the service worker and the API adds `Cache-Control: no-store` outside health endpoints.
 
 ## Abuse prevention
 
@@ -60,6 +60,19 @@ Redis fixed-window limits exist for login IP/account buckets and authenticated a
 - Normal launch: real playable Sudoku.
 - Hidden gesture: tap a visible `5`, then constrained upward swipe in the arm window.
 - Backgrounding for more than 30 seconds restores Sudoku before private content is shown again.
+
+## Production runtime hardening
+
+- Production Caddy adds HSTS, CSP, frame denial, no-referrer, COOP/CORP, nosniff and a restrictive Permissions-Policy.
+- Browser network egress under CSP is limited to the application origin, the dedicated encrypted-object subdomain and the same-host secure WebSocket.
+- API/Web containers run as non-root users; production Compose drops Linux capabilities and sets `no-new-privileges`.
+- MinIO is not directly published in production; browsers use the TLS `assets.<APP_DOMAIN>` endpoint and a dedicated least-privilege application user.
+- PostgreSQL/Redis/MinIO are not exposed as public application ports.
+- Backup/restore scripts use restrictive local permissions and integrity manifests; the real restore drill remains part of Step 70.
+
+## Dependency security
+
+CI audits Python, npm production dependencies and the Rust `Cargo.lock`. The current RustSec scan has no known vulnerability; it reports the transitive `proc-macro-error2 2.0.1` as unmaintained (RUSTSEC-2026-0173). This is tracked as a non-blocking maintenance risk.
 
 ## Limitations
 

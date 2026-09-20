@@ -20,16 +20,19 @@ The hidden gesture is presentation privacy only. Server authentication and autho
 
 ## Verification
 
-The complete automated acceptance pipeline has passed with real PostgreSQL + Redis + in-process S3-compatible storage:
+The enhanced pre-production pipeline passes with real PostgreSQL + Redis + in-process S3-compatible storage:
 
-- migrations + API integration
-- pinned OpenMLS Rust tests + browser WASM build
-- domain tests + TypeScript declarations
-- web typecheck + Next production build
-- Chromium E2EE reload/offline/retry acceptance
+- migrations, API integration, Python lint and dependency audit
+- pinned OpenMLS Rust tests + browser WASM build + RustSec audit
+- canonical npm clean install, npm audit, ESLint and JSX/CSS contract
+- domain tests + 10k-event encrypted projection profile
+- TypeScript declarations/typecheck + Next production build
+- bundle/WASM performance budgets
+- Chromium E2EE + mobile UI acceptance against the production build
 - production Compose policy validation
+- production API/Web Docker image builds with non-root user assertions
 
-Security hardening after the baseline includes strict mutation/WebSocket Origin checks, app-switcher privacy cover, serialized session rotation, realtime session revalidation, connection-scoped presence, push SSRF allowlisting and sensitive URL log suppression.
+Security hardening after the baseline includes strict mutation/WebSocket Origin checks, CSP/edge egress controls, app-switcher privacy cover, serialized session rotation, immediate concealment after remote session revocation, realtime membership/session revalidation, push SSRF allowlisting, private-response no-store policy and sensitive URL/log suppression.
 
 A live production deployment/mobile smoke test is still required before calling the service production-verified.
 

@@ -1,10 +1,12 @@
 # Progress
 
 ## Current milestone
-Automated E2EE production code gate complete. Production deployment remains blocked only on physical-device and live-infrastructure verification.
+Global automated pre-production audit, polish and profiling are complete. The code-level production gate passed on commit `d082d984`.
+
+The only remaining production gate is Step 70: physical iOS/Android and live-infrastructure verification.
 
 ## Verified E2EE baseline
-Through Step 69 the repository has verified:
+Through Steps 69-71 the repository has verified:
 - MLS/RFC 9420 direct + group protocol via pinned OpenMLS 0.9.0 WASM;
 - encrypted browser protocol state and crash-safe encrypted outbox;
 - persistent session-bound device identities and single-use KeyPackages;
@@ -15,34 +17,73 @@ Through Step 69 the repository has verified:
 - encrypted message/edit/reaction/delete events;
 - encrypted image/file/voice upload, local decrypt/render and integrity verification;
 - deterministic encrypted-event projection and unified application/control ordering;
-- reload/reconnect recovery solely through the unified transport cursor, preventing duplicate Welcome processing;
-- MLS-aware group add/remove transitions with server prepare/finalize choreography;
-- device/session add/revoke rekey reconciliation for existing encrypted groups;
+- reload/reconnect recovery solely through the unified transport cursor;
+- MLS-aware group add/remove transitions and device/session rekey reconciliation;
 - production API enforcement that new conversations are E2EE-only;
-- safety-number verification UI with locally encrypted verified markers;
-- Chromium reload/offline/retry/fail-closed browser acceptance.
+- safety-number verification UI;
+- immediate concealment/local MLS cleanup when a browser session is remotely revoked.
+
+## Global pre-production audit
+Step 71 closed the automated UX/UI, performance, security/privacy, accessibility, technical and operational findings that block deployment.
+
+Key fixes:
+- rebuilt the previously incomplete UI stylesheet as a responsive mobile-first design system;
+- added safe-area handling, focus states, reduced-motion behavior and >=44px mobile interaction targets;
+- added mobile UI overflow/keyboard/privacy acceptance;
+- bounded long-chat DOM and lazy-decrypt encrypted media;
+- released decrypted image/file memory when it is no longer needed;
+- preserved scroll position while reading older messages during realtime updates;
+- moved invite secrets from URL paths into JSON request bodies;
+- hardened CSP/edge headers and browser egress;
+- excluded `pending_add` members from asset authorization;
+- hardened realtime membership/rate-limit/session-revocation behavior;
+- made application containers non-root with dropped capabilities/no-new-privileges;
+- made MinIO production routing, CORS and dedicated application credentials explicit;
+- added production backup/restore scripts and protected local backups from Git;
+- added canonical npm lockfile/reproducible installs.
 
 ## Automated verification
-Full CI passed on final automated-gate commit `1b3f5d3e`:
-- Python compile and Alembic migrations ✓
-- API integration tests ✓
-- pinned OpenMLS Rust tests + WASM build ✓
-- domain tests + declarations ✓
-- web TypeScript check ✓
+Full enhanced CI passed on code-gate commit `d082d984`:
+- Python compile + Alembic migrations ✓
+- Ruff Python lint ✓
+- pip dependency audit ✓
+- API integration tests: 11 passed ✓
+- pinned OpenMLS Rust tests: 6 passed ✓
+- OpenMLS WASM production build ✓
+- RustSec audit: no known vulnerabilities ✓
+- canonical `npm ci` ✓
+- npm production dependency audit: 0 vulnerabilities ✓
+- JSX/CSS UI contract: 103 classes checked ✓
+- ESLint ✓
+- domain tests + encrypted projection profiling ✓
+- TypeScript declarations/typecheck ✓
 - Next production build ✓
-- Chromium E2EE acceptance ✓
-- production Compose merge/policy validation ✓
+- web bundle/WASM performance budget ✓
+- production-mode Chromium acceptance: 2 passed ✓
+- backup/restore script validation ✓
+- production Compose security-policy validation ✓
+- real API and Web Docker image builds ✓
+- non-root image users verified (`sudoku` / `node`) ✓
 
-## Next step
-Step 70 is external production verification on physical iOS/Android devices and the live deployment.
+Measured profile:
+- 10,000 encrypted events projected in 25.16 ms on the GitHub runner;
+- production JS: 10 chunks, 207,793 bytes total gzip;
+- largest JS chunk: 71,470 bytes gzip;
+- OpenMLS WASM: 2,709,987 bytes raw;
+- service worker: 2,546 bytes raw.
+
+## Known non-blocking P2
+- RustSec reports `proc-macro-error2 2.0.1` as unmaintained (RUSTSEC-2026-0173), pulled transitively through `hax-lib-macros 0.3.7`. No known vulnerability is reported. Dependency monitoring is enabled.
+- The encrypted local journal is still persisted as part of the encrypted protocol-state blob. Projection CPU cost is low, but very large catch-up histories can create IndexedDB write amplification. Re-profile on physical mobile hardware before expanding beyond the invite-only MVP scale.
 
 ## Remaining production blockers
-These require an actual deployment or physical devices and cannot be truthfully closed by repository CI:
+These require an actual deployment or physical devices and cannot be closed by repository CI:
 - installed iOS PWA privacy/background + push + attachment/voice smoke;
 - installed Android PWA privacy/background + push + attachment/voice smoke;
-- live DNS/TLS verification;
-- live PostgreSQL/Redis/S3 persistence and backup/restore verification;
-- final deployed-host smoke test.
+- live DNS/TLS and CSP verification;
+- live PostgreSQL/Redis/MinIO persistence;
+- a real PostgreSQL + encrypted-object backup/restore drill;
+- final two-device encrypted smoke including remote session revocation.
 
 ## Deployment rule
-Do not call the service production-verified until the live/mobile checks above pass.
+Do not call the service production-verified until Step 70 passes.
