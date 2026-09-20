@@ -18,3 +18,19 @@
 
     reverse_proxy web:3000
 }
+
+
+assets.{$APP_DOMAIN} {
+    encode zstd gzip
+
+    header {
+        -Server
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Cross-Origin-Resource-Policy "same-site"
+    }
+
+    reverse_proxy minio:9000
+}

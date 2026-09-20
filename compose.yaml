@@ -48,14 +48,24 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sudoku-local}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-minio-password-change-me}
+      S3_BUCKET: ${S3_BUCKET:-sudoku-assets}
+      S3_ALLOWED_ORIGIN: ${S3_ALLOWED_ORIGIN:-http://localhost:8080}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-sudoku-local-app}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-local-sudoku-app-secret-change-me}
     volumes:
-      - ./infra/minio/cors.xml:/config/cors.xml:ro
+      - ./infra/minio/cors.template.xml:/config/cors.template.xml:ro
+      - ./infra/minio/app-policy.template.json:/config/app-policy.template.json:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
         until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done;
-        mc mb --ignore-existing local/sudoku-assets;
-        mc cors set local/sudoku-assets /config/cors.xml;
+        sed "s|__ORIGIN__|${S3_ALLOWED_ORIGIN}|g" /config/cors.template.xml > /tmp/cors.xml;
+        sed "s|__BUCKET__|${S3_BUCKET}|g" /config/app-policy.template.json > /tmp/app-policy.json;
+        mc mb --ignore-existing "local/${S3_BUCKET}";
+        mc cors set "local/${S3_BUCKET}" /tmp/cors.xml;
+        mc admin policy info local sudoku-app >/dev/null 2>&1 || mc admin policy create local sudoku-app /tmp/app-policy.json;
+        mc admin user info local "${S3_ACCESS_KEY_ID}" >/dev/null 2>&1 || mc admin user add local "${S3_ACCESS_KEY_ID}" "${S3_SECRET_ACCESS_KEY}";
+        mc admin policy attach local sudoku-app --user "${S3_ACCESS_KEY_ID}";
 
   api:
     build:
@@ -72,8 +82,8 @@ services:
       S3_REGION: us-east-1
       S3_ENDPOINT_URL: http://minio:9000
       S3_PUBLIC_ENDPOINT_URL: http://localhost:9000
-      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-sudoku-local}
-      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-local-minio-password-change-me}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-sudoku-local-app}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-local-sudoku-app-secret-change-me}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.invalid}
@@ -111,8 +121,8 @@ services:
       S3_REGION: us-east-1
       S3_ENDPOINT_URL: http://minio:9000
       S3_PUBLIC_ENDPOINT_URL: http://localhost:9000
-      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-sudoku-local}
-      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-local-minio-password-change-me}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-sudoku-local-app}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-local-sudoku-app-secret-change-me}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.invalid}
