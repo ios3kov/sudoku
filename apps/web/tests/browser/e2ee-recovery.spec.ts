@@ -76,9 +76,88 @@ async function openConversation(page: Page, peerName: string) {
   const item = page.locator(".conversation-item").filter({ hasText: peerName });
   await expect(item).toBeVisible({ timeout: 60_000 });
   await item.click();
-  await expect(page.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
-    timeout: 60_000,
-  });
+
+  const secureHeader = page.getByText("End-to-end encrypted", { exact: true });
+  try {
+    await expect(secureHeader).toBeVisible({ timeout: 10_000 });
+  } catch {
+    const diagnostics = await page.evaluate(async () => {
+      const [conversationsResponse, sessionsResponse] = await Promise.all([
+        fetch("/v1/conversations", { credentials: "include", cache: "no-store" }),
+        fetch("/v1/sessions", { credentials: "include", cache: "no-store" }),
+      ]);
+      const conversations = conversationsResponse.ok
+        ? await conversationsResponse.json()
+        : [];
+      const sessions = sessionsResponse.ok ? await sessionsResponse.json() : [];
+      const current = sessions.find((session: { current?: boolean }) => session.current);
+      const conversation = conversations[0] ?? null;
+
+      let controlStatus: number | null = null;
+      let controlCount: number | null = null;
+      let transportStatus: number | null = null;
+      let transportKinds: string[] | null = null;
+      if (conversation?.id && current?.id) {
+        const control = await fetch(
+          `/v1/e2ee/conversations/${conversation.id}/devices/${current.id}/control-events`,
+          { credentials: "include", cache: "no-store" },
+        );
+        controlStatus = control.status;
+        if (control.ok) controlCount = (await control.json()).length;
+
+        const transport = await fetch(
+          `/v1/e2ee/conversations/${conversation.id}/devices/${current.id}/transport-events`,
+          { credentials: "include", cache: "no-store" },
+        );
+        transportStatus = transport.status;
+        if (transport.ok) {
+          transportKinds = (await transport.json()).map(
+            (event: { kind?: string }) => String(event.kind ?? "unknown"),
+          );
+        }
+      }
+
+      const dbRequest = indexedDB.open("sudoku-private-crypto");
+      const stateKeys = await new Promise<string[]>((resolve) => {
+        dbRequest.onerror = () => resolve([]);
+        dbRequest.onsuccess = () => {
+          const db = dbRequest.result;
+          if (!db.objectStoreNames.contains("state")) {
+            db.close();
+            resolve([]);
+            return;
+          }
+          const tx = db.transaction("state", "readonly");
+          const request = tx.objectStore("state").getAllKeys();
+          request.onerror = () => {
+            db.close();
+            resolve([]);
+          };
+          request.onsuccess = () => {
+            const keys = request.result.map(String);
+            db.close();
+            resolve(keys);
+          };
+        };
+      });
+
+      return {
+        conversationCount: conversations.length,
+        conversationId: conversation?.id ?? null,
+        e2eeReady: conversation?.e2ee_ready ?? null,
+        deviceId: current?.id ?? null,
+        controlStatus,
+        controlCount,
+        transportStatus,
+        transportKinds,
+        stateKeyCount: stateKeys.length,
+        bodyText: document.body.innerText.slice(0, 1200),
+      };
+    });
+    console.log("E2EE_RECOVERY_DIAGNOSTICS", JSON.stringify(diagnostics));
+  }
+
+  await expect(secureHeader).toBeVisible({ timeout: 60_000 });
 }
 
 async function sendText(page: Page, value: string) {
