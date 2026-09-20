@@ -13,6 +13,7 @@ import type {
 import { BrowserProtocolStateStore } from "./browser-state-store";
 import { loadOpenMlsWasm } from "./openmls-runtime";
 import type {
+  DecryptedMessage,
   EncryptedTransportRecord,
   OutboundPlaintext,
   ProtocolAdapter,
