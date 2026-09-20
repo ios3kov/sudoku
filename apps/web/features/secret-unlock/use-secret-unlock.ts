@@ -31,6 +31,7 @@ export function useSecretUnlock({
   const startY = useRef<number | null>(null);
   const currentOffset = useRef(0);
   const pendingOffset = useRef(0);
+  const viewportLimit = useRef(120);
   const suppressNextFiveClick = useRef(false);
   const revealStarted = useRef(false);
   const frame = useRef<number | null>(null);
@@ -101,6 +102,7 @@ export function useSecretUnlock({
 
     pointerActive.current = true;
     startY.current = event.clientY;
+    viewportLimit.current = Math.max(120, window.innerHeight);
     currentOffset.current = 0;
     pendingOffset.current = 0;
     suppressNextFiveClick.current = false;
@@ -116,8 +118,7 @@ export function useSecretUnlock({
     if (!pointerActive.current || startY.current === null) return;
 
     const upwardDistance = Math.max(0, startY.current - event.clientY);
-    const viewportLimit = Math.max(120, window.innerHeight);
-    const nextOffset = Math.min(viewportLimit, upwardDistance);
+    const nextOffset = Math.min(viewportLimit.current, upwardDistance);
 
     if (nextOffset >= REVEAL_START_PX) ensureRevealStarted();
     flushOffset(nextOffset);
