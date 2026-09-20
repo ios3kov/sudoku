@@ -71,7 +71,7 @@ Verified on the Selectel production host:
 Current live findings:
 - first MinIO registry pull blocker was fixed and CI-verified in PR #21;
 - Web production image domain-workspace build blocker was fixed and CI-verified in PR #22;
-- Sudoku shell polish requested during device testing: hidden unlock starts from a held digit 5 in the keypad, the digit visibly follows the finger upward with progress feedback and springs back on an incomplete drag, mobile digits remain one row, a stable puzzle number replaces `Level 1`, and the visible shell gains app branding plus timer/mistakes/progress;
+- Sudoku shell polish requested during device testing: hidden unlock starts from a held keypad digit 5, and the **entire Sudoku surface** now follows the finger upward to reveal the real private surface underneath; incomplete drags spring back. Mobile digits remain one row, a stable puzzle number replaces `Level 1`, and the visible shell gains app branding plus timer/mistakes/progress. The targeted UX/performance audit is documented in `docs/audits/sudoku-unlock-ux-2026-09-20.md`;
 - two-device invite acceptance is not yet verified and remains part of the live gate.
 
 ## Automated verification
