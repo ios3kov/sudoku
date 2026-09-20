@@ -3,7 +3,7 @@
 ## Current milestone
 Global automated pre-production audit, polish, profiling and behavior-preserving structural refactor are complete. The latest code-level production gate passed on commit `b84fc7ef`.
 
-The only remaining production gate is Step 70: physical iOS/Android and live-infrastructure verification.
+The only remaining production gate is Step 70: physical iOS/Android and live-infrastructure verification. Step 70 now has repository-managed preflight, edge-smoke and execution runbook tooling, but the live checks have not yet been executed.
 
 ## Verified E2EE baseline
 Through Steps 69-72 the repository has verified:
@@ -50,6 +50,16 @@ Step 72 reduced high-risk file concentration without changing API, MLS lifecycle
 - shared chat title/voice helpers moved to `chat-utils.ts`;
 - the ~66 KB API integration suite was split into core, MLS transport and MLS membership files;
 - lifecycle-heavy orchestration was intentionally left intact to avoid pre-production ordering regressions.
+
+## Step 70 deployment preparation
+Live-gate preparation now includes:
+- production Compose explicitly replaces the local Caddy port set so only 80/443 are host-published;
+- CI asserts that PostgreSQL, Redis, MinIO, API, Worker, Beat and Web publish no host ports;
+- `scripts/preflight-production.sh` validates Compose version, env-file permissions, required/independent secrets, VAPID key shape, E2EE policy, DNS and the final merged published-port boundary;
+- `scripts/smoke-production.sh` verifies live DNS, certificate-valid HTTPS, API readiness, CSP/security headers, asset-host TLS and HTTP -> HTTPS redirects;
+- `docs/steps/70-live-verification.md` defines the Selectel, persistence, destructive restore, two-device MLS and physical iOS/Android acceptance checklist.
+
+These checks reduce deployment ambiguity but do not replace the actual live/physical Step 70 execution.
 
 ## Automated verification
 Full enhanced CI passed after refactor on code-gate commit `b84fc7ef`:
