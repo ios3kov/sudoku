@@ -50,6 +50,7 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
             json={"email": admin_email, "password": password, "device_name": "integration-test"},
         )
         assert login.status_code == 200, login.text
+        assert login.headers.get("cache-control") == "no-store"
         assert login.json()["is_admin"] is True
 
         invite_response = await admin_client.post(

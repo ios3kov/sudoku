@@ -6,7 +6,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:17-alpine
@@ -74,6 +74,10 @@ jobs:
           test -s apps/web/generated/mls-wasm/sudoku_mls_wasm_bg.wasm
           test -s apps/web/generated/mls-wasm/sudoku_mls_wasm.js
           test -s apps/web/generated/mls-wasm/sudoku_mls_wasm.d.ts
+      - name: Rust dependency audit
+        run: |
+          cargo +1.91.0 install cargo-audit --version 0.22.2 --locked
+          cargo +1.91.0 audit --file packages/mls-wasm/Cargo.lock
       - name: Install web dependencies
         run: |
           cd "$GITHUB_WORKSPACE"
@@ -161,3 +165,10 @@ jobs:
             echo "local origin leaked into production config" >&2
             exit 1
           fi
+
+      - name: Build production application images
+        run: |
+          docker build --file apps/api/Dockerfile --tag sudoku-api-ci .
+          docker build --file apps/web/Dockerfile --tag sudoku-web-ci .
+          test "$(docker inspect --format '{{.Config.User}}' sudoku-api-ci)" = "sudoku"
+          test "$(docker inspect --format '{{.Config.User}}' sudoku-web-ci)" = "node"

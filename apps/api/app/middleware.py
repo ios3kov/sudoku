@@ -36,6 +36,8 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             status_code = response.status_code
             response.headers["X-Request-ID"] = request_id
+            if request.url.path.startswith("/v1/") and not request.url.path.startswith("/v1/health"):
+                response.headers.setdefault("Cache-Control", "no-store")
             return response
         finally:
             duration_ms = (time.perf_counter() - started) * 1000
