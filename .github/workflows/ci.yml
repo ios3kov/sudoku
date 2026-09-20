@@ -75,7 +75,11 @@ jobs:
           test -s apps/web/generated/mls-wasm/sudoku_mls_wasm.js
           test -s apps/web/generated/mls-wasm/sudoku_mls_wasm.d.ts
       - name: Install web dependencies
-        run: npm ci --no-audit --no-fund
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          test -s package-lock.json
+          node -e "const l=require('./package-lock.json'); if ((l.lockfileVersion ?? 0) < 1) process.exit(1)"
+          npm ci --no-audit --no-fund
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=high
       - name: UI class contract
