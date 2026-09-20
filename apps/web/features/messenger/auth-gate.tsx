@@ -135,7 +135,11 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
         }),
       });
       if (!response.ok) {
-        onError(response.status === 409 ? "Account already exists" : "Invite is invalid or expired");
+        if (response.status === 403) onError("This invite is for a different email");
+        else if (response.status === 409) onError("Account already exists");
+        else if (response.status === 422) onError("Check the invite code, email, name, and password");
+        else if (response.status === 429) onError("Too many attempts. Try later.");
+        else onError("Invite is invalid or expired");
         return;
       }
       onSuccess((await response.json()) as CurrentUser);
