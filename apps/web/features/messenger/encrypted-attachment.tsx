@@ -41,6 +41,16 @@ export function EncryptedAttachment({
   const objectUrlRef = useRef<string | null>(null);
   const imageButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  const releaseDecrypted = useCallback(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    setObjectUrl(null);
+    setDecryptedFile(null);
+    setState("idle");
+  }, [releaseDecrypted]);
+
   const decrypt = useCallback(async (): Promise<File> => {
     if (decryptedFile) return decryptedFile;
     setState("loading");
@@ -61,24 +71,27 @@ export function EncryptedAttachment({
   }, [decryptedFile, metadata]);
 
   useEffect(() => {
-    if (messageType !== "image" || state !== "idle") return;
+    if (messageType !== "image") return;
     const node = imageButtonRef.current;
     if (!node || !("IntersectionObserver" in window)) {
-      void decrypt().catch(() => undefined);
+      if (state === "idle") void decrypt().catch(() => undefined);
       return;
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        observer.disconnect();
-        void decrypt().catch(() => undefined);
+        const nearViewport = entries.some((entry) => entry.isIntersecting);
+        if (nearViewport && state === "idle") {
+          void decrypt().catch(() => undefined);
+        } else if (!nearViewport && state === "ready") {
+          releaseDecrypted();
+        }
       },
-      { rootMargin: "240px 0px" },
+      { rootMargin: "800px 0px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [decrypt, messageType, state]);
+  }, [decrypt, messageType, releaseDecrypted, state]);
 
   useEffect(() => () => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -94,6 +107,9 @@ export function EncryptedAttachment({
       anchor.download = file.name;
       anchor.rel = "noopener";
       anchor.click();
+      if (messageType === "file") {
+        window.setTimeout(releaseDecrypted, 0);
+      }
     } catch {
       // Visible state remains generic by design.
     }
