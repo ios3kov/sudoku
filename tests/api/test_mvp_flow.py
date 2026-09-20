@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.db import SessionFactory
 from app.main import app
-from app.models import Conversation, Invite, User
+from app.models import Asset, Conversation, ConversationMember, Invite, Message, MessageAsset, User
 from app.security import hash_password
 
 ORIGIN = "https://sudoku.test"
@@ -1629,3 +1629,103 @@ async def test_concurrent_mls_device_registration_is_idempotent() -> None:
             )
         ).scalars().all()
         assert len(rows) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_pending_add_member_cannot_access_conversation_asset() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    owner_email = f"asset-owner-{suffix}@example.com"
+    pending_email = f"asset-pending-{suffix}@example.com"
+    password = "correct horse battery staple"
+
+    async with SessionFactory() as db:
+        owner = User(
+            email=owner_email,
+            display_name="Asset Owner",
+            password_hash=hash_password(password),
+            status="active",
+        )
+        pending = User(
+            email=pending_email,
+            display_name="Pending Member",
+            password_hash=hash_password(password),
+            status="active",
+        )
+        db.add_all([owner, pending])
+        await db.flush()
+
+        conversation = Conversation(
+            type="group",
+            title="Pending authorization",
+            created_by=owner.id,
+            encryption_required=True,
+            e2ee_ready=True,
+        )
+        db.add(conversation)
+        await db.flush()
+        db.add_all([
+            ConversationMember(
+                conversation_id=conversation.id,
+                user_id=owner.id,
+                role="owner",
+                e2ee_state="active",
+            ),
+            ConversationMember(
+                conversation_id=conversation.id,
+                user_id=pending.id,
+                role="member",
+                e2ee_state="pending_add",
+            ),
+        ])
+
+        asset = Asset(
+            owner_id=owner.id,
+            storage_key=f"tests/{suffix}/ciphertext",
+            filename="encrypted.bin",
+            mime_type="application/octet-stream",
+            size_bytes=32,
+            sha256=hashlib.sha256(b"x" * 32).digest(),
+            e2ee_ciphertext=True,
+            status="ready",
+        )
+        db.add(asset)
+        await db.flush()
+
+        message = Message(
+            conversation_id=conversation.id,
+            sender_id=owner.id,
+            client_id=uuid.uuid4(),
+            sequence=1,
+            type="file",
+            body_text=None,
+            envelope={
+                "version": 1,
+                "protocol": "mls-rfc9420",
+                "kind": "application",
+                "ciphertext": "AA==",
+            },
+            encryption_version=1,
+        )
+        db.add(message)
+        await db.flush()
+        db.add(MessageAsset(message_id=message.id, asset_id=asset.id, position=0))
+        await db.commit()
+        asset_id = asset.id
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as pending_client:
+        login = await pending_client.post(
+            "/v1/auth/login",
+            json={
+                "email": pending_email,
+                "password": password,
+                "device_name": "pending-asset-test",
+            },
+        )
+        assert login.status_code == 200, login.text
+        denied = await pending_client.get(f"/v1/assets/{asset_id}")
+        assert denied.status_code == 404
