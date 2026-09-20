@@ -2,24 +2,37 @@ name: regenerate-npm-lock
 on:
   push:
     branches: [main]
+
+permissions:
+  contents: write
+
 jobs:
   lock:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Generate canonical npm lockfile
+      - name: Generate and validate canonical npm lockfile
         run: |
           rm -f package-lock.json
           npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          node -e "JSON.parse(require('fs').readFileSync('package-lock.json','utf8'))"
+          node -e "const l=JSON.parse(require('fs').readFileSync('package-lock.json','utf8')); if (l.lockfileVersion !== 3) process.exit(1)"
+          npm ci --ignore-scripts --no-audit --no-fund
           sha256sum package-lock.json
-      - uses: actions/upload-artifact@v4
-        with:
-          name: canonical-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit canonical lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already canonical"
+            exit 0
+          fi
+          git commit -m "build: regenerate canonical npm lockfile"
+          git pull --rebase origin main
+          git push origin HEAD:main
