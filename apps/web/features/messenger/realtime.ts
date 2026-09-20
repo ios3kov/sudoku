@@ -3,7 +3,7 @@ import type { RealtimeEvent } from "./types";
 export interface RealtimeHandlers {
   onEvent: (event: RealtimeEvent) => void;
   onOpen?: () => void;
-  onClose?: () => void;
+  onClose?: (event: CloseEvent) => void;
 }
 
 export class RealtimeClient {
@@ -56,10 +56,10 @@ export class RealtimeClient {
       }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this.heartbeat !== null) window.clearInterval(this.heartbeat);
       this.heartbeat = null;
-      this.handlers.onClose?.();
+      this.handlers.onClose?.(event);
       if (this.stopped) return;
       const delay = Math.min(10_000, 500 * 2 ** Math.min(this.attempts, 5));
       this.attempts += 1;

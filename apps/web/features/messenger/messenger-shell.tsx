@@ -167,7 +167,19 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           });
         }
       },
-      onClose: () => setConnectionState("reconnecting"),
+      onClose: (event) => {
+        setConnectionState("reconnecting");
+        if (event.code !== 4401) return;
+
+        realtime.stop();
+        void (async () => {
+          await e2eeRef.current?.clearLocalState().catch(() => undefined);
+          await clearPending().catch(() => undefined);
+          e2eeRef.current = null;
+          onLoggedOut();
+          onHide();
+        })();
+      },
       onEvent: (event) => {
         setLatestEvent(event);
         if (["conversation.created", "conversation.updated", "conversation.members_added", "conversation.member_role_updated", "conversation.member_removed"].includes(event.type)) void loadConversations();
