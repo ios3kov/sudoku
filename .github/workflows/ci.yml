@@ -35,7 +35,7 @@ jobs:
       WEB_PUSH_ALLOWED_HOSTS: push.apple.com,fcm.googleapis.com,push.services.mozilla.com
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: { python-version: "3.13", cache: pip }
       - name: Install API + tests
         run: python -m pip install -e "./apps/api[test]"
