@@ -88,3 +88,7 @@ Passed:
 - production Compose merge/policy validation.
 
 The temporary browser diagnostic dump used to isolate duplicate Welcome replay was removed after the green run.
+
+
+## Final cleanup gate
+The documentation/diagnostic-cleanup commit `1b3f5d3e` also passed the complete workflow. This confirms the repository head after removal of the temporary diagnostic dump remains green across API, OpenMLS/WASM, domain, typecheck, production build, Chromium acceptance and production Compose validation.

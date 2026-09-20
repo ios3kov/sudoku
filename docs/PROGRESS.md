@@ -23,7 +23,7 @@ Through Step 69 the repository has verified:
 - Chromium reload/offline/retry/fail-closed browser acceptance.
 
 ## Automated verification
-Full CI passed on commit `5b451e35`:
+Full CI passed on final automated-gate commit `1b3f5d3e`:
 - Python compile and Alembic migrations ✓
 - API integration tests ✓
 - pinned OpenMLS Rust tests + WASM build ✓
@@ -32,6 +32,9 @@ Full CI passed on commit `5b451e35`:
 - Next production build ✓
 - Chromium E2EE acceptance ✓
 - production Compose merge/policy validation ✓
+
+## Next step
+Step 70 is external production verification on physical iOS/Android devices and the live deployment.
 
 ## Remaining production blockers
 These require an actual deployment or physical devices and cannot be truthfully closed by repository CI:
