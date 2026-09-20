@@ -4,8 +4,6 @@ import uuid
 
 import httpx
 import pytest
-from sqlalchemy import select
-
 from app.db import SessionFactory
 from app.main import app
 from app.models import (
@@ -13,7 +11,7 @@ from app.models import (
     User,
 )
 from app.security import hash_password
-
+from sqlalchemy import select
 
 ORIGIN = "https://sudoku.test"
 MUTATION_HEADERS = {"origin": ORIGIN}
