@@ -22,6 +22,7 @@ import type {
 
 import {
   PROTOCOL,
+  STATE_VERSION,
   base64ToBytes,
   bytesToBase64,
   cloneLocalState,
