@@ -1,12 +1,12 @@
 # Progress
 
 ## Current milestone
-Global automated pre-production audit, polish and profiling are complete. The code-level production gate passed on commit `d082d984`.
+Global automated pre-production audit, polish, profiling and behavior-preserving structural refactor are complete. The latest code-level production gate passed on commit `b84fc7ef`.
 
 The only remaining production gate is Step 70: physical iOS/Android and live-infrastructure verification.
 
 ## Verified E2EE baseline
-Through Steps 69-71 the repository has verified:
+Through Steps 69-72 the repository has verified:
 - MLS/RFC 9420 direct + group protocol via pinned OpenMLS 0.9.0 WASM;
 - encrypted browser protocol state and crash-safe encrypted outbox;
 - persistent session-bound device identities and single-use KeyPackages;
@@ -42,8 +42,17 @@ Key fixes:
 - added production backup/restore scripts and protected local backups from Git;
 - added canonical npm lockfile/reproducible installs.
 
+## Structural refactor
+Step 72 reduced high-risk file concentration without changing API, MLS lifecycle or visible behavior:
+- `openmls-adapter.ts`: ~64.7 KB -> ~53.7 KB; state/codec and application-event codec extracted;
+- `e2ee.py`: ~61.7 KB -> ~54.5 KB; request/validation/authorization helpers extracted;
+- `routes/messaging.py`: ~36.9 KB -> ~31.5 KB; serialization/auth/outbox helpers extracted;
+- shared chat title/voice helpers moved to `chat-utils.ts`;
+- the ~66 KB API integration suite was split into core, MLS transport and MLS membership files;
+- lifecycle-heavy orchestration was intentionally left intact to avoid pre-production ordering regressions.
+
 ## Automated verification
-Full enhanced CI passed on code-gate commit `d082d984`:
+Full enhanced CI passed after refactor on code-gate commit `b84fc7ef`:
 - Python compile + Alembic migrations ✓
 - Ruff Python lint ✓
 - pip dependency audit ✓
