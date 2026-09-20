@@ -67,10 +67,11 @@ for header in \
   require_header "$app_headers" "$header"
 done
 assert_no_server_header "$app_headers"
-grep -Eqi "^content-security-policy:.*connect-src[^;]*https://assets\\.${APP_DOMAIN//./\\\\.}[^;]*wss://${APP_DOMAIN//./\\\\.}" "$app_headers" || {
+csp="$(grep -i '^content-security-policy:' "$app_headers" | head -n 1 | tr -d '\r')"
+if [[ "$csp" != *"https://assets.$APP_DOMAIN"* || "$csp" != *"wss://$APP_DOMAIN"* ]]; then
   echo "CSP connect-src does not include the expected asset and secure WebSocket origins" >&2
   exit 1
-}
+fi
 
 echo "[smoke] API readiness"
 retry_curl 30 --fail --output /dev/null "$origin/v1/health/ready"
