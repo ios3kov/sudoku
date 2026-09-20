@@ -13,7 +13,6 @@ import {
   MAX_VOICE_SECONDS,
   conversationTitle,
   findSupportedVoiceMime,
-  formatBytes,
   formatDuration,
   normalizeVoiceMime,
   voiceFileExtension,
@@ -748,12 +747,6 @@ function readReceiptLabel(conversation: Conversation, currentUserId: string, seq
   if (readCount === 0) return null;
   if (conversation.type === "direct") return "Read";
   return `${readCount} read`;
-}
-
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
 function formatBytes(bytes: number): string {
