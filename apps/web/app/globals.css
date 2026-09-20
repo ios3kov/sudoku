@@ -186,6 +186,12 @@ code{overflow-wrap:anywhere}
 }
 @media (max-width:430px){
   .page{padding:10px}
+  .digits{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .digit{min-height:48px}
+  .messenger-topbar button,.chat-header button,.back-button,.message-more-button,.member-actions button,.settings-row>button,.load-earlier-button{min-height:44px}
+  .back-button{width:44px}
+  .message-more-button{width:44px}
+  .page{padding:10px}
   .messenger-lock{margin-top:4vh;padding:18px}
   .message-bubble-wrap{max-width:88%}
   .messenger-topbar{padding-inline:8px}
