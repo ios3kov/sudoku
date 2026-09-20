@@ -24,6 +24,11 @@ const STATE_VERSION = 1;
 const ENVELOPE_VERSION = 1;
 const PROTOCOL = "mls-rfc9420" as const;
 
+// React Strict Mode and fast remounts can initialize the same authenticated
+// device more than once in one browser tab. Serialize by durable state key so
+// only one initializer can create/persist a fresh MLS identity at a time.
+const initializationQueues = new Map<string, Promise<void>>();
+
 interface PendingOutboundTransition {
   conversationId: string;
   membershipChangeId: string | null;
@@ -285,6 +290,22 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   }
 
   async initialize(): Promise<void> {
+    const previous = initializationQueues.get(this.stateKey) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(() => this.initializeUnlocked());
+    initializationQueues.set(this.stateKey, current);
+
+    try {
+      await current;
+    } finally {
+      if (initializationQueues.get(this.stateKey) === current) {
+        initializationQueues.delete(this.stateKey);
+      }
+    }
+  }
+
+  private async initializeUnlocked(): Promise<void> {
     const module = await loadOpenMlsWasm();
     const stored = await this.stateStore.get(this.stateKey);
 

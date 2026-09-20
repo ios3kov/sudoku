@@ -47,3 +47,9 @@ Browser acceptance exposed a real server race: concurrent initialization of the 
 Device registration now uses PostgreSQL `INSERT ... ON CONFLICT DO NOTHING RETURNING` and then re-reads the authoritative row. Identical concurrent registrations are idempotent; a changed identity or identity-key reuse by another device still fails closed with 409.
 
 API integration coverage now issues concurrent identical registrations and verifies all calls succeed while exactly one MLS device row exists.
+
+
+## Strict-Mode MLS initialization race
+After the server registration race was fixed, Chromium acceptance still showed the secure-chat button permanently disabled. Root cause: React development Strict Mode can mount MessengerShell twice quickly enough for two OpenMLS adapter instances to read an empty IndexedDB state and create different identities for the same authenticated session.
+
+OpenMlsProtocolAdapter initialization is now serialized by its durable `stateKey`. A second same-device initializer waits for the first to persist the identity, then reloads that exact state instead of generating another identity. The server keeps its fail-closed identity mismatch check; this fix removes the client race rather than weakening that check.
