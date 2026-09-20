@@ -14,6 +14,10 @@ const CLICK_SUPPRESS_PX = 12;
 const RETURN_MS = 260;
 const FINISH_MS = 340;
 
+function motionDuration(defaultMs: number): number {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 20 : defaultMs;
+}
+
 interface SecretUnlockOptions {
   onUnlock: () => void;
   onRevealStart: () => void;
@@ -74,7 +78,7 @@ export function useSecretUnlock({
         revealStarted.current = false;
         onRevealCancel();
       }
-    }, RETURN_MS);
+    }, motionDuration(RETURN_MS));
   }, [clearPhaseTimer, flushOffset, onRevealCancel]);
 
   useEffect(() => {
@@ -163,7 +167,7 @@ export function useSecretUnlock({
     clearPhaseTimer();
     phaseTimer.current = window.setTimeout(() => {
       onUnlock();
-    }, FINISH_MS);
+    }, motionDuration(FINISH_MS));
   }, [clearPhaseTimer, ensureRevealStarted, finishReturn, onUnlock]);
 
   const consumeFiveClick = useCallback(() => {
