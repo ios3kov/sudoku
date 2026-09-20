@@ -34,7 +34,7 @@ jobs:
       S3_SECRET_ACCESS_KEY: sudoku-ci-secret
       WEB_PUSH_ALLOWED_HOSTS: push.apple.com,fcm.googleapis.com,push.services.mozilla.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: { python-version: "3.13", cache: pip }
       - name: Install API + tests
