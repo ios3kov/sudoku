@@ -39,6 +39,16 @@ import {
   type RuntimeSnapshot,
 } from "./openmls-state";
 
+export interface OpenMlsAdapterOptions {
+  userId: string;
+  deviceId: string;
+  stateStore?: BrowserProtocolStateStore;
+}
+
+type MlsModule = Awaited<ReturnType<typeof loadOpenMlsWasm>>;
+type Provider = InstanceType<MlsModule["Provider"]>;
+type DeviceIdentity = ReturnType<Provider["createDeviceIdentity"]>;
+
 export class PeerIdentityChangedError extends Error {
   constructor(userId: string, deviceId: string) {
     super("MLS identity changed for " + userId + "/" + deviceId);
