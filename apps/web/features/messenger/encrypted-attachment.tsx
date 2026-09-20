@@ -49,7 +49,7 @@ export function EncryptedAttachment({
     setObjectUrl(null);
     setDecryptedFile(null);
     setState("idle");
-  }, [releaseDecrypted]);
+  }, []);
 
   const decrypt = useCallback(async (): Promise<File> => {
     if (decryptedFile) return decryptedFile;
