@@ -54,6 +54,10 @@ jobs:
       - name: Compile API and migrations
         working-directory: apps/api
         run: python -m compileall -q app alembic
+      - name: Python lint
+        run: ruff check apps/api/app apps/api/alembic tests/api tests/browser
+      - name: Python dependency audit
+        run: pip-audit --local
       - name: Migrate database
         working-directory: apps/api
         run: alembic upgrade head
