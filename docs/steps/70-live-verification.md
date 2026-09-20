@@ -77,7 +77,7 @@ Copy `publicKey` -> `VAPID_PUBLIC_KEY` and `privateKey` -> `VAPID_PRIVATE_KEY`. 
 Before starting containers:
 
 ```bash
-ENV_FILE=.env.production ./scripts/preflight-production.sh
+ENV_FILE=.env.production bash scripts/preflight-production.sh
 ```
 
 The preflight must reject placeholders, weak/unsafe deployment secrets, invalid VAPID key shape, unresolved DNS, unsupported Compose versions, unexpected Compose publication and any host-published service ports except Caddy 80/443.
@@ -87,7 +87,7 @@ The preflight must reject placeholders, weak/unsafe deployment secrets, invalid 
 ```bash
 docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml up -d --build --remove-orphans
 docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml ps
-APP_DOMAIN=<host> ./scripts/smoke-production.sh
+APP_DOMAIN=<host> bash scripts/smoke-production.sh
 ```
 
 The smoke gate verifies DNS, certificate-valid HTTPS, application readiness, HTTP -> HTTPS redirects, the asset-host TLS edge and required security headers.
@@ -119,19 +119,19 @@ Do this before admitting real user data. The restore script is intentionally des
 2. Take a backup:
 
 ```bash
-./scripts/backup-production.sh
+bash scripts/backup-production.sh
 ```
 
 3. Run a destructive restore of that exact backup:
 
 ```bash
-RESTORE_CONFIRM=YES ./scripts/restore-production.sh ./backups/<timestamp>
+RESTORE_CONFIRM=YES bash scripts/restore-production.sh ./backups/<timestamp>
 ```
 
 4. Re-run the edge smoke:
 
 ```bash
-APP_DOMAIN=<host> ./scripts/smoke-production.sh
+APP_DOMAIN=<host> bash scripts/smoke-production.sh
 ```
 
 5. Verify the baseline account/conversation and encrypted attachment still exist and open correctly after the database and bucket were rebuilt.
