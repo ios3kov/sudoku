@@ -76,7 +76,6 @@ jobs:
           test -s apps/web/generated/mls-wasm/sudoku_mls_wasm.d.ts
       - name: Install web dependencies
         run: npm ci --no-audit --no-fund
-          if-no-files-found: error
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=high
       - name: UI class contract
