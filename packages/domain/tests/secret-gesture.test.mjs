@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { armFromFive, beginSwipe, createGestureState, finishSwipe } from "../dist/secret-gesture.js";
 
-test("tap five then quick upward swipe unlocks", () => {
+test("press five then quick upward drag unlocks", () => {
   let state = armFromFive(createGestureState(), 1000);
   state = beginSwipe(state, { x: 100, y: 300 }, 1100);
   const result = finishSwipe(state, { x: 108, y: 190 }, 1350);

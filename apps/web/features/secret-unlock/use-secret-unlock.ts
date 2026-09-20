@@ -11,35 +11,51 @@ import {
 
 export function useSecretUnlock(onUnlock: () => void) {
   const state = useRef<GestureState>(createGestureState());
+  const suppressNextFiveClick = useRef(false);
 
-  const arm = useCallback(() => {
-    state.current = armFromFive(state.current, performance.now());
-  }, []);
-
-  const onPointerDown = useCallback((event: React.PointerEvent) => {
+  const onFivePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const now = performance.now();
+    const armed = armFromFive(createGestureState(), now);
     state.current = beginSwipe(
-      state.current,
+      armed,
       { x: event.clientX, y: event.clientY },
-      performance.now(),
+      now,
     );
+    suppressNextFiveClick.current = false;
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic test events may not register an active pointer.
+    }
   }, []);
 
-  const onPointerUp = useCallback(
-    (event: React.PointerEvent) => {
+  const onFivePointerUp = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
       const result = finishSwipe(
         state.current,
         { x: event.clientX, y: event.clientY },
         performance.now(),
       );
       state.current = result.state;
-      if (result.unlocked) onUnlock();
+      if (result.unlocked) {
+        suppressNextFiveClick.current = true;
+        event.preventDefault();
+        onUnlock();
+      }
     },
     [onUnlock],
   );
 
-  const cancel = useCallback(() => {
-    state.current = createGestureState();
+  const consumeFiveClick = useCallback(() => {
+    if (!suppressNextFiveClick.current) return false;
+    suppressNextFiveClick.current = false;
+    return true;
   }, []);
 
-  return { arm, onPointerDown, onPointerUp, cancel };
+  const cancel = useCallback(() => {
+    state.current = createGestureState();
+    suppressNextFiveClick.current = false;
+  }, []);
+
+  return { onFivePointerDown, onFivePointerUp, consumeFiveClick, cancel };
 }

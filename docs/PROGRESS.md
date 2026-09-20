@@ -1,9 +1,9 @@
 # Progress
 
 ## Current milestone
-Global automated pre-production audit, polish, profiling and behavior-preserving structural refactor are complete. The latest code-level production gate passed on commit `b84fc7ef`.
+Global automated pre-production audit, polish, profiling and behavior-preserving structural refactor are complete. Step 70 live verification is now in progress.
 
-The only remaining production gate is Step 70: physical iOS/Android and live-infrastructure verification. Step 70 now has repository-managed preflight, edge-smoke and execution runbook tooling, but the live checks have not yet been executed.
+Production was successfully built and started on verified commit `68211e02`. Live preflight, DNS/TLS edge smoke, intended external port exposure, and first-administrator bootstrap have passed. Persistence/restore, two-device MLS, and installed iOS/Android PWA checks are still open. Live testing also reopened a small Sudoku-shell UX gate, currently addressed by the compact control/gesture/HUD polish branch.
 
 ## Verified E2EE baseline
 Through Steps 69-72 the repository has verified:
@@ -61,6 +61,19 @@ Live-gate preparation now includes:
 
 These checks reduce deployment ambiguity but do not replace the actual live/physical Step 70 execution.
 
+## Live Step 70 status
+Verified on the Selectel production host:
+- production commit `68211e02` started with API/PostgreSQL/Redis healthy and Web/Worker/Beat/MinIO/Caddy running;
+- live smoke completed successfully for `sudoku.moscow`;
+- external exposure from the administrator source is limited to 22/80/443; application/data ports 3000/5432/6379/8000/9000/9001 are closed;
+- first administrator bootstrap completed through the hidden password prompt.
+
+Current live findings:
+- first MinIO registry pull blocker was fixed and CI-verified in PR #21;
+- Web production image domain-workspace build blocker was fixed and CI-verified in PR #22;
+- Sudoku shell polish requested during device testing: hidden unlock starts from a held digit 5 in the keypad, mobile digits remain one row, a stable puzzle number replaces `Level 1`, and the visible shell gains app branding plus timer/mistakes/progress;
+- two-device invite acceptance is not yet verified and remains part of the live gate.
+
 ## Automated verification
 Full enhanced CI passed after refactor on code-gate commit `b84fc7ef`:
 - Python compile + Alembic migrations ✓
@@ -105,13 +118,14 @@ Repository cleanup is complete before live verification:
 No additional code-fixing stage is required before Step 70. Any failure found during Step 70 reopens the relevant code/infrastructure gate.
 
 ## Remaining production blockers
-These require an actual deployment or physical devices and cannot be closed by repository CI:
-- installed iOS PWA privacy/background + push + attachment/voice smoke;
-- installed Android PWA privacy/background + push + attachment/voice smoke;
-- live DNS/TLS and CSP verification;
-- live PostgreSQL/Redis/MinIO persistence;
+These still require live/physical verification:
+- deploy and verify the latest Sudoku-shell UX patch;
+- diagnose/verify second-account invite acceptance;
+- live PostgreSQL/Redis/MinIO persistence across stack restart and host reboot;
 - a real PostgreSQL + encrypted-object backup/restore drill;
-- final two-device encrypted smoke including remote session revocation.
+- final two-device encrypted smoke including remote session revocation;
+- installed iOS PWA privacy/background + push + attachment/voice smoke;
+- installed Android PWA privacy/background + push + attachment/voice smoke.
 
 ## Deployment rule
 Do not call the service production-verified until Step 70 passes.

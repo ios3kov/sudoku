@@ -6,28 +6,23 @@ const PASSWORD = "browser acceptance password";
 
 async function unlockPrivate(page: Page) {
   await page.goto("/");
-  const five = page.getByRole("gridcell", { name: /, 5$/ }).first();
+  const five = page.getByRole("button", { name: "5", exact: true });
   await expect(five).toBeVisible();
-  await five.click();
 
-  const board = page.getByRole("grid", { name: "Sudoku board" });
-  await expect(board).toBeVisible();
-
-  // Dispatch the exact pointer events handled by useSecretUnlock instead of
-  // relying on OS-level mouse hit-testing/layout timing in headless Chromium.
-  await board.dispatchEvent("pointerdown", {
-    clientX: 120,
-    clientY: 220,
+  // Dispatch the exact press-and-drag gesture handled by useSecretUnlock.
+  await five.dispatchEvent("pointerdown", {
+    clientX: 190,
+    clientY: 740,
     pointerId: 1,
-    pointerType: "mouse",
+    pointerType: "touch",
     isPrimary: true,
     buttons: 1,
   });
-  await board.dispatchEvent("pointerup", {
-    clientX: 120,
-    clientY: 100,
+  await five.dispatchEvent("pointerup", {
+    clientX: 192,
+    clientY: 620,
     pointerId: 1,
-    pointerType: "mouse",
+    pointerType: "touch",
     isPrimary: true,
     buttons: 0,
   });

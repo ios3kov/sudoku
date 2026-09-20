@@ -185,4 +185,19 @@ Live preparation completed:
 
 First production deploy on commit `cdbdcde4` exposed a Web Docker build regression: `@sudoku/domain` was copied into the image but its `dist` output was not built before Next.js compilation, so the container build failed closed with module-resolution errors.
 
-The failure did not start the production application stack. Fix is tracked in PR #22 and must pass the full CI/production-image gate before another deployment attempt.
+The failure did not start the production application stack. PR #22 fixed the missing domain-workspace build and passed the full CI/production-image gate.
+
+Second production deploy:
+- verified commit: `68211e02`;
+- application stack started successfully;
+- live edge smoke passed for `sudoku.moscow`;
+- external administrator-source scan: 22/80/443 reachable; 3000/5432/6379/8000/9000/9001 closed;
+- first administrator bootstrap succeeded through the hidden password prompt.
+
+Device testing then identified Sudoku-shell UX corrections before continuing the two-device gate:
+- private unlock must begin by pressing digit 5 in the keypad and swiping upward without releasing;
+- mobile keypad must keep all digits 1–9 on one row at board width;
+- fixed `Level 1` copy must be replaced by a stable puzzle number;
+- add visible Sudoku branding and compact timer/mistakes/progress HUD.
+
+Two-device invite acceptance has not yet passed and remains open. Do not continue to persistence/restore completion claims until the current UX patch is deployed and the invite flow is verified.
