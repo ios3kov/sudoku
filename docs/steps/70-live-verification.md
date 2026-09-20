@@ -173,3 +173,16 @@ Record in this document after execution:
 - pass/fail for every item above.
 
 Do not mark production verified until every Step 70 item passes. Any failure reopens the relevant gate and must be fixed, reviewed and re-tested before launch.
+
+
+## Execution log — 2026-09-20
+
+Live preparation completed:
+- Selectel production host provisioned and hardened;
+- production DNS for `sudoku.moscow` and `assets.sudoku.moscow` resolves to the Selectel host;
+- production secrets/VAPID created on-host with restrictive env-file permissions;
+- `scripts/preflight-production.sh` passed against the live production configuration.
+
+First production deploy on commit `cdbdcde4` exposed a Web Docker build regression: `@sudoku/domain` was copied into the image but its `dist` output was not built before Next.js compilation, so the container build failed closed with module-resolution errors.
+
+The failure did not start the production application stack. Fix is tracked in PR #22 and must pass the full CI/production-image gate before another deployment attempt.
