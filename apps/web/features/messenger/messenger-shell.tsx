@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
 import { AdminInvite } from "./admin-invite";
-import { ConversationView, conversationTitle } from "./conversation-view";
+import { ConversationView } from "./conversation-view";
 import { EncryptedConversationView } from "./encrypted-conversation-view";
+import { conversationTitle } from "./chat-utils";
 import { NewChat } from "./new-chat";
 import { clearPending } from "./outbox";
 import { RealtimeClient } from "./realtime";

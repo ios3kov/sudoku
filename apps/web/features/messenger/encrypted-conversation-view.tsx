@@ -14,12 +14,18 @@ import { messengerApi } from "./api";
 import { EncryptedAttachment, isEncryptedAttachmentMetadata } from "./encrypted-attachment";
 import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
-import { conversationTitle } from "./conversation-view";
 import { uploadEncryptedAsset } from "./uploads";
 import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
+import {
+  MAX_VOICE_SECONDS,
+  conversationTitle,
+  findSupportedVoiceMime,
+  formatDuration,
+  normalizeVoiceMime,
+  voiceFileExtension,
+} from "./chat-utils";
 
-const MAX_VOICE_SECONDS = 5 * 60;
 const INITIAL_VISIBLE_MESSAGES = 120;
 
 export function EncryptedConversationView({
@@ -269,12 +275,11 @@ export function EncryptedConversationView({
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeCandidates = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
-      const supportedMime = mimeCandidates.find((mime) => MediaRecorder.isTypeSupported(mime));
+      const supportedMime = findSupportedVoiceMime();
       const recorder = supportedMime
         ? new MediaRecorder(stream, { mimeType: supportedMime })
         : new MediaRecorder(stream);
-      const baseMime = (recorder.mimeType || supportedMime || "").split(";", 1)[0];
+      const baseMime = normalizeVoiceMime(recorder.mimeType || supportedMime || "");
       if (!baseMime || !["audio/mp4", "audio/webm"].includes(baseMime)) {
         stream.getTracks().forEach((track) => track.stop());
         setError("This browser records an unsupported audio format");
@@ -321,7 +326,7 @@ export function EncryptedConversationView({
     setBusy(true);
     setUploadProgress(0);
     try {
-      const extension = mimeType === "audio/mp4" ? "m4a" : "webm";
+      const extension = voiceFileExtension(mimeType);
       const file = new File(chunks, `voice-${Date.now()}.${extension}`, {
         type: mimeType,
       });

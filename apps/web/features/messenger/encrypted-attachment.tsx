@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
 import type { EncryptedAttachmentMetadata } from "./types";
 import { downloadEncryptedAsset } from "./uploads";
+import { formatBytes } from "./chat-utils";
 
 export function isEncryptedAttachmentMetadata(
   value: unknown,
@@ -164,10 +165,4 @@ export function EncryptedAttachment({
       <small>{formatBytes(metadata.plaintextSize)}</small>
     </button>
   );
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
