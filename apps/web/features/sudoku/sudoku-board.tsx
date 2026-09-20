@@ -41,7 +41,15 @@ function formatElapsed(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) {
+export function SudokuBoard({
+  onSecretUnlock,
+  onSecretRevealStart,
+  onSecretRevealCancel,
+}: {
+  onSecretUnlock: () => void;
+  onSecretRevealStart: () => void;
+  onSecretRevealCancel: () => void;
+}) {
   const givens = useMemo(() => givensMask(PUZZLE), []);
   const [grid, setGrid] = useState<CellValue[]>([...PUZZLE]);
   const [notes, setNotes] = useState<NotesMap>({});
@@ -52,7 +60,11 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
   const [completedAt, setCompletedAt] = useState<number | null>(null);
   const [clockNow, setClockNow] = useState(0);
   const [hydrated, setHydrated] = useState(false);
-  const gesture = useSecretUnlock(onSecretUnlock);
+  const gesture = useSecretUnlock({
+    onUnlock: onSecretUnlock,
+    onRevealStart: onSecretRevealStart,
+    onRevealCancel: onSecretRevealCancel,
+  });
 
   useEffect(() => {
     const now = Date.now();
@@ -185,7 +197,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
   }
 
   return (
-    <main className="page">
+    <main ref={gesture.screenRef} className="page sudoku-reveal-screen">
       <section className="sudoku-shell" aria-label="Sudoku">
         <header className="topbar sudoku-topbar">
           <div className="sudoku-brand">
@@ -251,34 +263,18 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
         </div>
 
         <div className="controls">
-          <div className={`digits${gesture.active ? " unlock-active" : ""}`} aria-label="Digits">
-            {gesture.active ? (
-              <span className={`unlock-gesture-visual${gesture.unlocking ? " is-complete" : ""}`} aria-hidden="true">
-                <span className="unlock-gesture-rail" />
-                <span
-                  className="unlock-gesture-fill"
-                  style={{ height: `${Math.max(12, Math.round(gesture.progress * 100))}%` }}
-                />
-                <span className="unlock-gesture-chevron" style={{ opacity: 0.35 + gesture.progress * 0.65 }}>↑</span>
-              </span>
-            ) : null}
+          <div className="digits" aria-label="Digits">
             {([1,2,3,4,5,6,7,8,9] as CellValue[]).map((value) => {
               const isSecretDigit = value === 5;
               return (
                 <button
                   key={value}
-                  className={[
-                    "digit",
-                    isSecretDigit ? "secret-digit" : "",
-                    isSecretDigit && gesture.dragging ? "is-dragging" : "",
-                    isSecretDigit && gesture.unlocking ? "is-unlocking" : "",
-                  ].filter(Boolean).join(" ")}
+                  className={`digit${isSecretDigit ? " secret-digit" : ""}`}
                   type="button"
                   onPointerDown={isSecretDigit ? gesture.onFivePointerDown : undefined}
                   onPointerMove={isSecretDigit ? gesture.onFivePointerMove : undefined}
                   onPointerUp={isSecretDigit ? gesture.onFivePointerUp : undefined}
                   onPointerCancel={isSecretDigit ? gesture.cancel : undefined}
-                  style={isSecretDigit ? { transform: `translate3d(0, -${gesture.dragOffsetY}px, 0)` } : undefined}
                   onClick={() => {
                     if (isSecretDigit && gesture.consumeFiveClick()) return;
                     enterDigit(value);
