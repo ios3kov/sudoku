@@ -341,7 +341,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
     }
 
-    this.module = module;
+    this.module = wasm;
     this.provider = provider;
     this.identity = identity;
     this.localState = state;
