@@ -22,7 +22,11 @@ export function useSecretUnlock(onUnlock: () => void) {
       now,
     );
     suppressNextFiveClick.current = false;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic test events may not register an active pointer.
+    }
   }, []);
 
   const onFivePointerUp = useCallback(
