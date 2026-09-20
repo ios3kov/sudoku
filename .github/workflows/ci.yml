@@ -150,6 +150,23 @@ jobs:
           VAPID_SUBJECT: mailto:admin@example.com
         run: |
           docker compose -f compose.yaml -f compose.production.yaml config > /tmp/production-compose.yml
+          docker compose -f compose.yaml -f compose.production.yaml config --format json > /tmp/production-compose.json
+          python - <<'PY'
+          import json
+
+          with open("/tmp/production-compose.json", encoding="utf-8") as handle:
+              config = json.load(handle)
+
+          services = config["services"]
+          caddy_ports = sorted(str(item["published"]) for item in services["caddy"].get("ports", []))
+          if caddy_ports != ["443", "80"]:
+              raise SystemExit(f"unexpected production Caddy published ports: {caddy_ports}")
+
+          for service_name in ("postgres", "redis", "minio", "minio-init", "api", "worker", "beat", "web"):
+              ports = services[service_name].get("ports", [])
+              if ports:
+                  raise SystemExit(f"production service {service_name} unexpectedly publishes ports: {ports}")
+          PY
           grep -q 'PUBLIC_ORIGIN: https://sudoku.example.com' /tmp/production-compose.yml
           grep -q 'SECURE_COOKIES: "true"' /tmp/production-compose.yml
           grep -q 'REQUIRE_E2EE_NEW_CONVERSATIONS: "true"' /tmp/production-compose.yml
