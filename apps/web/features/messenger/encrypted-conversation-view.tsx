@@ -416,7 +416,7 @@ export function EncryptedConversationView({
     <section className="conversation-view">
       <header className="messenger-topbar">
         <div className="conversation-header-copy">
-          <button className="back-button" type="button" onClick={onBack}>←</button>
+          <button className="back-button" type="button" onClick={onBack} aria-label="Back to conversations">←</button>
           <div>
             <strong>{conversationTitle(conversation, user.id)}</strong>
             <span>End-to-end encrypted</span>
@@ -591,13 +591,13 @@ export function EncryptedConversationView({
       {replyingTo ? (
         <div className="reply-compose-preview">
           <span>Replying to {encryptedPreview(replyingTo)}</span>
-          <button type="button" onClick={() => setReplyingToId(null)}>×</button>
+          <button type="button" onClick={() => setReplyingToId(null)} aria-label="Cancel reply">×</button>
         </div>
       ) : null}
       {editing ? (
         <div className="reply-compose-preview">
           <span>Editing encrypted message</span>
-          <button type="button" onClick={() => {
+          <button type="button" aria-label="Cancel edit" onClick={() => {
             setEditingId(null);
             setBody("");
           }}>×</button>
