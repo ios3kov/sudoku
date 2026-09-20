@@ -11,15 +11,26 @@ async function unlockPrivate(page: Page) {
   await five.click();
 
   const board = page.getByRole("grid", { name: "Sudoku board" });
-  const box = await board.boundingBox();
-  if (!box) throw new Error("Sudoku board has no bounding box");
+  await expect(board).toBeVisible();
 
-  const x = box.x + box.width / 2;
-  const startY = box.y + box.height * 0.72;
-  await page.mouse.move(x, startY);
-  await page.mouse.down();
-  await page.mouse.move(x, startY - 120, { steps: 4 });
-  await page.mouse.up();
+  // Dispatch the exact pointer events handled by useSecretUnlock instead of
+  // relying on OS-level mouse hit-testing/layout timing in headless Chromium.
+  await board.dispatchEvent("pointerdown", {
+    clientX: 120,
+    clientY: 220,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+    buttons: 1,
+  });
+  await board.dispatchEvent("pointerup", {
+    clientX: 120,
+    clientY: 100,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+    buttons: 0,
+  });
 
   await expect(page.locator(".messenger-lock, .messenger-page").first()).toBeVisible();
 }
