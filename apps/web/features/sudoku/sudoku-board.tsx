@@ -120,7 +120,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
   const elapsedSeconds =
     startedAt === null
       ? 0
-      : Math.floor(((completedAt ?? clockNow || startedAt) - startedAt) / 1000);
+      : Math.floor(((completedAt ?? (clockNow || startedAt)) - startedAt) / 1000);
 
   function selectCell(index: number) {
     setSelected(index);
