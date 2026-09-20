@@ -175,8 +175,10 @@ jobs:
             --file infra/minio/Dockerfile.mc \
             --build-arg MC_VERSION=RELEASE.2025-08-13T08-35-41Z \
             --tag sudoku-mc-ci .
-          docker run --rm sudoku-minio-ci --version | grep -q 'RELEASE.2025-10-15T17-29-55Z'
-          docker run --rm sudoku-mc-ci --version | grep -q 'RELEASE.2025-08-13T08-35-41Z'
+          test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' sudoku-minio-ci)" = "RELEASE.2025-10-15T17-29-55Z"
+          test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' sudoku-mc-ci)" = "RELEASE.2025-08-13T08-35-41Z"
+          docker run --rm sudoku-minio-ci --version >/dev/null
+          docker run --rm sudoku-mc-ci --version >/dev/null
 
       - name: Validate production Compose merge
         env:
