@@ -23,21 +23,22 @@ RUN apt-get update \
 
 FROM node:22-alpine
 
-ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /srv/app
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/domain/package.json ./packages/domain/package.json
-RUN npm ci --workspaces --include-workspace-root
+RUN npm ci --include=dev --workspaces --include-workspace-root
 
 COPY apps/web ./apps/web
 COPY packages/domain ./packages/domain
 COPY --from=mls-build /out ./apps/web/generated/mls-wasm
 RUN npm run build:web \
+    && npm prune --omit=dev --workspaces --include-workspace-root \
     && chown -R node:node /srv/app
 
+ENV NODE_ENV=production
 USER node
 
 EXPOSE 3000
