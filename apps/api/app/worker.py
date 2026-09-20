@@ -15,8 +15,10 @@ def init_worker_observability(*_args, **_kwargs):
     CeleryInstrumentor().instrument(use_span_links=True)
 
 
-celery_app = Celery("sudoku", broker=settings.redis_url, backend=settings.redis_url)
+celery_app = Celery("sudoku", broker=settings.redis_url)
 celery_app.conf.update(
+    task_ignore_result=True,
+    task_store_errors_even_if_ignored=False,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     broker_transport_options={"visibility_timeout": 300},
