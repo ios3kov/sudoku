@@ -20,6 +20,7 @@ import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 
 const MAX_VOICE_SECONDS = 5 * 60;
+const INITIAL_VISIBLE_MESSAGES = 120;
 
 export function EncryptedConversationView({
   conversation,
@@ -57,6 +58,7 @@ export function EncryptedConversationView({
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -100,6 +102,7 @@ export function EncryptedConversationView({
     setReplyingToId(null);
     setEditingId(null);
     setActionMessageId(null);
+    setVisibleCount(INITIAL_VISIBLE_MESSAGES);
     setError(null);
     setSyncBlocked(true);
     void refreshProjection();
@@ -151,6 +154,10 @@ export function EncryptedConversationView({
   const editing = useMemo(
     () => messages.find((message) => message.id === editingId) ?? null,
     [messages, editingId],
+  );
+  const visibleMessages = useMemo(
+    () => messages.slice(Math.max(0, messages.length - visibleCount)),
+    [messages, visibleCount],
   );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -448,7 +455,18 @@ export function EncryptedConversationView({
             <h2>No encrypted messages yet</h2>
             <p>Messages are decrypted only on this device.</p>
           </div>
-        ) : messages.map((message) => {
+        ) : (
+          <>
+            {messages.length > visibleCount ? (
+              <button
+                className="load-earlier-button"
+                type="button"
+                onClick={() => setVisibleCount((count) => count + INITIAL_VISIBLE_MESSAGES)}
+              >
+                Show earlier messages
+              </button>
+            ) : null}
+            {visibleMessages.map((message) => {
           const own = message.senderId === user.id;
           const reply = message.replyTo
             ? messages.find((candidate) => candidate.id === message.replyTo) ?? null
@@ -546,8 +564,10 @@ export function EncryptedConversationView({
                 </div>
               ) : null}
             </div>
-          );
-        })}
+              );
+            })}
+          </>
+        )}
         <div ref={bottomRef} />
       </div>
 

@@ -39,6 +39,7 @@ export function EncryptedAttachment({
   const [decryptedFile, setDecryptedFile] = useState<File | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const objectUrlRef = useRef<string | null>(null);
+  const imageButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const decrypt = useCallback(async (): Promise<File> => {
     if (decryptedFile) return decryptedFile;
@@ -60,10 +61,24 @@ export function EncryptedAttachment({
   }, [decryptedFile, metadata]);
 
   useEffect(() => {
-    if (messageType === "image" || messageType === "voice") {
+    if (messageType !== "image" || state !== "idle") return;
+    const node = imageButtonRef.current;
+    if (!node || !("IntersectionObserver" in window)) {
       void decrypt().catch(() => undefined);
+      return;
     }
-  }, [decrypt, messageType]);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        void decrypt().catch(() => undefined);
+      },
+      { rootMargin: "240px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [decrypt, messageType, state]);
 
   useEffect(() => () => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -91,6 +106,7 @@ export function EncryptedAttachment({
   if (messageType === "image") {
     return (
       <button
+        ref={imageButtonRef}
         className="image-attachment"
         type="button"
         onClick={() => void download()}
