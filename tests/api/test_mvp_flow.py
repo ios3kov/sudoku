@@ -59,8 +59,9 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
 
         async with httpx.AsyncClient(transport=transport, base_url=ORIGIN, headers=MUTATION_HEADERS) as member_client:
             accepted = await member_client.post(
-                f"/v1/invites/{raw_invite}/accept",
+                "/v1/invites/accept",
                 json={
+                    "token": raw_invite,
                     "email": member_email,
                     "display_name": "Member",
                     "password": password,

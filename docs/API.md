@@ -16,7 +16,7 @@ DELETE /sessions/{session_id}
 
 POST   /invites                  # admin only
 DELETE /invites/{invite_id}      # admin only
-POST   /invites/{token}/accept
+POST   /invites/accept            # token is JSON body field; never place invite secrets in URLs
 ```
 
 Create invite:

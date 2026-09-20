@@ -86,6 +86,7 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => v
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          token,
           email: data.get("email"),
           password: data.get("password"),
           device_name: "Sudoku web app",
@@ -122,7 +123,7 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
     const data = new FormData(event.currentTarget);
     const token = String(data.get("invite") ?? "").trim();
     try {
-      const response = await fetch(`/v1/invites/${encodeURIComponent(token)}/accept`, {
+      const response = await fetch("/v1/invites/accept", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },

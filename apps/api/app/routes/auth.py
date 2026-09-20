@@ -265,14 +265,14 @@ async def revoke_invite(
         await db.commit()
 
 
-@router.post("/invites/{token}/accept", response_model=UserResponse, status_code=201)
-async def accept_invite(token: str, payload: InviteAcceptRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+@router.post("/invites/accept", response_model=UserResponse, status_code=201)
+async def accept_invite(payload: InviteAcceptRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
     await enforce_ip_rate_limit(client_ip, "invite-accept", 20, 900)
     now = datetime.now(UTC)
     email = normalize_email(str(payload.email))
     invite = (
-        await db.execute(select(Invite).where(Invite.token_hash == hash_secret(token)).with_for_update())
+        await db.execute(select(Invite).where(Invite.token_hash == hash_secret(payload.token)).with_for_update())
     ).scalar_one_or_none()
     if invite is None or invite.revoked_at is not None or invite.expires_at <= now or invite.uses >= invite.max_uses:
         raise HTTPException(status_code=404, detail="Invite is invalid or expired")

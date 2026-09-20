@@ -11,6 +11,7 @@ class LoginRequest(BaseModel):
 
 
 class InviteAcceptRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=512)
     email: EmailStr
     display_name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=12, max_length=1024)
