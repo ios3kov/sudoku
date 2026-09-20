@@ -157,7 +157,13 @@ jobs:
           EOF
           chmod 600 .env.production.ci
           SKIP_DNS=1 ENV_FILE=.env.production.ci bash scripts/preflight-production.sh
-          rm -f .env.production.ci
+          cp .env.production.ci .env.production.bad
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=bad:password:with:reserved:characters:1234567890/' .env.production.bad
+          if SKIP_DNS=1 ENV_FILE=.env.production.bad bash scripts/preflight-production.sh; then
+            echo "preflight accepted an unsafe POSTGRES_PASSWORD" >&2
+            exit 1
+          fi
+          rm -f .env.production.ci .env.production.bad
 
       - name: Validate production Compose merge
         env:
