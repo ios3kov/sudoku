@@ -27,8 +27,6 @@ from .models import (
 from .rate_limit import enforce_user_rate_limit
 from .mls_lifecycle import promote_next_mls_change, schedule_mls_device_change
 
-router = APIRouter(prefix="/v1/e2ee", tags=["e2ee"])
-
 from .e2ee_support import (
     ControlEventAckRequest,
     ControlEventBatchCreateRequest,
@@ -49,6 +47,8 @@ from .e2ee_support import (
     serialize_control_event,
     serialize_membership_change,
 )
+
+router = APIRouter(prefix="/v1/e2ee", tags=["e2ee"])
 
 @router.post(
     "/conversations/{conversation_id}/membership-changes/add/{user_id}",
