@@ -95,6 +95,15 @@ Measured profile:
 - RustSec reports `proc-macro-error2 2.0.1` as unmaintained (RUSTSEC-2026-0173), pulled transitively through `hax-lib-macros 0.3.7`. No known vulnerability is reported. Dependency monitoring is enabled.
 - The encrypted local journal is still persisted as part of the encrypted protocol-state blob. Projection CPU cost is low, but very large catch-up histories can create IndexedDB write amplification. Re-profile on physical mobile hardware before expanding beyond the invite-only MVP scale.
 
+## Pre-Step-70 fixing closure
+Repository cleanup is complete before live verification:
+- obsolete bootstrap/CI verification PRs #1 and #2 are closed and are not part of the production path;
+- there are no open repository issues and no open implementation PRs;
+- no TODO/FIXME production blocker remains in the tracked source;
+- the two known P2 items below are explicitly deferred rather than changed immediately: removing the RustSec maintenance warning requires changing the pinned OpenMLS/hax dependency chain, while changing encrypted-journal persistence would alter reload/crash-safety behavior. Both changes have higher pre-production regression risk than their current non-blocking impact.
+
+No additional code-fixing stage is required before Step 70. Any failure found during Step 70 reopens the relevant code/infrastructure gate.
+
 ## Remaining production blockers
 These require an actual deployment or physical devices and cannot be closed by repository CI:
 - installed iOS PWA privacy/background + push + attachment/voice smoke;
