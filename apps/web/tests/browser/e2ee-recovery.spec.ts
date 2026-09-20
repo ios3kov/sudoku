@@ -39,17 +39,29 @@ async function login(page: Page, email: string) {
   await unlockPrivate(page);
   const emailInput = page.getByLabel("Email");
 
-  // Fresh browser contexts are always unauthenticated. AuthGate first probes
-  // /v1/me asynchronously, so count() here is racy: wait for the actual login
-  // form before entering credentials.
   await expect(emailInput).toBeVisible({ timeout: 30_000 });
   await emailInput.fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
 
+  const loginResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/v1/auth/login")
+      && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Sign in" }).click();
+  expect((await loginResponse).status()).toBe(200);
+
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // The first browser MLS initialization generates and publishes a KeyPackage
+  // pool in WASM. On cold GitHub runners this can be materially slower than
+  // ordinary UI hydration, so assert the real readiness signal instead of
+  // treating cryptographic startup as a 60s rendering deadline.
   const newChat = page.getByRole("button", { name: "New secure chat" });
-  await expect(newChat).toBeVisible({ timeout: 60_000 });
-  await expect(newChat).toBeEnabled({ timeout: 60_000 });
+  await expect(newChat).toBeVisible({ timeout: 120_000 });
+  await expect(newChat).toBeEnabled({ timeout: 120_000 });
 }
 
 async function reopenMessenger(page: Page) {
@@ -77,6 +89,7 @@ async function sendText(page: Page, value: string) {
 }
 
 test("MLS survives reload, offline retry and fails closed on transport outage", async ({ browser }) => {
+  test.setTimeout(240_000);
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
