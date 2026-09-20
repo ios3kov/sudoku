@@ -4,7 +4,6 @@ import type {
   ClaimedMlsKeyPackage,
   Conversation,
   E2eeEnvelope,
-  EncryptedAttachmentMetadata,
   MlsControlBatchItem,
   MlsControlEvent,
   MlsControlRecipient,
@@ -14,7 +13,6 @@ import type {
 import { BrowserProtocolStateStore } from "./browser-state-store";
 import { loadOpenMlsWasm } from "./openmls-runtime";
 import type {
-  DecryptedMessage,
   EncryptedTransportRecord,
   OutboundPlaintext,
   ProtocolAdapter,
@@ -39,6 +37,12 @@ import {
   type PendingApplicationSend,
   type RuntimeSnapshot,
 } from "./openmls-state";
+import {
+  cloneDomainEvent,
+  decryptApplicationEvent,
+  decryptedMessageFromDomainEvent,
+  toDomainEvent,
+} from "./openmls-events";
 
 export interface OpenMlsAdapterOptions {
   userId: string;
@@ -785,7 +789,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     envelope: E2eeEnvelope,
   ): Promise<DecryptedMessage> {
     return this.mutate((provider) =>
-      this.decryptWithProvider(provider, conversationId, envelope)
+      decryptApplicationEvent(provider, conversationId, envelope)
     );
   }
 
@@ -882,12 +886,12 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         (item) => item.eventId === record.id,
       );
       if (existing) {
-        return this.decryptedMessageFromDomainEvent(existing.event);
+        return decryptedMessageFromDomainEvent(existing.event);
       }
 
       const snapshot = this.snapshotRuntime();
       try {
-        const decrypted = this.decryptWithProvider(
+        const decrypted = decryptApplicationEvent(
           this.provider!,
           conversationId,
           record.envelope,
@@ -897,7 +901,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
           eventId: record.id,
           senderId: record.senderId,
           sequence: record.sequence,
-          event: this.toDomainEvent(decrypted.event),
+          event: toDomainEvent(decrypted.event),
         });
         this.localState!.eventJournal[conversationId] = journal;
         await this.persistCurrentState();
@@ -1078,7 +1082,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
 
     const snapshot = this.snapshotRuntime();
     try {
-      const decrypted = this.decryptWithProvider(
+      const decrypted = decryptApplicationEvent(
         this.provider!,
         conversationId,
         item.envelope,
@@ -1088,7 +1092,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         eventId: item.message_id,
         senderId: item.sender_user_id,
         sequence: item.message_sequence,
-        event: this.toDomainEvent(decrypted.event),
+        event: toDomainEvent(decrypted.event),
       });
       this.localState!.eventJournal[conversationId] = journal;
       this.localState!.transportCursors[conversationId] = item.transport_sequence;
@@ -1429,128 +1433,6 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return userId + ":" + deviceId;
   }
 
-  private decryptWithProvider(
-    provider: Provider,
-    conversationId: string,
-    envelope: E2eeEnvelope,
-  ): DecryptedMessage {
-    if (envelope.kind !== "application") {
-      throw new Error("Expected an MLS application envelope");
-    }
-
-    const plaintext = provider.decryptApplication(
-      utf8(conversationId),
-      envelopeBytes(envelope),
-    );
-    const decoded = JSON.parse(utf8String(plaintext)) as Record<string, unknown>;
-    if (decoded.version !== 1 || typeof decoded.kind !== "string") {
-      throw new Error("Invalid decrypted MLS application payload");
-    }
-
-    if (decoded.kind === "message") {
-      if (
-        !["text", "image", "file", "voice"].includes(String(decoded.messageType))
-        || !(typeof decoded.body === "string" || decoded.body === null)
-        || !(typeof decoded.replyTo === "string" || decoded.replyTo === null)
-        || !Array.isArray(decoded.assetIds)
-        || decoded.assetIds.some((item) => typeof item !== "string")
-        || !Array.isArray(decoded.attachments)
-        || decoded.attachments.some((item) => !isEncryptedAttachmentMetadata(item))
-      ) {
-        throw new Error("Invalid decrypted MLS message event");
-      }
-      return {
-        body: decoded.body,
-        event: {
-          kind: "message",
-          messageType: decoded.messageType as "text" | "image" | "file" | "voice",
-          body: decoded.body,
-          replyTo: decoded.replyTo,
-          assetIds: decoded.assetIds as string[],
-          attachments: decoded.attachments as EncryptedAttachmentMetadata[],
-        },
-      };
-    }
-
-    if (decoded.kind === "edit") {
-      if (typeof decoded.targetMessageId !== "string" || typeof decoded.body !== "string") {
-        throw new Error("Invalid decrypted MLS edit event");
-      }
-      return {
-        body: null,
-        event: {
-          kind: "edit",
-          targetMessageId: decoded.targetMessageId,
-          body: decoded.body,
-        },
-      };
-    }
-
-    if (decoded.kind === "reaction") {
-      if (
-        typeof decoded.targetMessageId !== "string"
-        || typeof decoded.emoji !== "string"
-        || typeof decoded.active !== "boolean"
-      ) {
-        throw new Error("Invalid decrypted MLS reaction event");
-      }
-      return {
-        body: null,
-        event: {
-          kind: "reaction",
-          targetMessageId: decoded.targetMessageId,
-          emoji: decoded.emoji,
-          active: decoded.active,
-        },
-      };
-    }
-
-    if (decoded.kind === "delete") {
-      if (typeof decoded.targetMessageId !== "string") {
-        throw new Error("Invalid decrypted MLS delete event");
-      }
-      return {
-        body: null,
-        event: {
-          kind: "delete",
-          targetMessageId: decoded.targetMessageId,
-        },
-      };
-    }
-
-    throw new Error("Unsupported decrypted MLS application event");
-  }
-
-  private toDomainEvent(event: DecryptedMessage["event"]): EncryptedEventRecord["event"] {
-    if (event.kind !== "message") return event;
-    return {
-      ...event,
-      assetIds: [...event.assetIds],
-      attachments: event.attachments.map((item) => ({ ...item })),
-    };
-  }
-
-  private decryptedMessageFromDomainEvent(
-    event: EncryptedEventRecord["event"],
-  ): DecryptedMessage {
-    if (event.kind === "message") {
-      const attachments = event.attachments.map((item) => {
-        if (!isEncryptedAttachmentMetadata(item)) {
-          throw new Error("Invalid journaled encrypted attachment metadata");
-        }
-        return item;
-      });
-      return {
-        body: event.body,
-        event: {
-          ...event,
-          attachments,
-        },
-      };
-    }
-    return { body: null, event };
-  }
-
   private async queueApplicationSend(
     conversationId: string,
     clientId: string,
@@ -1591,7 +1473,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
             conversationId,
             clientId,
             envelope: makeEnvelope(ciphertext, "application"),
-            event: this.cloneDomainEvent(event),
+            event: cloneDomainEvent(event),
             serverType,
             assetIds: [...assetIds],
           });
@@ -1666,7 +1548,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
             eventId: response.id,
             senderId: response.sender_id,
             sequence: response.sequence,
-            event: this.cloneDomainEvent(pending.event),
+            event: cloneDomainEvent(pending.event),
           });
           this.localState!.eventJournal[pending.conversationId] = journal;
         }
@@ -1682,12 +1564,6 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       }
     }
     return delivered;
-  }
-
-  private cloneDomainEvent(
-    event: EncryptedEventRecord["event"],
-  ): EncryptedEventRecord["event"] {
-    return JSON.parse(JSON.stringify(event)) as EncryptedEventRecord["event"];
   }
 
   private async encryptApplicationEvent(
