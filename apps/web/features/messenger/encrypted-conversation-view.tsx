@@ -60,6 +60,8 @@ export function EncryptedConversationView({
   const [showSecurity, setShowSecurity] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -131,8 +133,19 @@ export function EncryptedConversationView({
   }, [refreshProjection]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (!stickToBottomRef.current) return;
+    bottomRef.current?.scrollIntoView({
+      behavior: messages.length > INITIAL_VISIBLE_MESSAGES ? "smooth" : "auto",
+      block: "end",
+    });
   }, [messages, queuedCount]);
+
+  const handleMessageScroll = useCallback(() => {
+    const node = messageListRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 96;
+  }, []);
 
   useEffect(() => () => {
     if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
@@ -448,7 +461,11 @@ export function EncryptedConversationView({
         </p>
       ) : null}
 
-      <div className="message-list">
+      <div
+        className="message-list"
+        ref={messageListRef}
+        onScroll={handleMessageScroll}
+      >
         {loading ? <p className="muted center">Decrypting…</p> : messages.length === 0 ? (
           <div className="empty-conversations">
             <div className="empty-icon" aria-hidden="true">•••</div>
