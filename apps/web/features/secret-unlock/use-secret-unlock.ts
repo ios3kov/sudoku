@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   armFromFive,
   beginSwipe,
@@ -9,29 +9,87 @@ import {
   type GestureState,
 } from "@sudoku/domain";
 
-const UNLOCK_DISTANCE_PX = 80;
-const MAX_VISUAL_DRAG_PX = 120;
-const UNLOCK_FINISH_MS = 150;
+const REVEAL_START_PX = 6;
+const CLICK_SUPPRESS_PX = 12;
+const RETURN_MS = 260;
+const FINISH_MS = 340;
 
-export function useSecretUnlock(onUnlock: () => void) {
+interface SecretUnlockOptions {
+  onUnlock: () => void;
+  onRevealStart: () => void;
+  onRevealCancel: () => void;
+}
+
+export function useSecretUnlock({
+  onUnlock,
+  onRevealStart,
+  onRevealCancel,
+}: SecretUnlockOptions) {
+  const screenRef = useRef<HTMLElement | null>(null);
   const state = useRef<GestureState>(createGestureState());
   const pointerActive = useRef(false);
   const startY = useRef<number | null>(null);
-  const dragOffsetRef = useRef(0);
+  const currentOffset = useRef(0);
+  const pendingOffset = useRef(0);
   const suppressNextFiveClick = useRef(false);
-  const unlockTimer = useRef<number | null>(null);
-  const [dragOffsetY, setDragOffsetY] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const [unlocking, setUnlocking] = useState(false);
+  const revealStarted = useRef(false);
+  const frame = useRef<number | null>(null);
+  const phaseTimer = useRef<number | null>(null);
+
+  const clearPhaseTimer = useCallback(() => {
+    if (phaseTimer.current !== null) {
+      window.clearTimeout(phaseTimer.current);
+      phaseTimer.current = null;
+    }
+  }, []);
+
+  const flushOffset = useCallback((offset: number) => {
+    currentOffset.current = offset;
+    pendingOffset.current = offset;
+
+    if (frame.current !== null) return;
+    frame.current = window.requestAnimationFrame(() => {
+      screenRef.current?.style.setProperty("--unlock-offset", `${pendingOffset.current}px`);
+      frame.current = null;
+    });
+  }, []);
+
+  const ensureRevealStarted = useCallback(() => {
+    if (revealStarted.current) return;
+    revealStarted.current = true;
+    onRevealStart();
+  }, [onRevealStart]);
+
+  const finishReturn = useCallback(() => {
+    const screen = screenRef.current;
+    screen?.classList.remove("is-dragging", "is-unlocking");
+    screen?.classList.add("is-returning");
+    flushOffset(0);
+
+    clearPhaseTimer();
+    phaseTimer.current = window.setTimeout(() => {
+      screenRef.current?.classList.remove("is-returning");
+      if (revealStarted.current) {
+        revealStarted.current = false;
+        onRevealCancel();
+      }
+    }, RETURN_MS);
+  }, [clearPhaseTimer, flushOffset, onRevealCancel]);
 
   useEffect(() => {
     return () => {
-      if (unlockTimer.current !== null) window.clearTimeout(unlockTimer.current);
+      if (frame.current !== null) window.cancelAnimationFrame(frame.current);
+      if (phaseTimer.current !== null) window.clearTimeout(phaseTimer.current);
     };
   }, []);
 
   const onFivePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
-    if (unlocking) return;
+    clearPhaseTimer();
+
+    const screen = screenRef.current;
+    screen?.classList.remove("is-returning", "is-unlocking");
+    screen?.classList.add("is-dragging");
+    screen?.style.setProperty("--unlock-offset", "0px");
 
     const now = performance.now();
     const armed = armFromFive(createGestureState(), now);
@@ -40,73 +98,72 @@ export function useSecretUnlock(onUnlock: () => void) {
       { x: event.clientX, y: event.clientY },
       now,
     );
+
     pointerActive.current = true;
     startY.current = event.clientY;
-    dragOffsetRef.current = 0;
+    currentOffset.current = 0;
+    pendingOffset.current = 0;
     suppressNextFiveClick.current = false;
-    setDragOffsetY(0);
-    setDragging(true);
 
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId);
     } catch {
-      // Synthetic test events may not register an active pointer.
+      // Synthetic browser-test events may not own an active pointer.
     }
-  }, [unlocking]);
+  }, [clearPhaseTimer]);
 
   const onFivePointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (!pointerActive.current || startY.current === null) return;
-    const upwardDistance = Math.max(0, startY.current - event.clientY);
-    const nextOffset = Math.min(MAX_VISUAL_DRAG_PX, upwardDistance);
-    dragOffsetRef.current = nextOffset;
-    setDragOffsetY(nextOffset);
-  }, []);
 
-  const resetVisual = useCallback(() => {
+    const upwardDistance = Math.max(0, startY.current - event.clientY);
+    const viewportLimit = Math.max(120, window.innerHeight);
+    const nextOffset = Math.min(viewportLimit, upwardDistance);
+
+    if (nextOffset >= REVEAL_START_PX) ensureRevealStarted();
+    flushOffset(nextOffset);
+  }, [ensureRevealStarted, flushOffset]);
+
+  const onFivePointerUp = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!pointerActive.current) return;
+
+    const result = finishSwipe(
+      state.current,
+      { x: event.clientX, y: event.clientY },
+      performance.now(),
+    );
+
+    state.current = result.state;
     pointerActive.current = false;
     startY.current = null;
-    setDragging(false);
-    setUnlocking(false);
-    setDragOffsetY(0);
-  }, []);
 
-  const onFivePointerUp = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (!pointerActive.current) return;
+    const screen = screenRef.current;
+    screen?.classList.remove("is-dragging");
 
-      const result = finishSwipe(
-        state.current,
-        { x: event.clientX, y: event.clientY },
-        performance.now(),
-      );
-      state.current = result.state;
-      pointerActive.current = false;
-      startY.current = null;
-      setDragging(false);
+    if (!result.unlocked) {
+      suppressNextFiveClick.current = currentOffset.current > CLICK_SUPPRESS_PX;
+      if (currentOffset.current > 0 || revealStarted.current) finishReturn();
+      return;
+    }
 
-      if (!result.unlocked) {
-        suppressNextFiveClick.current = dragOffsetRef.current > 12;
-        dragOffsetRef.current = 0;
-        setDragOffsetY(0);
-        return;
-      }
+    ensureRevealStarted();
+    suppressNextFiveClick.current = true;
+    event.preventDefault();
 
-      dragOffsetRef.current = MAX_VISUAL_DRAG_PX;
-      suppressNextFiveClick.current = true;
-      setUnlocking(true);
-      setDragOffsetY(MAX_VISUAL_DRAG_PX);
-      event.preventDefault();
+    // Lock the current compositor position before switching to the finishing
+    // transition so the screen continues from exactly where the finger left it.
+    if (frame.current !== null) {
+      window.cancelAnimationFrame(frame.current);
+      frame.current = null;
+    }
+    screen?.style.setProperty("--unlock-offset", `${currentOffset.current}px`);
+    if (screen) void screen.offsetHeight;
+    screen?.classList.add("is-unlocking");
 
-      if (unlockTimer.current !== null) window.clearTimeout(unlockTimer.current);
-      unlockTimer.current = window.setTimeout(() => {
-        dragOffsetRef.current = 0;
-        setUnlocking(false);
-        setDragOffsetY(0);
-        onUnlock();
-      }, UNLOCK_FINISH_MS);
-    },
-    [onUnlock],
-  );
+    clearPhaseTimer();
+    phaseTimer.current = window.setTimeout(() => {
+      onUnlock();
+    }, FINISH_MS);
+  }, [clearPhaseTimer, ensureRevealStarted, finishReturn, onUnlock]);
 
   const consumeFiveClick = useCallback(() => {
     if (!suppressNextFiveClick.current) return false;
@@ -116,25 +173,23 @@ export function useSecretUnlock(onUnlock: () => void) {
 
   const cancel = useCallback(() => {
     state.current = createGestureState();
-    dragOffsetRef.current = 0;
-    suppressNextFiveClick.current = false;
-    if (unlockTimer.current !== null) {
-      window.clearTimeout(unlockTimer.current);
-      unlockTimer.current = null;
+    pointerActive.current = false;
+    startY.current = null;
+    suppressNextFiveClick.current = currentOffset.current > CLICK_SUPPRESS_PX;
+
+    if (currentOffset.current > 0 || revealStarted.current) {
+      finishReturn();
+    } else {
+      screenRef.current?.classList.remove("is-dragging");
     }
-    resetVisual();
-  }, [resetVisual]);
+  }, [finishReturn]);
 
   return {
+    screenRef,
     onFivePointerDown,
     onFivePointerMove,
     onFivePointerUp,
     consumeFiveClick,
     cancel,
-    dragOffsetY,
-    progress: Math.min(1, dragOffsetY / UNLOCK_DISTANCE_PX),
-    dragging,
-    unlocking,
-    active: dragging || unlocking,
   };
 }
