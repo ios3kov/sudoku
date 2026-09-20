@@ -66,7 +66,11 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
           setNotes(parsed.notes ?? {});
           setMistakes(Number.isFinite(parsed.mistakes) ? Math.max(0, Number(parsed.mistakes)) : 0);
           setStartedAt(parsed.startedAt && parsed.startedAt > 0 ? parsed.startedAt : now);
-          setCompletedAt(parsed.completedAt && parsed.completedAt > 0 ? parsed.completedAt : null);
+          setCompletedAt(
+            isSolved(parsed.grid, SOLUTION) && parsed.completedAt && parsed.completedAt > 0
+              ? parsed.completedAt
+              : null,
+          );
         } else {
           setStartedAt(now);
         }
