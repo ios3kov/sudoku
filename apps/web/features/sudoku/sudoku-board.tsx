@@ -197,7 +197,7 @@ export function SudokuBoard({
   }
 
   return (
-    <main ref={gesture.screenRef} className="page sudoku-reveal-screen">
+    <main ref={gesture.setScreenElement} className="page sudoku-reveal-screen">
       <section className="sudoku-shell" aria-label="Sudoku">
         <header className="topbar sudoku-topbar">
           <div className="sudoku-brand">
