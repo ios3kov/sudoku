@@ -15,6 +15,10 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
 
   api:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment: &production-api-env
       DATABASE_URL: postgresql+asyncpg://sudoku:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/sudoku
       REDIS_URL: redis://redis:6379/0
@@ -38,10 +42,24 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
   worker:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment: *production-api-env
 
   beat:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment: *production-api-env
+
+  web:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   caddy:
     ports:

@@ -35,7 +35,10 @@ RUN npm install --workspaces --include-workspace-root
 COPY apps/web ./apps/web
 COPY packages/domain ./packages/domain
 COPY --from=mls-build /out ./apps/web/generated/mls-wasm
-RUN npm run build:web
+RUN npm run build:web \
+    && chown -R node:node /srv/app
+
+USER node
 
 EXPOSE 3000
 CMD ["npm", "--workspace", "@sudoku/web", "run", "start"]
