@@ -48,7 +48,10 @@ export function HomeClient() {
 
   useEffect(() => {
     function concealNow() {
-      if (mode !== "sudoku") setPrivacyCover(true);
+      if (mode !== "sudoku" || privateUnderlayMounted) {
+        setPrivacyCover(true);
+        setPrivateUnderlayMounted(false);
+      }
       hiddenAt.current = Date.now();
     }
     function handleVisibility() {
@@ -70,7 +73,7 @@ export function HomeClient() {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("pagehide", concealNow);
     };
-  }, [hidePrivateSurface, mode]);
+  }, [hidePrivateSurface, mode, privateUnderlayMounted]);
 
   if (privacyCover) {
     return <main className="shell"><section className="card"><h1>Sudoku</h1><div className="privacy-grid" aria-hidden="true" /></section></main>;
