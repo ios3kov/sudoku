@@ -49,11 +49,21 @@ code{overflow-wrap:anywhere}
 .hidden-file-input{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important}
 
 /* Sudoku */
-.sudoku-shell{width:min(100%,560px);margin:0 auto;display:grid;gap:14px}
+.sudoku-shell{width:min(100%,560px);margin:0 auto;display:grid;gap:12px}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .topbar h1{font-size:clamp(24px,7vw,34px);line-height:1;margin:0;letter-spacing:-.03em}
 .topbar button{border:0;background:transparent;color:var(--muted);padding:0 8px}
-.status{min-height:22px;text-align:center;color:var(--muted);font-size:14px;font-weight:600}
+.sudoku-topbar{min-height:48px}
+.sudoku-brand{display:flex;align-items:center;gap:10px;min-width:0}
+.sudoku-logo{width:42px;height:42px;border-radius:12px;box-shadow:0 5px 18px rgba(25,35,39,.10);flex:none}
+.sudoku-brand>div{min-width:0}
+.sudoku-brand span{display:block;margin-top:4px;color:var(--muted);font-size:12px;font-weight:650;white-space:nowrap}
+.sudoku-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.sudoku-stats>div{display:grid;gap:2px;padding:8px 10px;text-align:center}
+.sudoku-stats>div+div{border-left:1px solid var(--line)}
+.sudoku-stats span{color:var(--muted);font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.05em}
+.sudoku-stats strong{font-size:15px;line-height:1.2;font-variant-numeric:tabular-nums}
+.status{min-height:18px;text-align:center;color:var(--muted);font-size:12px;font-weight:650}
 .board,.grid{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));width:100%;aspect-ratio:1;border:2px solid var(--text);border-radius:8px;overflow:hidden;background:var(--text);gap:1px;touch-action:none;box-shadow:var(--shadow)}
 .cell{position:relative;display:grid;place-items:center;min-width:0;min-height:0;aspect-ratio:1;border:0;background:#fff;font-size:clamp(17px,5.2vw,27px);font-weight:650;padding:0}
 .cell:nth-child(3n){box-shadow:inset -2px 0 0 var(--text)}
@@ -66,9 +76,10 @@ code{overflow-wrap:anywhere}
 .cell.error{color:var(--danger);background:#fbe6e4}
 .notes{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr)}
 .note{display:grid;place-items:center;font-size:clamp(7px,2vw,10px);font-weight:600;color:var(--muted)}
-.controls{display:grid;gap:10px}
-.digits{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:6px}
-.digit{padding:0;min-width:0;background:var(--surface);font-size:18px}
+.controls{display:grid;gap:9px}
+.digits{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:4px;width:100%}
+.digit{padding:0;min-width:0;background:var(--surface);font-size:18px;font-weight:760}
+.secret-digit{touch-action:none}
 .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 
 /* Private auth */
@@ -186,8 +197,13 @@ code{overflow-wrap:anywhere}
 }
 @media (max-width:430px){
   .page{padding:10px}
-  .digits{grid-template-columns:repeat(5,minmax(0,1fr))}
-  .digit{min-height:48px}
+  .sudoku-shell{gap:10px}
+  .sudoku-logo{width:38px;height:38px;border-radius:10px}
+  .sudoku-brand span{font-size:11px}
+  .sudoku-stats>div{padding:7px 5px}
+  .sudoku-stats strong{font-size:14px}
+  .digits{gap:2px}
+  .digit{min-height:42px;font-size:17px;border-radius:9px}
   .messenger-topbar button,.chat-header button,.back-button,.message-more-button,.member-actions button,.settings-row>button,.load-earlier-button{min-height:44px}
   .back-button{width:44px}
   .message-more-button{width:44px}
