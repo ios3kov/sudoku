@@ -18,6 +18,22 @@ async function unlockPrivate(page: Page) {
     isPrimary: true,
     buttons: 1,
   });
+  await five.dispatchEvent("pointermove", {
+    clientX: 191,
+    clientY: 680,
+    pointerId: 1,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
+  await five.dispatchEvent("pointermove", {
+    clientX: 192,
+    clientY: 620,
+    pointerId: 1,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
   await five.dispatchEvent("pointerup", {
     clientX: 192,
     clientY: 620,
