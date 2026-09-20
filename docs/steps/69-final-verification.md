@@ -61,3 +61,16 @@ The next browser acceptance run reached conversation creation but the peer could
 Root cause: the Strict-Mode initialization lock covered identity creation/registration but not the immediately-following KeyPackage pool refill in MessengerShell. A cancelled first mount could therefore generate/publish KeyPackages from one provider state while the surviving mount loaded or persisted another provider state. The server could hand out a KeyPackage whose corresponding private material was no longer present in the surviving browser state.
 
 Initial KeyPackage pool refill now runs inside the same per-stateKey serialized OpenMLS initialization. MessengerShell no longer performs a second unsynchronized startup refill. Reconnect-time pool maintenance remains serialized on the live adapter.
+
+
+## Duplicate Welcome recovery path
+The diagnostic browser run showed:
+- the peer conversation was active;
+- the Welcome recipient row was already ACKed;
+- the unified transport still correctly contained the historical MLS control event followed by the encrypted message;
+- the local encrypted state record existed;
+- the UI nevertheless entered the secure-unavailable state.
+
+Root cause: reload recovery used the control-only feed first. That path joined and ACKed the Welcome but did not advance the unified transport cursor. The subsequent unified sync started at sequence 0 and replayed the already-consumed Welcome, causing OpenMLS to fail closed.
+
+MessengerShell startup/reconnect recovery now uses only the unified transport ledger. Control and application events are processed exactly once in transport order, and the durable transport cursor advances with the Welcome. The control-only endpoint remains available for compatibility/targeted recovery but is no longer composed with a zero-cursor unified sync.

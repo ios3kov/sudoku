@@ -113,9 +113,11 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           (conversation) => conversation.encryption_required && conversation.e2ee_ready,
         );
         for (const conversation of encryptedConversations) {
-          if (!adapter.trackedConversationIds().includes(conversation.id)) {
-            await adapter.syncControlEvents(conversation.id);
-          }
+          // Unified transport is authoritative for recovery. It includes both
+          // MLS control events and application messages in one durable order,
+          // so a Welcome must never be consumed first through the legacy
+          // control-only feed and then replayed from transport sequence 0.
+          await adapter.syncTransport(conversation.id);
           if (adapter.trackedConversationIds().includes(conversation.id)) {
             await reconcileDeviceChange(adapter, conversation.id);
             await adapter.syncTransport(conversation.id);
@@ -147,9 +149,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           );
           for (const conversation of encryptedConversations) {
             void (async () => {
-              if (!adapter.trackedConversationIds().includes(conversation.id)) {
-                await adapter.syncControlEvents(conversation.id);
-              }
+              await adapter.syncTransport(conversation.id);
               if (adapter.trackedConversationIds().includes(conversation.id)) {
                 await reconcileDeviceChange(adapter, conversation.id);
                 await adapter.syncTransport(conversation.id);
