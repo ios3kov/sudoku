@@ -11,6 +11,7 @@ import {
 
 export function useSecretUnlock(onUnlock: () => void) {
   const state = useRef<GestureState>(createGestureState());
+  const suppressNextFiveClick = useRef(false);
 
   const onFivePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     const now = performance.now();
@@ -20,6 +21,7 @@ export function useSecretUnlock(onUnlock: () => void) {
       { x: event.clientX, y: event.clientY },
       now,
     );
+    suppressNextFiveClick.current = false;
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }, []);
 
@@ -32,6 +34,7 @@ export function useSecretUnlock(onUnlock: () => void) {
       );
       state.current = result.state;
       if (result.unlocked) {
+        suppressNextFiveClick.current = true;
         event.preventDefault();
         onUnlock();
       }
@@ -39,9 +42,16 @@ export function useSecretUnlock(onUnlock: () => void) {
     [onUnlock],
   );
 
-  const cancel = useCallback(() => {
-    state.current = createGestureState();
+  const consumeFiveClick = useCallback(() => {
+    if (!suppressNextFiveClick.current) return false;
+    suppressNextFiveClick.current = false;
+    return true;
   }, []);
 
-  return { onFivePointerDown, onFivePointerUp, cancel };
+  const cancel = useCallback(() => {
+    state.current = createGestureState();
+    suppressNextFiveClick.current = false;
+  }, []);
+
+  return { onFivePointerDown, onFivePointerUp, consumeFiveClick, cancel };
 }
