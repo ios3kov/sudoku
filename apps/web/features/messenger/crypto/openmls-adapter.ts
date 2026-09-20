@@ -24,8 +24,6 @@ import {
   base64ToBytes,
   bytesToBase64,
   cloneLocalState,
-  envelopeBytes,
-  isEncryptedAttachmentMetadata,
   makeEnvelope,
   parseLocalState,
   serializeLocalState,
