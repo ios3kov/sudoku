@@ -8,10 +8,17 @@ from .config import get_settings
 _redis = Redis.from_url(get_settings().redis_url, decode_responses=False)
 
 
+_FIXED_WINDOW_SCRIPT = """
+local count = redis.call("INCR", KEYS[1])
+if count == 1 then
+  redis.call("EXPIRE", KEYS[1], ARGV[1])
+end
+return count
+"""
+
+
 async def _enforce_fixed_window(key: str, limit: int, ttl_seconds: int) -> None:
-    count = await _redis.incr(key)
-    if count == 1:
-        await _redis.expire(key, ttl_seconds)
+    count = int(await _redis.eval(_FIXED_WINDOW_SCRIPT, 1, key, ttl_seconds))
     if count > limit:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
 

@@ -40,7 +40,10 @@ def dispatch_outbox_batch(batch_size: int = 100) -> int:
 
             current_user_ids = set(
                 db.execute(
-                    select(ConversationMember.user_id).where(ConversationMember.conversation_id == event.conversation_id)
+                    select(ConversationMember.user_id).where(
+                        ConversationMember.conversation_id == event.conversation_id,
+                        ConversationMember.e2ee_state != "pending_add",
+                    )
                 ).scalars().all()
             )
             payload = dict(event.payload or {})
