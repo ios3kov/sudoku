@@ -201,3 +201,5 @@ code{overflow-wrap:anywhere}
 }
 
 .load-earlier-button{display:block;margin:0 auto 12px;min-height:40px;border:1px solid var(--line);border-radius:999px;background:var(--surface);padding:0 14px;color:var(--accent);font-weight:700}
+
+.group-member-row{align-items:flex-start}

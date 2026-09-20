@@ -35,7 +35,7 @@ for (const file of walk(root)) {
 
   const expressionRegex = /className\s*=\s*\{([^}]+)\}/g;
   for (const match of source.matchAll(expressionRegex)) {
-    for (const literal of match[1].matchAll(/["']([a-zA-Z][\w-]*)["']/g)) {
+    for (const literal of match[1].matchAll(/[?:]\s*["']([a-zA-Z][\w-]*)["']/g)) {
       classes.add(literal[1]);
     }
   }
