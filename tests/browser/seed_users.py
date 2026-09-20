@@ -1,10 +1,9 @@
 import asyncio
 
-from sqlalchemy import select
-
 from app.db import SessionFactory
 from app.models import User
 from app.security import hash_password
+from sqlalchemy import select
 
 
 USERS = (

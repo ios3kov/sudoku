@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,7 +34,6 @@ from ..schemas import (
     ReactionRequest,
     ReadRequest,
     UserDirectoryItem,
-    AssetSummary,
     UpdateConversationRequest,
     ConversationMembersRequest,
     ConversationMemberRoleRequest,

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -78,8 +78,6 @@ class LoginAttempt(Base):
     email_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
     succeeded: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-from sqlalchemy.dialects.postgresql import JSONB
 
 
 class Conversation(Base):

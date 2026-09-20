@@ -3,6 +3,7 @@ import json
 import time
 import uuid
 from collections import deque
+from contextlib import suppress
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
@@ -68,6 +69,7 @@ async def publish_typing(user: User, conversation_id: uuid.UUID, event_type: str
                 select(ConversationMember.user_id).where(
                     ConversationMember.conversation_id == conversation_id,
                     ConversationMember.user_id == user.id,
+                    ConversationMember.e2ee_state != "pending_add",
                 )
             )
         ).scalar_one_or_none()
@@ -78,6 +80,7 @@ async def publish_typing(user: User, conversation_id: uuid.UUID, event_type: str
                 select(ConversationMember.user_id).where(
                     ConversationMember.conversation_id == conversation_id,
                     ConversationMember.user_id != user.id,
+                    ConversationMember.e2ee_state != "pending_add",
                 )
             )
         ).scalars().all()
@@ -90,43 +93,80 @@ async def publish_typing(user: User, conversation_id: uuid.UUID, event_type: str
 @router.websocket("/v1/ws")
 async def websocket_endpoint(websocket: WebSocket):
     if websocket.headers.get("origin") != EXPECTED_ORIGIN:
-        await websocket.close(code=4403); return
+        await websocket.close(code=4403)
+        return
+
     authenticated = await authenticate_websocket(websocket)
     if authenticated is None:
-        await websocket.close(code=4401); return
+        await websocket.close(code=4401)
+        return
+
     user, session_id = authenticated
     await websocket.accept()
     websocket_connection_delta(1)
-    pubsub=redis.pubsub(); channel=f"rt:user:{user.id}"
-    connection_id=uuid.uuid4().hex
-    presence_key=f"presence:user:{user.id}:{connection_id}"
-    await pubsub.subscribe(channel); await redis.set(presence_key,"1",ex=70)
 
-    async def forward_events():
-        async for event in pubsub.listen():
-            if event.get("type")=="message": await websocket.send_text(str(event["data"]))
-    forward_task=asyncio.create_task(forward_events()); typing_events:deque[float]=deque()
+    pubsub = redis.pubsub()
+    channel = f"rt:user:{user.id}"
+    connection_id = uuid.uuid4().hex
+    presence_key = f"presence:user:{user.id}:{connection_id}"
+    forward_task: asyncio.Task[None] | None = None
+
     try:
+        await pubsub.subscribe(channel)
+        await redis.set(presence_key, "1", ex=70)
+
+        async def forward_events() -> None:
+            async for event in pubsub.listen():
+                if event.get("type") == "message":
+                    await websocket.send_text(str(event["data"]))
+
+        forward_task = asyncio.create_task(forward_events())
+        typing_events: deque[float] = deque()
+
         while True:
-            raw=await websocket.receive_text()
-            try: payload=json.loads(raw)
-            except json.JSONDecodeError: continue
-            if payload.get("type")=="ping":
-                if not await session_still_valid(session_id,user.id):
-                    await websocket.close(code=4401); break
-                await redis.set(presence_key,"1",ex=70); await websocket.send_json({"type":"pong"}); continue
-            if payload.get("type") in {"typing.started","typing.stopped"}:
-                if not await session_still_valid(session_id,user.id):
-                    await websocket.close(code=4401); break
-                now=time.monotonic()
-                while typing_events and now-typing_events[0]>5.0: typing_events.popleft()
-                if len(typing_events)>=20: continue
-                typing_events.append(now)
-                try: conversation_id=uuid.UUID(str(payload.get("conversation_id")))
-                except (TypeError,ValueError): continue
-                await publish_typing(user,conversation_id,str(payload["type"]))
+            raw = await websocket.receive_text()
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            if payload.get("type") == "ping":
+                if not await session_still_valid(session_id, user.id):
+                    await websocket.close(code=4401)
+                    break
+                await redis.set(presence_key, "1", ex=70)
+                await websocket.send_json({"type": "pong"})
+                continue
+
+            if payload.get("type") not in {"typing.started", "typing.stopped"}:
+                continue
+            if not await session_still_valid(session_id, user.id):
+                await websocket.close(code=4401)
+                break
+
+            now = time.monotonic()
+            while typing_events and now - typing_events[0] > 5.0:
+                typing_events.popleft()
+            if len(typing_events) >= 20:
+                continue
+            typing_events.append(now)
+
+            try:
+                conversation_id = uuid.UUID(str(payload.get("conversation_id")))
+            except (TypeError, ValueError):
+                continue
+            await publish_typing(user, conversation_id, str(payload["type"]))
     except WebSocketDisconnect:
         pass
     finally:
-        websocket_connection_delta(-1); forward_task.cancel()
-        await pubsub.unsubscribe(channel); await pubsub.aclose(); await redis.delete(presence_key)
+        websocket_connection_delta(-1)
+        if forward_task is not None:
+            forward_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await forward_task
+        with suppress(Exception):
+            await pubsub.unsubscribe(channel)
+        with suppress(Exception):
+            await pubsub.aclose()
+        with suppress(Exception):
+            await redis.delete(presence_key)
