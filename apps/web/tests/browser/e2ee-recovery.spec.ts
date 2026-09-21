@@ -100,7 +100,11 @@ async function sendText(page: Page, value: string) {
 }
 
 test("MLS survives reload, offline retry and fails closed on transport outage", async ({ browser }) => {
-  test.setTimeout(300_000);
+  // Cold GitHub runners can spend several minutes compiling/initializing two
+  // independent OpenMLS browser sessions. Keep each functional assertion
+  // individually bounded below, but leave enough aggregate headroom so the
+  // suite fails on the real assertion rather than the outer test clock.
+  test.setTimeout(420_000);
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
