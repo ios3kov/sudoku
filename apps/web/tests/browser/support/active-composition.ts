@@ -74,7 +74,9 @@ export async function verifyActiveComposition(
 
   // Active drafts are memory-only. Leaving the view must still clear them.
   await composer.fill("discard on leaving this chat");
-  await peer.getByRole("button", { name: "Back", exact: true }).click();
+  const back = peer.getByRole("button", { name: "Back to conversations", exact: true });
+  await expect(back).toBeVisible();
+  await back.click({ timeout: 5_000 });
   await openConversation(peer, "Browser Owner");
   await expect(composer).toBeEnabled();
   await expect(composer).toHaveValue("");

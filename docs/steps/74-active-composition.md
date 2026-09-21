@@ -51,3 +51,11 @@ Do not merge if integrated browser acceptance, crypto/offline recovery, typechec
 ## Prior milestone closure
 
 Step 73 is complete: PR #31 merged after CI #279, and post-merge CI #280 (`35652840406`) passed on `ea063f410778280c302291b67337ec8510d14819`. Its older pending handoff is superseded by the final PR #31 evidence. This Step 74 change is a separate UX correction, not part of that earlier pass.
+
+## CI #281 navigation-test correction
+
+CI #281 (`35654285320`, job `106513926121`) passed API, OpenMLS, audits, lint, types, build and budget. Browser acceptance reached the final Back/reopen check after draft/reply/edit preservation, then exhausted its 480-second test clock looking for an exact `Back` button. The shared header's existing accessible name is `Back to conversations`; the retained page snapshot in artifact `10664196669` confirms that control is present. The independent mobile Sudoku scenario passed; later infrastructure/image checks were skipped, not passed.
+
+The correction changes only the test locator to the existing accessible name, asserts visibility and bounds the click to five seconds so a missing control fails at the relevant action. No production code, crypto assertion, privacy requirement, retry count or overall timeout changes.
+
+Local verification of this follow-up: rendered the actual transpiled shared header with React DOM server and exercised it in the default managed Chromium using `setContent`; the old exact selector had zero matches, the corrected selector was visible and clicked successfully. This is a focused accessible-navigation check, not full-stack acceptance. Targeted helper ESLint and TypeScript against the restored pinned baseline plus helper passed. Full CI on the updated PR head remains required.
