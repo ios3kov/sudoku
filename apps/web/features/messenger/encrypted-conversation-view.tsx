@@ -114,18 +114,11 @@ export function EncryptedConversationView({
     });
   }, [adapter, conversation.id, conversation.latest_sequence, queueRefresh]);
 
+  // MessengerShell keys this view by conversation identity. Updates within
+  // that conversation should sync history, never reset an active draft/edit.
   useEffect(() => {
-    setLoading(true);
-    setMessages([]);
-    setBody("");
-    setReplyingToId(null);
-    setEditingId(null);
-    setActionMessageId(null);
-    setVisibleCount(INITIAL_VISIBLE_MESSAGES);
-    setError(null);
-    setSyncBlocked(true);
     void refreshProjection();
-  }, [conversation.id, refreshProjection]);
+  }, [refreshProjection]);
 
   useEffect(() => {
     if (reconnectTick > 0) void refreshProjection();

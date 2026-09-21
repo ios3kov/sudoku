@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { observeRealtimeSocket, verifyActiveComposition } from "./support/active-composition";
 
 const OWNER_EMAIL = "browser-owner@example.com";
 const PEER_EMAIL = "browser-peer@example.com";
@@ -119,6 +120,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
   const peer = await peerContext.newPage();
 
   try {
+    await observeRealtimeSocket(peer);
     // Peer must publish a KeyPackage before the owner bootstraps the direct chat.
     await login(peer, PEER_EMAIL);
     await login(owner, OWNER_EMAIL);
@@ -241,6 +243,8 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       await peer.unroute(readPattern);
       await peer.unroute(transportPattern);
     }
+
+    await verifyActiveComposition(owner, peer, sendText, openConversation);
   } finally {
     // Close both browser contexts concurrently. On cold CI runners the MLS
     // scenario can legitimately consume most of the test budget; serial

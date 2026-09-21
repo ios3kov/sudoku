@@ -388,6 +388,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         <main className="messenger-page">
           <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
             <EncryptedConversationView
+              key={selected.id}
               conversation={selected}
               user={user}
               adapter={e2eeAdapter}
