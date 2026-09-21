@@ -9,8 +9,8 @@ async function unlockPrivate(page: Page) {
   const five = page.getByRole("button", { name: "5", exact: true });
   await expect(five).toBeVisible();
 
-  // Dispatch the real 75%-threshold gesture. The available swipe path runs
-  // from the digit's current Y position to the top edge; crossing 75% lets the
+  // Dispatch the real 50%-threshold gesture. The available swipe path runs
+  // from the digit's current Y position to the top edge; crossing 50% lets the
   // finishing animation take over automatically.
   const box = await five.boundingBox();
   expect(box).not.toBeNull();
@@ -27,7 +27,7 @@ async function unlockPrivate(page: Page) {
   });
   await five.dispatchEvent("pointermove", {
     clientX: startX + 1,
-    clientY: startY * 0.2,
+    clientY: startY * 0.45,
     pointerId: 1,
     pointerType: "touch",
     isPrimary: true,
