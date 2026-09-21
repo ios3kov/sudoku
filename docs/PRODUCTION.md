@@ -32,7 +32,8 @@ Docker and Compose versions were verified during provisioning and must continue 
 There are two different states and they must not be confused:
 
 - **last live-verified deployment:** `68211e02` — production stack started and the live edge smoke passed;
-- **current merged release:** `6c0aefe95d02c3ee430904d3449ad6c8070cdf8b` — PR #25, full CI #245 green, but its live deploy/smoke is not yet recorded as passed in this repository.
+- **current deployed test candidate:** `6c0aefe95d02c3ee430904d3449ad6c8070cdf8b` — PR #25, full CI #245 green; its whole-screen unlock behavior has been observed on a physical live device, but a passing live smoke result for this SHA has not yet been recorded in the repository;
+- **current follow-up:** live-device polish restores full Sudoku keypad behavior and replaces the first full-screen settle with an iPhone-like compositor-driven motion path. This follow-up is not production-verified until its own CI/deploy/device retest passes.
 
 Do not update the "last live-verified deployment" value until the exact release SHA has been deployed and `scripts/smoke-production.sh` has passed against the live host.
 
