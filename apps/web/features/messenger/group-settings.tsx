@@ -134,7 +134,7 @@ export function GroupSettings({
   }
 
   return (
-    <section className="group-settings" aria-label="Group settings">
+    <section className="group-settings" role="dialog" aria-label="Group settings">
       <div className="settings-header"><div><strong>Group</strong><span>{conversation.members.length} members</span></div><button type="button" onClick={onClose}>Close</button></div>
       {error ? <p className="form-error">{error}</p> : null}
       {isOwner ? (
