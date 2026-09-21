@@ -1,10 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function dragFive(page: Page, distance: number, pointerId: number) {
+async function dragFive(page: Page, progress: number, pointerId: number) {
   const five = page.getByRole("button", { name: "5", exact: true });
-  const startY = 740;
+  const box = await five.boundingBox();
+  expect(box).not.toBeNull();
+
+  const startX = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+  const startY = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  const targetY = Math.max(0, startY * (1 - progress));
+
   await five.dispatchEvent("pointerdown", {
-    clientX: 190,
+    clientX: startX,
     clientY: startY,
     pointerId,
     pointerType: "touch",
@@ -12,41 +18,21 @@ async function dragFive(page: Page, distance: number, pointerId: number) {
     buttons: 1,
   });
   await five.dispatchEvent("pointermove", {
-    clientX: 191,
-    clientY: startY - distance,
+    clientX: startX + 1,
+    clientY: targetY,
     pointerId,
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
   });
-  return five;
+
+  return { five, startX, startY, targetY };
 }
 
 async function unlockPrivate(page: Page) {
-  const five = await dragFive(page, 60, 7);
-
-  await expect(page.locator(".private-reveal-layer")).toBeVisible();
-  const draggedTop = await page.locator(".sudoku-reveal-screen").evaluate(
-    (element) => element.getBoundingClientRect().top,
-  );
-  expect(draggedTop).toBeLessThan(-45);
-
-  await five.dispatchEvent("pointermove", {
-    clientX: 192,
-    clientY: 620,
-    pointerId: 7,
-    pointerType: "touch",
-    isPrimary: true,
-    buttons: 1,
-  });
-  await five.dispatchEvent("pointerup", {
-    clientX: 192,
-    clientY: 620,
-    pointerId: 7,
-    pointerType: "touch",
-    isPrimary: true,
-    buttons: 0,
-  });
+  // Crossing 75% of the available upward path must hand off to the finishing
+  // animation immediately; no extra release gesture is required.
+  await dragFive(page, 0.8, 7);
 }
 
 test("mobile Sudoku stays compact and unlock slides the whole screen over chat", async ({ page }) => {
@@ -100,6 +86,33 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
     await page.getByRole("button", { name: digit, exact: true }).click();
     await expect(editableCell).toHaveText(digit);
     await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+
+    if (digit === "1") {
+      await expect(editableCell).toHaveClass(/invalid/);
+      const invalidGeometry = await editableCell.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return {
+          marginTop: style.marginTop,
+          marginBottom: style.marginBottom,
+          paddingTop: style.paddingTop,
+          paddingBottom: style.paddingBottom,
+          borderRadius: style.borderRadius,
+          width: rect.width,
+          height: rect.height,
+        };
+      });
+      expect(invalidGeometry.marginTop).toBe("0px");
+      expect(invalidGeometry.marginBottom).toBe("0px");
+      expect(invalidGeometry.paddingTop).toBe("0px");
+      expect(invalidGeometry.paddingBottom).toBe("0px");
+      expect(invalidGeometry.borderRadius).toBe("0px");
+      expect(Math.abs(invalidGeometry.width - invalidGeometry.height)).toBeLessThanOrEqual(1);
+
+      const boardAfterInvalid = await page.getByRole("grid", { name: "Sudoku board" }).boundingBox();
+      expect(boardAfterInvalid).not.toBeNull();
+      expect(Math.abs((boardAfterInvalid?.height ?? 0) - (boardBox?.height ?? 0))).toBeLessThanOrEqual(1);
+    }
   }
 
   await page.getByRole("button", { name: "Erase", exact: true }).click();
@@ -117,17 +130,17 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await page.getByRole("button", { name: "1", exact: true }).click();
   await expect(givenCell).toHaveText("5");
 
-  // A short drag must reveal the private layer but snap the full Sudoku screen
-  // back into place without opening it.
-  const shortFive = await dragFive(page, 35, 6);
+  // 74% is deliberately below the unlock threshold. The entire Sudoku screen
+  // must still follow the finger, then return instead of opening the messenger.
+  const belowThreshold = await dragFive(page, 0.74, 6);
   await expect(page.locator(".private-reveal-layer")).toBeVisible();
   const shortTop = await page.locator(".sudoku-reveal-screen").evaluate(
     (element) => element.getBoundingClientRect().top,
   );
-  expect(shortTop).toBeLessThan(-20);
-  await shortFive.dispatchEvent("pointerup", {
-    clientX: 191,
-    clientY: 705,
+  expect(shortTop).toBeLessThan(-100);
+  await belowThreshold.five.dispatchEvent("pointerup", {
+    clientX: belowThreshold.startX + 1,
+    clientY: belowThreshold.targetY,
     pointerId: 6,
     pointerType: "touch",
     isPrimary: true,
