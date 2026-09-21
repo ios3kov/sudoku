@@ -92,7 +92,7 @@ export function SecurityVerification({
   }
 
   return (
-    <section className="group-settings" aria-label="Security verification">
+    <section className="group-settings" role="dialog" aria-label="Security verification">
       <div className="settings-header">
         <div>
           <strong>Verify devices</strong>
