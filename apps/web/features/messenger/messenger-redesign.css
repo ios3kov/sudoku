@@ -735,12 +735,12 @@
   color:#475569;
   font-size:12px;
 }
-.messenger-inline-status.error{
+.messenger-inline-status.is-error{
   border-color:#fecaca;
   background:#fff7f7;
   color:#991b1b;
 }
-.messenger-inline-status.warning{
+.messenger-inline-status.is-warning{
   border-color:#fde68a;
   background:#fffbeb;
   color:#92400e;
