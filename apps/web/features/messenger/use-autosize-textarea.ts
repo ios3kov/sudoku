@@ -1,6 +1,6 @@
 "use client";
 
-import { RefObject, useLayoutEffect } from "react";
+import { useLayoutEffect, type RefObject } from "react";
 
 const MAX_COMPOSER_HEIGHT = 128;
 
