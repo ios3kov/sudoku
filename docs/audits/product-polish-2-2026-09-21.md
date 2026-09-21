@@ -38,7 +38,7 @@ New chat, devices and admin invite were rendered inside the shell but were not a
 
 Fix:
 - mutually exclusive overlay state;
-- modal dialog semantics;
+- explicit dialog semantics without claiming focus trapping;
 - absolute in-shell drawers/panels that do not reflow the conversation list.
 
 ### P1 — people search was too eager
@@ -82,6 +82,7 @@ Implemented:
 - compact recoverable status banners;
 - exclusive new-chat/device/invite drawers;
 - selected-state semantics for Direct/Group and group member selection;
+- group member discovery now follows the same 2-character minimum and avoids a no-op Save action when the group name is unchanged;
 - dialog semantics for focused overlays;
 - clear search hints and no-result feedback;
 - autosizing composer;
@@ -95,7 +96,7 @@ The current 460 px mobile-first messenger frame, message bubble system, fixed iP
 
 ### Improvements in this pass
 
-- directory search no longer fires for empty or one-character queries;
+- new-chat and group-member directory searches no longer fire for empty or one-character queries;
 - no new runtime dependency was introduced;
 - loading placeholders use existing DOM/CSS only;
 - autosize work is limited to the active textarea and current text value;
