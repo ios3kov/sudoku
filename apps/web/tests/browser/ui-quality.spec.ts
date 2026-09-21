@@ -92,6 +92,35 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   );
   expect(unnamedButtons).toBe(0);
 
+  // The cover is a real Sudoku, not a decorative unlock screen. Every keypad
+  // digit, including 5, must remain usable for ordinary play.
+  const editableCell = page.getByRole("gridcell", {
+    name: "Row 1, column 3, empty",
+  });
+  await editableCell.click();
+  for (const digit of ["1", "2", "3", "4", "5", "6", "7", "8", "9"]) {
+    await page.getByRole("button", { name: digit, exact: true }).click();
+    await expect(editableCell).toHaveText(digit);
+    await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+  }
+
+  await page.getByRole("button", { name: "Erase", exact: true }).click();
+  await expect(editableCell).toHaveText("");
+
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await page.getByRole("button", { name: "2", exact: true }).click();
+  await expect(editableCell).toContainText("2");
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(editableCell).toHaveText("");
+
+  const givenCell = page.getByRole("gridcell", {
+    name: "Row 1, column 1, 5",
+  });
+  await givenCell.click();
+  await page.getByRole("button", { name: "1", exact: true }).click();
+  await expect(givenCell).toHaveText("5");
+
   // A short drag must reveal the private layer but snap the full Sudoku screen
   // back into place without opening it.
   const shortFive = await dragFive(page, 35, 6);
