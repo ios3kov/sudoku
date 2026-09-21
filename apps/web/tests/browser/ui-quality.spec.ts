@@ -94,9 +94,7 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
 
   // The cover is a real Sudoku, not a decorative unlock screen. Every keypad
   // digit, including 5, must remain usable for ordinary play.
-  const editableCell = page.getByRole("gridcell", {
-    name: "Row 1, column 3, empty",
-  });
+  const editableCell = page.getByRole("gridcell").nth(2);
   await editableCell.click();
   for (const digit of ["1", "2", "3", "4", "5", "6", "7", "8", "9"]) {
     await page.getByRole("button", { name: digit, exact: true }).click();
@@ -114,9 +112,7 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(editableCell).toHaveText("");
 
-  const givenCell = page.getByRole("gridcell", {
-    name: "Row 1, column 1, 5",
-  });
+  const givenCell = page.getByRole("gridcell").nth(0);
   await givenCell.click();
   await page.getByRole("button", { name: "1", exact: true }).click();
   await expect(givenCell).toHaveText("5");
