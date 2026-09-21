@@ -1,0 +1,84 @@
+name: ux3-materialize
+on:
+  push:
+    branches: [feat/messenger-ux3-final]
+    paths: [.github/workflows/ux3-materialize.yml]
+permissions:
+  contents: write
+jobs:
+  materialize:
+    if: github.repository == 'ios3kov/sudoku' && github.ref == 'refs/heads/feat/messenger-ux3-final'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Materialize the exact locally checked source tree
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast, hashlib, json, lzma, pathlib, subprocess
+          BASE = '9b4cf2be5dff938f03df9811f95e1f7b168afd4b'
+          SOURCE = '8c17aaf120205492cd3b2fc52dc84a4d70e9195e'
+          OLD_BASE = 'ff97e0f4ed476cd33be095a8814f90936849805a'
+          EXPECTED_BASE = 'd8a2f8d3998c153e72ebaa5709b598b08c16d413'
+          EXPECTED_INTERMEDIATE = '766e0bc1675e6c64c15c88d57036097408ecf100'
+          EXPECTED_TARGET = '8711a6aa1e16de3c41a01476b13ef424fd63b17e'
+          EXPECTED_DATA = '9f564183796a75aff2015d518061f299ee6e304a4eefd566d79108eb396de2a1'
+          def git(*args):
+              return subprocess.check_output(['git', *args])
+          def check(value, expected, label):
+              if value != expected:
+                  raise SystemExit(label + ' mismatch')
+          bootstrap = ['.github/workflows/ux3-materialize.yml'] + [f'.github/ux3-source.{n}.bin' for n in range(3)]
+          saved = {name: pathlib.Path(name).read_bytes() for name in bootstrap}
+          data = lzma.decompress(b''.join(saved[f'.github/ux3-source.{n}.bin'] for n in range(3)))
+          check(hashlib.sha256(data).hexdigest(), EXPECTED_DATA, 'overlay')
+          check(git('rev-parse', BASE + '^{tree}').decode().strip(), EXPECTED_BASE, 'base tree')
+          subprocess.run(['git', 'read-tree', '--reset', '-u', BASE], check=True)
+          def apply(change, source):
+              name = pathlib.PurePosixPath(change['path'])
+              if name.is_absolute() or '..' in name.parts or name.parts[0] not in {'apps', 'packages', 'scripts', 'tests', 'docs'}:
+                  raise SystemExit('Unexpected patch path')
+              if change['base'] is not None:
+                  check(hashlib.sha256(source.encode()).hexdigest(), change['base'], str(name) + ' base')
+              lines = source.splitlines(keepends=True)
+              previous = len(lines)
+              for start, end, replacement in sorted(change['edits'], reverse=True):
+                  if not 0 <= start <= end <= previous:
+                      raise SystemExit('Invalid edit range')
+                  lines[start:end] = [replacement]
+                  previous = start
+              result = ''.join(lines)
+              check(hashlib.sha256(result.encode()).hexdigest(), change['sha256'], str(name) + ' result')
+              path = pathlib.Path(name)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(result)
+          for number in range(3):
+              changes = ast.literal_eval(git('show', f'{SOURCE}:.github/ux3-changes{number}.py').decode())
+              for change in changes:
+                  source = '' if change['base'] is None else git('show', f'{OLD_BASE}:{change["path"]}').decode()
+                  apply(change, source)
+          subprocess.run(['git', 'add', '-A'], check=True)
+          check(git('write-tree').decode().strip(), EXPECTED_INTERMEDIATE, 'intermediate tree')
+          for change in json.loads(data):
+              path = pathlib.Path(change['path'])
+              apply(change, path.read_text() if path.exists() else '')
+          subprocess.run(['git', 'add', '-A'], check=True)
+          check(git('write-tree').decode().strip(), EXPECTED_TARGET, 'checked source tree')
+          # Preserve existing bootstrap files in this source-only bot push.
+          # The authorized connector removes them before opening the PR.
+          for name, content in saved.items():
+              path = pathlib.Path(name)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_bytes(content)
+          subprocess.run(['git', 'add', *bootstrap], check=True)
+          print('Verified source tree:', EXPECTED_TARGET)
+          print('Prepared branch tree:', git('write-tree').decode().strip())
+          PY
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: integrate verified Messenger UX3 source on Step74 baseline' -m 'Source materialization only: expected clean tree 8711a6aa1e16de3c41a01476b13ef424fd63b17e. Full integrated CI is still required. No production deployment.'
+          git push origin HEAD:refs/heads/feat/messenger-ux3-final
