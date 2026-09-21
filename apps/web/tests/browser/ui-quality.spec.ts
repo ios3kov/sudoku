@@ -30,9 +30,9 @@ async function dragFive(page: Page, progress: number, pointerId: number) {
 }
 
 async function unlockPrivate(page: Page) {
-  // Crossing 75% of the available upward path must hand off to the finishing
+  // Crossing 50% of the available upward path must hand off to the finishing
   // animation immediately; no extra release gesture is required.
-  await dragFive(page, 0.8, 7);
+  await dragFive(page, 0.55, 7);
 }
 
 test("mobile Sudoku stays compact and unlock slides the whole screen over chat", async ({ page }) => {
@@ -130,9 +130,9 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await page.getByRole("button", { name: "1", exact: true }).click();
   await expect(givenCell).toHaveText("5");
 
-  // 74% is deliberately below the unlock threshold. The entire Sudoku screen
+  // 49% is deliberately below the unlock threshold. The entire Sudoku screen
   // must still follow the finger, then return instead of opening the messenger.
-  const belowThreshold = await dragFive(page, 0.74, 6);
+  const belowThreshold = await dragFive(page, 0.49, 6);
   await expect(page.locator(".private-reveal-layer")).toBeVisible();
   const shortTop = await page.locator(".sudoku-reveal-screen").evaluate(
     (element) => element.getBoundingClientRect().top,
@@ -160,6 +160,10 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await unlockPrivate(page);
   const email = page.getByLabel("Email");
   await expect(email).toBeVisible({ timeout: 30_000 });
+  await expect(email).toHaveCSS("font-size", "16px");
+  const viewportMeta = await page.locator('meta[name="viewport"]').getAttribute("content");
+  expect(viewportMeta).toContain("maximum-scale=1");
+  expect(viewportMeta).toContain("user-scalable=no");
 
   const privateOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
