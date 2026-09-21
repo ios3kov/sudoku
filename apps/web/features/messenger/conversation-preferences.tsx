@@ -35,7 +35,7 @@ export function ConversationPreferences({
   }
 
   return (
-    <section className="conversation-tools" aria-label="Conversation settings">
+    <section className="conversation-tools" role="dialog" aria-label="Conversation settings">
       <header className="settings-header">
         <div>
           <strong>Conversation</strong>
