@@ -158,6 +158,7 @@ export function GroupSettings({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Add people"
+            aria-label="Add people"
             type="search"
             autoCapitalize="none"
             autoCorrect="off"
