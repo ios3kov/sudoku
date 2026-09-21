@@ -634,7 +634,7 @@ export function ConversationView({
         />
         <button
           type="button"
-          className="attach-button"
+          className={`attach-button ${uploadProgress !== null ? "is-uploading" : ""}`}
           aria-label="Attach file"
           disabled={uploadProgress !== null || recording}
           onClick={() => fileInputRef.current?.click()}
