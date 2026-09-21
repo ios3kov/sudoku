@@ -284,6 +284,24 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     }
   }
 
+  function openNewChat() {
+    setShowInvite(false);
+    setShowDevices(false);
+    setCreating(true);
+  }
+
+  function toggleInvite() {
+    setCreating(false);
+    setShowDevices(false);
+    setShowInvite((value) => !value);
+  }
+
+  function toggleDevices() {
+    setCreating(false);
+    setShowInvite(false);
+    setShowDevices((value) => !value);
+  }
+
   function addConversation(conversation: Conversation) {
     setConversations((current) => {
       const without = current.filter((item) => item.id !== conversation.id);
@@ -442,7 +460,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <strong>Messages</strong>
             <span>{user.display_name} · {connectionState === "online" ? "online" : "reconnecting"}</span>
           </div>
-          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={() => setCreating(true)} aria-label={e2eeState === "ready" ? "New secure chat" : "Preparing secure messaging"}>＋</button>
+          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={openNewChat} aria-label={e2eeState === "ready" ? "New secure chat" : "Preparing secure messaging"}>＋</button>
         </header>
 
         {creating ? (
@@ -480,7 +498,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
               className="new-chat-button minimal-new-chat-button"
               type="button"
               disabled={e2eeState !== "ready"}
-              onClick={() => setCreating(true)}
+              onClick={openNewChat}
             >
               {e2eeState === "initializing" ? "Preparing secure messaging…" : "New secure chat"}
             </button>
@@ -538,8 +556,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
-          {user.is_admin ? <button type="button" onClick={() => setShowInvite((value) => !value)}>Invite</button> : null}
-          <button type="button" onClick={() => setShowDevices((value) => !value)}>Devices</button>
+          {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}
+          <button type="button" onClick={toggleDevices}>Devices</button>
           <button type="button" onClick={() => void enablePush()} disabled={pushState === "enabling" || pushState === "enabled"}>
             {pushState === "enabled" ? "Notifications on" : pushState === "enabling" ? "Enabling…" : pushState === "error" ? "Retry notifications" : "Enable notifications"}
           </button>
