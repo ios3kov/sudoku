@@ -32,18 +32,29 @@ export function NewChat({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setLoading(true);
+      setError(null);
       try {
-        const result = await messengerApi.searchUsers(query);
+        const result = await messengerApi.searchUsers(term);
         if (!cancelled) setUsers(result);
       } catch {
-        if (!cancelled) setError("Unable to load contacts");
+        if (!cancelled) {
+          setUsers([]);
+          setError("Unable to load contacts");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 180);
+    }, 220);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -111,22 +122,53 @@ export function NewChat({
     <section className="new-chat-panel">
       <div className="new-chat-header"><strong>New chat</strong><button type="button" onClick={onCancel}>Close</button></div>
       <div className="chat-mode-tabs">
-        <button className={mode === "direct" ? "active" : ""} type="button" onClick={() => switchMode("direct")}>Direct</button>
-        <button className={mode === "group" ? "active" : ""} type="button" onClick={() => switchMode("group")}>Group</button>
+        <button
+          className={mode === "direct" ? "active" : ""}
+          type="button"
+          aria-pressed={mode === "direct"}
+          onClick={() => switchMode("direct")}
+        >
+          Direct
+        </button>
+        <button
+          className={mode === "group" ? "active" : ""}
+          type="button"
+          aria-pressed={mode === "group"}
+          onClick={() => switchMode("group")}
+        >
+          Group
+        </button>
       </div>
       {mode === "group" ? (
         <input className="group-title-input" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} placeholder="Group name" maxLength={160} />
       ) : null}
-      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search people" autoFocus />
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search people"
+        type="search"
+        autoCapitalize="none"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        autoFocus
+      />
       {error ? <p className="form-error">{error}</p> : null}
       {mode === "group" && selected.size > 0 ? <p className="selected-count">{selected.size} selected</p> : null}
-      <div className="directory-list">
-        {loading ? <p className="muted">Searching…</p> : users.map((user) => (
+      <div className="directory-list" aria-busy={loading}>
+        {query.trim().length < 2 ? (
+          <p className="muted new-chat-hint">Type at least 2 characters to search.</p>
+        ) : loading ? (
+          <p className="muted">Searching…</p>
+        ) : users.length === 0 && !error ? (
+          <p className="muted new-chat-hint">No people found.</p>
+        ) : users.map((user) => (
           <button
             type="button"
             key={user.id}
             className={`directory-item ${selected.has(user.id) ? "selected" : ""}`}
             disabled={creating || !adapter}
+            aria-pressed={mode === "group" ? selected.has(user.id) : undefined}
             onClick={() => mode === "direct" ? void createDirect(user) : toggleUser(user.id)}
           >
             <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
