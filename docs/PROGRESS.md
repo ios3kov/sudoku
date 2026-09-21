@@ -3,7 +3,7 @@
 ## Current milestone
 Global automated pre-production audit, polish, profiling and behavior-preserving structural refactor are complete. Step 70 live verification is now in progress.
 
-Production was successfully built and started on verified commit `68211e02`. Live preflight, DNS/TLS edge smoke, intended external port exposure, and first-administrator bootstrap have passed. The latest merged release is `47060e20a342ba99bbd1a52070d2fe33f3dbf9c1` (PR #26, CI #248 green). Physical iPhone testing of that interaction found two follow-up issues: invalid Sudoku cells inherited generic form-error spacing and broke the board grid, and the hidden reveal still completed too early. The current patch isolates invalid-cell styling and requires 75% swipe progress before auto-finishing the final 25%. Persistence/restore, two-device MLS, and installed iOS/Android PWA checks are still open.
+Production was successfully built and started on verified commit `68211e02`. Live preflight, DNS/TLS edge smoke, intended external port exposure, and first-administrator bootstrap have passed. The latest merged release is `1787a48a475216865d0fd0a493e0899f3f0e9889` (PR #27, CI #250 green). Live UX feedback now changes the hidden reveal handoff to 50% of the available swipe path and requires the messenger/login viewport to keep a fixed scale when fields receive focus. The current patch locks the mobile viewport scale and forces 16px text inputs to prevent iOS focus auto-zoom. Persistence/restore, two-device MLS, and installed iOS/Android PWA checks are still open.
 
 ## Verified E2EE baseline
 Through Steps 69-72 the repository has verified:
@@ -76,7 +76,8 @@ Current live findings:
 - PR #25 also hardened overlapping MLS transport refresh/recovery and passed the full CI #245 gate before squash-merge to `6c0aefe9`;
 - the first deploy attempt for `6c0aefe9` did not start because SSH was temporarily unreachable; administrator-source TCP/22 connectivity was subsequently re-confirmed. A successful deploy + live smoke for this SHA is still pending evidence;
 - live iPhone gameplay exposed a CSS class collision: Sudoku invalid cells inherited the generic `.error` margin/padding/radius rules and could create thick dark grid bands; the fix moves Sudoku to a dedicated `.invalid` state and adds geometry acceptance;
-- unlock completion now requires 75% of the available upward path from digit 5 to the top edge; below that, release returns the whole Sudoku screen, and crossing 75% hands off to the finishing animation;
+- unlock completion is now intentionally set to 50% of the available upward path from digit 5 to the top edge; below 50%, release returns the whole Sudoku screen, and crossing 50% hands off to the finishing animation;
+- mobile chat/login keeps a fixed viewport scale: inputs are 16px minimum and the viewport disallows focus-driven zoom/pinch scaling, so entering email/password must not resize the whole interface;
 - two-device invite acceptance is not yet verified and remains part of the live gate.
 
 Targeted unlock UX/performance work is documented in `docs/audits/sudoku-unlock-ux-2026-09-20.md`.
@@ -126,7 +127,7 @@ No additional code-fixing stage is required before Step 70. Any failure found du
 
 ## Remaining production blockers
 These still require live/physical verification:
-- pass full CI for the grid-integrity/75%-threshold patch, merge/deploy its exact SHA, and record a passing live smoke plus physical iPhone retest;
+- pass full CI for the 50%-threshold/fixed-chat-scale patch, merge/deploy its exact SHA, and record a passing live smoke plus physical iPhone retest;
 - diagnose/verify second-account invite acceptance;
 - live PostgreSQL/Redis/MinIO persistence across stack restart and host reboot;
 - a real PostgreSQL + encrypted-object backup/restore drill;
