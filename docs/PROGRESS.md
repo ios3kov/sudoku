@@ -1,11 +1,11 @@
 # Progress
 
 ## Current milestone
-Product polish 2.0 merged in PR #30 as `ff97e0f4ed476cd33be095a8814f90936849805a` after PR CI #276 passed. Post-merge CI #277 (run `35639832585`) then failed in the browser MLS transport-outage assertion; the merged release is therefore not recorded as passing its post-merge gate.
+Step 73 is merged and its automated gate is complete. PR #31 merged as `ea063f410778280c302291b67337ec8510d14819` after full PR CI #279 (`35650704939`) passed; full post-merge CI #280 (`35652840406`) also passed, including both browser scenarios, MinIO/Compose validation and production API/Web image builds. This closes the lost secure-refresh notification and animation-frame test findings from CI #277/#278. The exact final evidence is recorded in PR #31.
 
-The active correction is Step 73 on `fix/secure-refresh-notifications`: retain refresh notifications received while a previous secure sync is finishing its read receipt, preserve decrypted history on failure, and clear the blocked-sync warning only after successful recovery. The isolated regression reproduces the lost notification; the corrected queue passes all seven regression tests. Full integrated CI for this correction remains a merge gate, not an assumed result.
+The next focused correction is Step 74 on `fix/preserve-active-composition`: incoming message metadata must not reset unsent text, reply/edit mode or expanded history in the open encrypted chat. State is scoped to the mounted conversation identity and is still discarded when leaving/hiding. The isolated real-component characterization failed in three cases before the fix and passed all four cases afterwards; the full browser/CI gate for this new correction remains required. See `docs/steps/74-active-composition.md`.
 
-The user reports the previously deployed build appears to work, but exact smoke evidence for the current release is not captured. Persistence/restore, two-device MLS and installed iOS/Android PWA checks remain open and intentionally deferred. This correction does not deploy production or apply the unfinished `feat/messenger-ux3` snapshot scripts.
+Product polish 2.0 previously merged in PR #30 as `ff97e0f4ed476cd33be095a8814f90936849805a`. No production deployment is performed by Steps 73-74. The previously deployed build was reported to work, but exact current live smoke evidence is not captured. Persistence/restore, two-device MLS and installed iOS/Android PWA checks remain deliberately deferred. Unfinished `feat/messenger-ux3` snapshot scripts are not applied by these focused fixes.
 
 ## Verified E2EE baseline
 Through Steps 69-72 the repository has verified:
@@ -85,7 +85,7 @@ Current live findings:
 Targeted unlock UX/performance work is documented in `docs/audits/sudoku-unlock-ux-2026-09-20.md`.
 
 ## Automated verification
-Current status: PR #30 CI #276 passed; post-merge CI #277 failed the browser secure-outage assertion. API/OpenMLS, lint/typecheck/build and bundle checks passed in #277, while production operations/Compose/image steps after browser acceptance were skipped. Step 73 documents the correction and its separate local verification. Do not treat the historical checklist below as a current passing gate.
+Latest completed baseline: Step 73 / PR #31, main SHA `ea063f410778280c302291b67337ec8510d14819`, full PR CI #279 and post-merge CI #280 passed. Step 74 has separate local characterization, lint/typecheck/build/budget evidence and additive browser coverage; its exact CI result must be recorded in its PR before merge. Do not treat historical results as a pass for new code.
 
 ### Historical pre-production baseline
 The release gate passed in PR #25 CI #245 before squash-merge to main SHA `6c0aefe95d02c3ee430904d3449ad6c8070cdf8b`. The broader enhanced pre-production gate also passed after refactor on code-gate commit `b84fc7ef`:
@@ -128,7 +128,7 @@ At the earlier pre-Step-70 checkpoint, repository cleanup was recorded as follow
 - no TODO/FIXME production blocker remains in the tracked source;
 - the two known P2 items below are explicitly deferred rather than changed immediately: removing the RustSec maintenance warning requires changing the pinned OpenMLS/hax dependency chain, while changing encrypted-journal persistence would alter reload/crash-safety behavior. Both changes have higher pre-production regression risk than their current non-blocking impact.
 
-This historical closure was reopened by post-merge CI #277. The Step 73 recovery correction requires the full automated gate before merging. Live/physical Step 70 remains deferred.
+That historical closure was reopened by post-merge CI #277. Step 73 resolved the resulting findings with full PR and post-merge gates. Step 74 is a separately tracked active-composition correction. Live/physical Step 70 remains deferred.
 
 ## Messenger redesign follow-up
 
@@ -139,7 +139,7 @@ PR #29 merged to main as `33f17fe5df3d4de124d391414c5b76adf6e0ac88` after CI #26
 - shared conversation header and isolated messenger CSS reduced presentation duplication;
 - existing API, session, realtime, MLS, offline, attachment and voice behavior were preserved.
 
-Product polish 2.0 merged in PR #30 and is tracked in `docs/audits/product-polish-2-2026-09-21.md`. Its post-merge recovery correction is tracked in `docs/steps/73-secure-refresh-recovery.md`.
+Product polish 2.0 merged in PR #30 and is tracked in `docs/audits/product-polish-2-2026-09-21.md`. Its post-merge recovery correction is tracked in `docs/steps/73-secure-refresh-recovery.md`, with final completed CI evidence in PR #31. Active-composition follow-up is tracked in `docs/steps/74-active-composition.md`.
 
 ## Deferred production verification
 These still require live/physical verification, but the user has explicitly deferred this Step 70 work for now:
