@@ -147,6 +147,7 @@ export function NewChat({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search people"
+        aria-label="Search people"
         type="search"
         autoCapitalize="none"
         autoCorrect="off"
