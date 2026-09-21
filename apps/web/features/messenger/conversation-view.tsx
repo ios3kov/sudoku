@@ -10,10 +10,12 @@ import { GroupSettings } from "./group-settings";
 import { ConversationPreferences } from "./conversation-preferences";
 import { MessageSearch } from "./message-search";
 import { ConversationHeader } from "./conversation-header";
+import { useAutosizeTextarea } from "./use-autosize-textarea";
 import {
   MAX_VOICE_SECONDS,
   conversationTitle,
   findSupportedVoiceMime,
+  formatBytes,
   formatDuration,
   normalizeVoiceMime,
   voiceFileExtension,
@@ -71,6 +73,8 @@ export function ConversationView({
   const lastProcessedEventRef = useRef<RealtimeEvent | null>(null);
   const scrollTargetSequenceRef = useRef<number | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
+
+  useAutosizeTextarea(textareaRef, body);
 
   const lastSequence = useMemo(
     () => messages.reduce((max, message) => Math.max(max, message.sequence), 0),
@@ -581,6 +585,13 @@ export function ConversationView({
       <div className="message-list" aria-live="polite">
         {loading ? <p className="muted center">Loading…</p> : null}
         {error ? <p className="form-error center">{error}</p> : null}
+        {!loading && !error && messages.length === 0 && pending.length === 0 ? (
+          <div className="empty-conversations compact chat-empty-state">
+            <div className="empty-icon" aria-hidden="true">•••</div>
+            <h2>No messages yet</h2>
+            <p>Send the first message when you are ready.</p>
+          </div>
+        ) : null}
         {messages.map((message) => {
           const replyMessage = message.reply_to ? messages.find((candidate) => candidate.id === message.reply_to) ?? null : null;
           const actionsOpen = actionMessageId === message.id;
@@ -748,12 +759,6 @@ function readReceiptLabel(conversation: Conversation, currentUserId: string, seq
   if (readCount === 0) return null;
   if (conversation.type === "direct") return "Read";
   return `${readCount} read`;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function mergeMessages(current: Message[], incoming: Message[]): Message[] {

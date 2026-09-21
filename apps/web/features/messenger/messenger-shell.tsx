@@ -5,7 +5,7 @@ import { messengerApi } from "./api";
 import { AdminInvite } from "./admin-invite";
 import { ConversationView } from "./conversation-view";
 import { EncryptedConversationView } from "./encrypted-conversation-view";
-import { conversationTitle } from "./chat-utils";
+import { conversationInitials, conversationTitle } from "./chat-utils";
 import { NewChat } from "./new-chat";
 import { clearPending } from "./outbox";
 import { RealtimeClient } from "./realtime";
@@ -13,15 +13,6 @@ import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
-
-function conversationInitials(value: string): string {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.slice(0, 1).toUpperCase())
-    .join("") || "•";
-}
 
 function sortConversations(items: Conversation[]): Conversation[] {
   return [...items].sort((a, b) => {
@@ -36,6 +27,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const [conversationQuery, setConversationQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [latestEvent, setLatestEvent] = useState<RealtimeEvent | null>(null);
   const [reconnectTick, setReconnectTick] = useState(0);
@@ -53,19 +45,23 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
 
-  const loadConversations = useCallback(async () => {
+  const loadConversations = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    setConversationLoadError(null);
     try {
       const next = await messengerApi.conversations();
       const sorted = sortConversations(next);
       conversationsRef.current = sorted;
       setConversations(sorted);
+    } catch {
+      setConversationLoadError("Unable to load conversations");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadConversations();
+    void loadConversations(true);
   }, [loadConversations]);
 
   const reconcileDeviceChange = useCallback(async (
@@ -288,6 +284,24 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     }
   }
 
+  function openNewChat() {
+    setShowInvite(false);
+    setShowDevices(false);
+    setCreating(true);
+  }
+
+  function toggleInvite() {
+    setCreating(false);
+    setShowDevices(false);
+    setShowInvite((value) => !value);
+  }
+
+  function toggleDevices() {
+    setCreating(false);
+    setShowInvite(false);
+    setShowDevices((value) => !value);
+  }
+
   function addConversation(conversation: Conversation) {
     setConversations((current) => {
       const without = current.filter((item) => item.id !== conversation.id);
@@ -446,7 +460,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <strong>Messages</strong>
             <span>{user.display_name} · {connectionState === "online" ? "online" : "reconnecting"}</span>
           </div>
-          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={() => setCreating(true)} aria-label={e2eeState === "ready" ? "New secure chat" : "Preparing secure messaging"}>＋</button>
+          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={openNewChat} aria-label={e2eeState === "ready" ? "New secure chat" : "Preparing secure messaging"}>＋</button>
         </header>
 
         {creating ? (
@@ -467,16 +481,35 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
                 aria-label="Search conversations"
               />
             </div>
-            <div className="conversation-list minimal-chat-list">
+            {conversationLoadError ? (
+              <div className="messenger-inline-status is-error" role="alert">
+                <span>{conversationLoadError}</span>
+                <button type="button" onClick={() => void loadConversations(true)}>Retry</button>
+              </div>
+            ) : null}
+            {e2eeState === "error" ? (
+              <div className="messenger-inline-status is-warning" role="status">
+                <span>Secure messaging needs a restart.</span>
+                <button type="button" onClick={() => window.location.reload()}>Reload</button>
+              </div>
+            ) : null}
+            <div className="conversation-list minimal-chat-list" aria-busy={loading}>
             <button
               className="new-chat-button minimal-new-chat-button"
               type="button"
               disabled={e2eeState !== "ready"}
-              onClick={() => setCreating(true)}
+              onClick={openNewChat}
             >
               {e2eeState === "initializing" ? "Preparing secure messaging…" : "New secure chat"}
             </button>
-            {loading ? <p className="muted center">Loading…</p> : conversations.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }, (_, index) => (
+                <div className="conversation-item minimal-chat-item is-skeleton" key={index} aria-hidden="true">
+                  <span className="avatar minimal-avatar" />
+                  <span className="conversation-copy"><strong /><small /></span>
+                </div>
+              ))
+            ) : conversations.length === 0 && !conversationLoadError ? (
               <div className="empty-conversations">
                 <div className="empty-icon" aria-hidden="true">•••</div>
                 <h2>No conversations yet</h2>
@@ -523,8 +556,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
-          {user.is_admin ? <button type="button" onClick={() => setShowInvite((value) => !value)}>Invite</button> : null}
-          <button type="button" onClick={() => setShowDevices((value) => !value)}>Devices</button>
+          {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}
+          <button type="button" onClick={toggleDevices}>Devices</button>
           <button type="button" onClick={() => void enablePush()} disabled={pushState === "enabling" || pushState === "enabled"}>
             {pushState === "enabled" ? "Notifications on" : pushState === "enabling" ? "Enabling…" : pushState === "error" ? "Retry notifications" : "Enable notifications"}
           </button>

@@ -25,6 +25,7 @@ export function GroupSettings({
   const [title, setTitle] = useState(conversation.title ?? "");
   const [query, setQuery] = useState("");
   const [directory, setDirectory] = useState<DirectoryUser[]>([]);
+  const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const me = conversation.members.find((member) => member.id === user.id);
@@ -36,20 +37,29 @@ export function GroupSettings({
   }, [conversation.title]);
 
   useEffect(() => {
-    if (!isOwner || !query.trim()) {
+    const term = query.trim();
+    if (!isOwner || term.length < 2) {
       setDirectory([]);
+      setSearching(false);
       return;
     }
     let cancelled = false;
     const timer = window.setTimeout(async () => {
+      setSearching(true);
+      setError(null);
       try {
-        const results = await messengerApi.searchUsers(query);
+        const results = await messengerApi.searchUsers(term);
         const existing = new Set(conversation.members.map((member) => member.id));
         if (!cancelled) setDirectory(results.filter((item) => !existing.has(item.id)));
       } catch {
-        if (!cancelled) setError("Unable to search people");
+        if (!cancelled) {
+          setDirectory([]);
+          setError("Unable to search people");
+        }
+      } finally {
+        if (!cancelled) setSearching(false);
       }
-    }, 180);
+    }, 220);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [conversation.members, isOwner, query]);
 
@@ -124,13 +134,13 @@ export function GroupSettings({
   }
 
   return (
-    <section className="group-settings" aria-label="Group settings">
+    <section className="group-settings" role="dialog" aria-label="Group settings">
       <div className="settings-header"><div><strong>Group</strong><span>{conversation.members.length} members</span></div><button type="button" onClick={onClose}>Close</button></div>
       {error ? <p className="form-error">{error}</p> : null}
       {isOwner ? (
         <form className="group-rename" onSubmit={rename}>
           <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} aria-label="Group name" />
-          <button type="submit" disabled={busy || !title.trim()}>Save</button>
+          <button type="submit" disabled={busy || !title.trim() || title.trim() === conversation.title}>Save</button>
         </form>
       ) : null}
       <div className="settings-list">
@@ -149,8 +159,21 @@ export function GroupSettings({
         ))}
       </div>
       {isOwner ? (
-        <div className="member-search">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Add people" />
+        <div className="member-search" aria-busy={searching}>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Add people"
+            aria-label="Add people"
+            type="search"
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {query.trim().length < 2 ? <p className="muted member-search-hint">Type at least 2 characters.</p> : null}
+          {query.trim().length >= 2 && searching ? <p className="muted member-search-hint">Searching…</p> : null}
+          {query.trim().length >= 2 && !searching && directory.length === 0 && !error ? <p className="muted member-search-hint">No new members found.</p> : null}
           {directory.map((item) => <button type="button" key={item.id} disabled={busy} onClick={() => void add(item.id)}><span>{item.display_name}</span><small>{item.email}</small></button>)}
         </div>
       ) : null}

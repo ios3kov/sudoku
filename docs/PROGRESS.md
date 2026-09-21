@@ -1,9 +1,9 @@
 # Progress
 
 ## Current milestone
-Step 70 live verification is in progress. Physical iPhone feedback has now opened a focused messenger presentation/performance redesign based on the supplied Minimal Messenger reference, while preserving the existing production auth/E2EE/runtime behavior.
+Product polish 2.0 is in progress on branch `feat/product-polish-2` after the Minimal Messenger redesign shipped in PR #29. The goal is to improve day-to-day messenger UX, loading/error recovery, panel behavior, composer ergonomics, accessibility and perceived performance without changing the API/MLS protocol.
 
-Production was successfully built and started on verified commit `68211e02`. Live preflight, DNS/TLS edge smoke, intended external port exposure, and first-administrator bootstrap have passed. The latest merged release is `1787a48a475216865d0fd0a493e0899f3f0e9889` (PR #27, CI #250 green). Live UX feedback now changes the hidden reveal handoff to 50% of the available swipe path and requires the messenger/login viewport to keep a fixed scale when fields receive focus. The current patch locks the mobile viewport scale and forces 16px text inputs to prevent iOS focus auto-zoom. Persistence/restore, two-device MLS, and installed iOS/Android PWA checks are still open.
+The latest merged release is `33f17fe5df3d4de124d391414c5b76adf6e0ac88` (PR #29, CI #262 green). The user reports the deployed build appears to work, but the exact production smoke output has not been captured in chat, so it is not recorded as a verified Step 70 pass. Persistence/restore, two-device MLS and installed iOS/Android PWA checks remain open and are intentionally deferred for now.
 
 ## Verified E2EE baseline
 Through Steps 69-72 the repository has verified:
@@ -127,19 +127,18 @@ No additional code-fixing stage is required before Step 70. Any failure found du
 
 ## Messenger redesign follow-up
 
-Current branch `feat/minimal-messenger-redesign`:
-- ports the supplied 460 px mobile-first visual system onto the production messenger;
-- adds lightweight real-data reveal preview so OpenMLS/realtime initialization no longer competes with the Sudoku drag;
-- adds conversation search, redesigned list/bubbles/composer and overlay drawers;
-- extracts a shared conversation header and isolates messenger CSS;
-- keeps existing API, session, realtime, MLS, offline, attachment and voice behavior;
-- documents UX/UI, performance and technical audit in `docs/audits/minimal-messenger-redesign-2026-09-21.md`.
+PR #29 merged to main as `33f17fe5df3d4de124d391414c5b76adf6e0ac88` after CI #262 passed:
+- the supplied 460 px mobile-first visual system is applied to the production messenger;
+- a lightweight real-data reveal preview keeps OpenMLS/realtime initialization off the Sudoku drag critical path;
+- conversation search, redesigned list/bubbles/composer and overlay drawers are live in the codebase;
+- shared conversation header and isolated messenger CSS reduced presentation duplication;
+- existing API, session, realtime, MLS, offline, attachment and voice behavior were preserved.
 
-This redesign must pass full CI plus a physical iPhone smoke before deployment.
+Product polish 2.0 is tracked in `docs/audits/product-polish-2-2026-09-21.md`.
 
-## Remaining production blockers
-These still require live/physical verification:
-- pass full CI for the 50%-threshold/fixed-chat-scale patch, merge/deploy its exact SHA, and record a passing live smoke plus physical iPhone retest;
+## Deferred production verification
+These still require live/physical verification, but the user has explicitly deferred this Step 70 work for now:
+- capture exact live smoke evidence for the currently deployed release and perform the physical iPhone retest;
 - diagnose/verify second-account invite acceptance;
 - live PostgreSQL/Redis/MinIO persistence across stack restart and host reboot;
 - a real PostgreSQL + encrypted-object backup/restore drill;

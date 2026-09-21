@@ -123,15 +123,42 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await login(peer, PEER_EMAIL);
     await login(owner, OWNER_EMAIL);
 
+    let directoryRequests = 0;
+    owner.on("request", (request) => {
+      if (request.url().includes("/v1/users?q=")) directoryRequests += 1;
+    });
+
     await owner.getByRole("button", { name: "New secure chat" }).click();
-    await owner.getByPlaceholder("Search people").fill("Browser Peer");
+    await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+    await expect(owner.getByText("Type at least 2 characters to search.", { exact: true })).toBeVisible();
+    await expect(owner.getByRole("button", { name: "Direct", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+    const peopleSearch = owner.getByPlaceholder("Search people");
+    await peopleSearch.fill("B");
+    await owner.waitForTimeout(300);
+    expect(directoryRequests).toBe(0);
+
+    await peopleSearch.fill("Browser Peer");
     const peerResult = owner.locator(".directory-item").filter({ hasText: PEER_EMAIL });
     await expect(peerResult).toBeVisible();
+    expect(directoryRequests).toBeGreaterThan(0);
     await peerResult.click();
 
     await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
       timeout: 60_000,
     });
+
+    const composer = owner.locator("textarea").last();
+    await expect(composer).toBeEnabled({ timeout: 60_000 });
+    const initialComposerHeight = await composer.evaluate((element) =>
+      Math.round(element.getBoundingClientRect().height),
+    );
+    await composer.fill("one\ntwo\nthree");
+    const expandedComposerHeight = await composer.evaluate((element) =>
+      Math.round(element.getBoundingClientRect().height),
+    );
+    expect(expandedComposerHeight).toBeGreaterThan(initialComposerHeight);
+    await composer.fill("");
 
     await sendText(owner, "persisted before reload");
     await expect(owner.getByText("persisted before reload", { exact: true })).toBeVisible();

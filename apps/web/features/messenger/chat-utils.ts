@@ -8,6 +8,15 @@ const VOICE_MIME_CANDIDATES = [
   "audio/webm",
 ] as const;
 
+export function conversationInitials(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.slice(0, 1).toUpperCase())
+    .join("") || "•";
+}
+
 export function conversationTitle(
   conversation: Conversation,
   currentUserId: string,

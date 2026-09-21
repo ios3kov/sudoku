@@ -36,7 +36,7 @@ export function MessageSearch({
   }
 
   return (
-    <section className="message-search-panel" aria-label="Search messages">
+    <section className="message-search-panel" role="dialog" aria-label="Search messages">
       <header className="settings-header">
         <div><strong>Find in chat</strong><span>Searches message text in this conversation.</span></div>
         <button type="button" onClick={onClose}>Done</button>

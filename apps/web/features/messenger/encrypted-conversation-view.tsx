@@ -18,6 +18,7 @@ import { uploadEncryptedAsset } from "./uploads";
 import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
+import { useAutosizeTextarea } from "./use-autosize-textarea";
 import {
   MAX_VOICE_SECONDS,
   conversationTitle,
@@ -70,6 +71,7 @@ export function EncryptedConversationView({
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
@@ -77,6 +79,8 @@ export function EncryptedConversationView({
   const recordStopTimerRef = useRef<number | null>(null);
   const lastEventRef = useRef<RealtimeEvent | null>(null);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
+
+  useAutosizeTextarea(textareaRef, body);
 
   const refreshProjection = useCallback((): Promise<void> => {
     if (refreshInFlightRef.current) return refreshInFlightRef.current;
@@ -440,6 +444,7 @@ export function EncryptedConversationView({
     setReplyingToId(null);
     setBody(message.body ?? "");
     setActionMessageId(null);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
   }
 
   return (
@@ -590,6 +595,7 @@ export function EncryptedConversationView({
                     setReplyingToId(message.id);
                     setEditingId(null);
                     setActionMessageId(null);
+                    window.setTimeout(() => textareaRef.current?.focus(), 0);
                   }}>Reply</button>
                   {own ? (
                     <button type="button" onClick={() => beginEdit(message)}>Edit</button>
@@ -650,6 +656,7 @@ export function EncryptedConversationView({
           {uploadProgress === null ? "+" : `${uploadProgress}%`}
         </button>
         <textarea
+          ref={textareaRef}
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={1}
