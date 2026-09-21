@@ -33,6 +33,7 @@ The drag path is deliberately compositor-oriented:
 - only `transform` changes during the gesture;
 - viewport height is sampled once on pointer down, not on every move;
 - the private surface is mounted only after a real upward drag begins, so normal taps on `5` do not initialize the messenger;
+- overlapping secure transport refreshes are coalesced, and a blocked encrypted view retries recovery without stacking concurrent refreshes;
 - one forced layout is used only on successful release to guarantee a continuous finishing transition from the exact finger position.
 
 This removes the main jank risk in the previous implementation: React re-rendering for every pointer event.
