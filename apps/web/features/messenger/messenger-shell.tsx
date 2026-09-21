@@ -482,13 +482,13 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
               />
             </div>
             {conversationLoadError ? (
-              <div className="messenger-inline-status error" role="alert">
+              <div className="messenger-inline-status is-error" role="alert">
                 <span>{conversationLoadError}</span>
                 <button type="button" onClick={() => void loadConversations(true)}>Retry</button>
               </div>
             ) : null}
             {e2eeState === "error" ? (
-              <div className="messenger-inline-status warning" role="status">
+              <div className="messenger-inline-status is-warning" role="status">
                 <span>Secure messaging needs a restart.</span>
                 <button type="button" onClick={() => window.location.reload()}>Reload</button>
               </div>
