@@ -8,13 +8,19 @@ permissions:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Archive tracked source only
-        run: git archive --format=zip HEAD -o /tmp/sudoku-ux3-baseline.zip
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm}
+      - name: Install pinned verification dependencies
+        run: npm ci --ignore-scripts --include=dev
+      - name: Build existing pinned browser WASM
+        run: node scripts/build-mls-wasm.mjs
+      - name: Package local verification toolchain (no credentials)
+        run: tar -czf /tmp/ux3-toolchain.tar.gz node_modules apps/web/generated/mls-wasm
       - uses: actions/upload-artifact@v4
         with:
-          name: ux3-baseline-source
-          path: /tmp/sudoku-ux3-baseline.zip
+          name: ux3-verification-toolchain
+          path: /tmp/ux3-toolchain.tar.gz
           retention-days: 1
