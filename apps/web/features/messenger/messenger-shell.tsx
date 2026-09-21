@@ -327,7 +327,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     ) {
       return (
         <main className="messenger-page">
-          <section className="messenger-shell minimal-messenger-frame">
+          <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
             <header className="messenger-topbar minimal-chat-topbar">
               <div>
                 <strong>{conversationTitle(selected, user.id)}</strong>
@@ -372,7 +372,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     ) {
       return (
         <main className="messenger-page">
-          <section className="messenger-shell minimal-messenger-frame">
+          <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
             <EncryptedConversationView
               conversation={selected}
               user={user}
@@ -394,7 +394,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
     return (
       <main className="messenger-page">
-        <section className="messenger-shell minimal-messenger-frame">
+        <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
           <header className="messenger-topbar minimal-chat-topbar">
             <div>
               <strong>{conversationTitle(selected, user.id)}</strong>
@@ -418,7 +418,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   if (selected) {
     return (
       <main className="messenger-page">
-        <section className="messenger-shell minimal-messenger-frame">
+        <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
           <ConversationView
             conversation={selected}
             user={user}
@@ -440,7 +440,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
   return (
     <main className="messenger-page">
-      <section className="messenger-shell minimal-messenger-frame">
+      <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
         <header className="messenger-topbar minimal-list-topbar">
           <div className="minimal-list-heading">
             <strong>Messages</strong>
