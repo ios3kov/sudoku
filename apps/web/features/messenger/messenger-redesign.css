@@ -859,3 +859,11 @@
 @keyframes messenger-skeleton-pulse{
   50%{opacity:.55}
 }
+
+
+.member-search-hint{
+  margin:0;
+  padding:8px 2px;
+  color:#94a3b8;
+  font-size:11px;
+}
