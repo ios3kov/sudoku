@@ -83,3 +83,31 @@ Do not call this interaction closed from CI alone. After merge/deploy, repeat on
 - background the app during a partial drag.
 
 The fix passes only when the motion feels continuous and the Sudoku remains fully playable.
+
+
+## Physical-device follow-up — grid integrity and 75% handoff
+
+Live iPhone testing after PR #26 exposed two more concrete issues.
+
+### Sudoku grid corruption
+
+Wrong cells used the generic CSS class `error`. That class is also used for form-level errors and adds margin, padding, border radius and a smaller font size. When applied to a grid cell, those layout properties distort the CSS Grid track and expose the dark board background as thick horizontal/vertical bands.
+
+Fix:
+- Sudoku cells now use a dedicated `invalid` state class;
+- invalid cells change only visual error color/background;
+- no margin, padding, radius or font-size mutation is inherited from form errors;
+- browser acceptance checks invalid-cell geometry and board dimensions after a wrong entry.
+
+### Unlock threshold
+
+The previous gesture still completed after a short upward movement because it reused the old fixed-pixel unlock rule.
+
+The new rule is progress based:
+- the full gesture path is the available vertical distance from the pressed digit `5` to the top edge of the viewport;
+- the Sudoku surface follows the finger for the entire drag;
+- below 75% progress, release returns the Sudoku surface;
+- at 75% progress, the gesture hands off to the finishing animation and completes the remaining 25%;
+- a normal tap on `5` remains ordinary Sudoku input.
+
+This makes the hidden transition deliberate and prevents short accidental reveals.

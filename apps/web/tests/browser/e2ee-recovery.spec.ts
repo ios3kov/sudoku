@@ -9,38 +9,29 @@ async function unlockPrivate(page: Page) {
   const five = page.getByRole("button", { name: "5", exact: true });
   await expect(five).toBeVisible();
 
-  // Dispatch the exact press-and-drag gesture handled by useSecretUnlock.
+  // Dispatch the real 75%-threshold gesture. The available swipe path runs
+  // from the digit's current Y position to the top edge; crossing 75% lets the
+  // finishing animation take over automatically.
+  const box = await five.boundingBox();
+  expect(box).not.toBeNull();
+  const startX = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+  const startY = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+
   await five.dispatchEvent("pointerdown", {
-    clientX: 190,
-    clientY: 740,
+    clientX: startX,
+    clientY: startY,
     pointerId: 1,
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
   });
   await five.dispatchEvent("pointermove", {
-    clientX: 191,
-    clientY: 680,
+    clientX: startX + 1,
+    clientY: startY * 0.2,
     pointerId: 1,
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
-  });
-  await five.dispatchEvent("pointermove", {
-    clientX: 192,
-    clientY: 620,
-    pointerId: 1,
-    pointerType: "touch",
-    isPrimary: true,
-    buttons: 1,
-  });
-  await five.dispatchEvent("pointerup", {
-    clientX: 192,
-    clientY: 620,
-    pointerId: 1,
-    pointerType: "touch",
-    isPrimary: true,
-    buttons: 0,
   });
 
   await expect(page.locator(".messenger-lock, .messenger-page").first()).toBeVisible();

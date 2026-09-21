@@ -228,3 +228,20 @@ Release and device-test update:
 - automated acceptance is extended to verify all 1–9 keypad digits, erase/notes/reset, immutable givens, incomplete-drag return, full-screen reveal and privacy behavior.
 
 Do not mark this follow-up live-verified until its CI passes, it is merged/deployed as an exact SHA, and the physical-device animation/gameplay retest passes.
+
+
+### Live interaction follow-up — grid + unlock threshold
+
+Physical iPhone testing after PR #26 identified:
+- invalid Sudoku cells could distort the board because the Sudoku `error` class collided with the global form-error CSS selector;
+- the reveal threshold still accepted a short swipe.
+
+Current correction:
+- Sudoku invalid cells use a dedicated `invalid` class with no layout-changing margin/padding/radius;
+- automated UI acceptance verifies invalid-cell geometry and board dimensions after a wrong entry;
+- the gesture uses the available vertical path from digit `5` to the top edge as 100% progress;
+- below 75%, release returns the whole Sudoku surface;
+- at 75%, the finishing animation takes over and completes the remaining 25%;
+- a normal tap on digit `5` still behaves as normal Sudoku input.
+
+This follow-up must pass CI, exact-SHA deploy/smoke and physical-device retest before the interaction gate can close.

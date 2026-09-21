@@ -242,7 +242,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
                   selected === index ? "selected" : "",
                   selected !== index && same ? "same" : "",
                   selected !== index && !same && related ? "related" : "",
-                  invalid ? "error" : "",
+                  invalid ? "invalid" : "",
                 ].filter(Boolean).join(" ")}
                 onClick={() => selectCell(index)}
               >
