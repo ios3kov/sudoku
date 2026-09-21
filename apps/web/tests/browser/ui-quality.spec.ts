@@ -137,7 +137,9 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
     isPrimary: true,
     buttons: 0,
   });
-  await expect(page.locator(".private-reveal-layer")).toHaveCount(0, { timeout: 2_000 });
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "", {
+    timeout: 2_000,
+  });
   const returnedTop = await page.locator(".sudoku-reveal-screen").evaluate(
     (element) => Math.round(element.getBoundingClientRect().top),
   );
