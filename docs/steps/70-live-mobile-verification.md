@@ -7,7 +7,7 @@ Close the only remaining production blockers that repository CI cannot prove: in
 - deploy only the green repository head;
 - production keeps `REQUIRE_E2EE_NEW_CONVERSATIONS=true`;
 - production secrets are supplied outside the repository;
-- public ports are limited to 80/443;
+- application ingress is limited to 80/443; SSH 22 is administrator-source-only;
 - database/object-storage backups exist before the smoke test.
 
 ## iOS installed-PWA smoke
@@ -15,17 +15,18 @@ Use a physical iPhone/iPad installed from the production hostname.
 
 Verify:
 1. normal launch opens Sudoku, not messenger;
-2. hidden gesture opens the private area;
-3. sign-in session persists across app restart;
-4. app backgrounding/privacy cover returns visible content to Sudoku according to the configured timeout;
-5. create a new direct encrypted chat;
-6. send/receive text, image and file;
-7. grant microphone permission and send/play an encrypted voice note;
-8. reload/reopen and confirm encrypted history recovers;
-9. go offline, queue an encrypted text update, reconnect and confirm delivery;
-10. enable push and confirm notification content remains generic Sudoku-only;
-11. revoke the device session from another device and confirm access is removed;
-12. compare and mark a safety number verified.
+2. press and hold keypad digit `5`, drag upward, and confirm the entire Sudoku surface follows the finger to reveal the private area underneath; an incomplete drag must settle back smoothly;
+3. verify the Sudoku remains fully playable before unlock: all digits 1–9 enter normally, a normal tap on `5` does not unlock, and Notes/Erase/Reset still work;
+4. sign-in session persists across app restart;
+5. app backgrounding/privacy cover returns visible content to Sudoku according to the configured timeout, including when backgrounded during a partial unlock drag;
+6. create a new direct encrypted chat;
+7. send/receive text, image and file;
+8. grant microphone permission and send/play an encrypted voice note;
+9. reload/reopen and confirm encrypted history recovers;
+10. go offline, queue an encrypted text update, reconnect and confirm delivery;
+11. enable push and confirm notification content remains generic Sudoku-only;
+12. revoke the device session from another device and confirm access is removed;
+13. compare and mark a safety number verified.
 
 ## Android installed-PWA smoke
 Repeat the same matrix on a physical Android device, including:

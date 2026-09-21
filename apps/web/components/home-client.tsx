@@ -12,30 +12,14 @@ export function HomeClient() {
   const hidePrivateSurface = useAppStore((state) => state.hidePrivateSurface);
   const hiddenAt = useRef<number | null>(null);
   const [privacyCover, setPrivacyCover] = useState(false);
-  const [privateUnderlayMounted, setPrivateUnderlayMounted] = useState(false);
 
   const hidePrivate = useCallback(() => {
-    setPrivateUnderlayMounted(false);
     hidePrivateSurface();
   }, [hidePrivateSurface]);
-
-  const beginPrivateReveal = useCallback(() => {
-    setPrivateUnderlayMounted(true);
-  }, []);
-
-  const cancelPrivateReveal = useCallback(() => {
-    setPrivateUnderlayMounted(false);
-  }, []);
-
-  const completePrivateReveal = useCallback(() => {
-    setPrivateUnderlayMounted(true);
-    showMessengerLock();
-  }, [showMessengerLock]);
 
   useEffect(() => {
     function forceSudoku() {
       setPrivacyCover(true);
-      setPrivateUnderlayMounted(false);
       hidePrivateSurface();
       requestAnimationFrame(() => setPrivacyCover(false));
     }
@@ -48,10 +32,10 @@ export function HomeClient() {
 
   useEffect(() => {
     function concealNow() {
-      if (mode !== "sudoku" || privateUnderlayMounted) {
-        setPrivacyCover(true);
-        setPrivateUnderlayMounted(false);
-      }
+      // Always replace the current visual tree while the page is hidden. This
+      // also guarantees that a half-finished Sudoku reveal can never be frozen
+      // in the OS app switcher with private content exposed underneath.
+      setPrivacyCover(true);
       hiddenAt.current = Date.now();
     }
     function handleVisibility() {
@@ -60,10 +44,7 @@ export function HomeClient() {
         return;
       }
       const shouldLock = mode !== "sudoku" && shouldLockPrivateSurface(hiddenAt.current, Date.now());
-      if (shouldLock) {
-        setPrivateUnderlayMounted(false);
-        hidePrivateSurface();
-      }
+      if (shouldLock) hidePrivateSurface();
       hiddenAt.current = null;
       requestAnimationFrame(() => setPrivacyCover(false));
     }
@@ -73,32 +54,26 @@ export function HomeClient() {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("pagehide", concealNow);
     };
-  }, [hidePrivateSurface, mode, privateUnderlayMounted]);
+  }, [hidePrivateSurface, mode]);
 
   if (privacyCover) {
     return <main className="shell"><section className="card"><h1>Sudoku</h1><div className="privacy-grid" aria-hidden="true" /></section></main>;
   }
 
-  const privateVisible = mode === "messenger-lock" || privateUnderlayMounted;
+  const privateActive = mode === "messenger-lock";
 
   return (
-    <div className={`home-reveal-stage${mode === "messenger-lock" ? " private-active" : ""}`}>
-      {privateVisible ? (
-        <div
-          className={`private-reveal-layer${mode === "messenger-lock" ? " is-active" : ""}`}
-          aria-hidden={mode === "sudoku" ? true : undefined}
-          inert={mode === "sudoku" ? true : undefined}
-        >
-          <AuthGate onHide={hidePrivate} />
-        </div>
-      ) : null}
+    <div className={`home-reveal-stage${privateActive ? " private-active" : ""}`}>
+      <div
+        className={`private-reveal-layer${privateActive ? " is-active" : ""}`}
+        aria-hidden={privateActive ? undefined : true}
+        inert={privateActive ? undefined : true}
+      >
+        <AuthGate onHide={hidePrivate} />
+      </div>
 
       {mode === "sudoku" ? (
-        <SudokuBoard
-          onSecretRevealStart={beginPrivateReveal}
-          onSecretRevealCancel={cancelPrivateReveal}
-          onSecretUnlock={completePrivateReveal}
-        />
+        <SudokuBoard onSecretUnlock={showMessengerLock} />
       ) : null}
     </div>
   );

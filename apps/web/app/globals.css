@@ -41,13 +41,11 @@ code{overflow-wrap:anywhere}
 
 /* Sudoku -> private reveal */
 .home-reveal-stage{position:relative;min-height:100dvh;overflow:hidden;background:var(--bg);isolation:isolate}
-.private-reveal-layer{position:fixed;inset:0;z-index:0;overflow:auto;background:var(--surface);pointer-events:none;transform:scale(.985);transform-origin:center bottom;opacity:.96;transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .2s ease}
-.private-reveal-layer.is-active{position:absolute;z-index:2;pointer-events:auto;transform:none;opacity:1}
-.sudoku-reveal-screen{--unlock-offset:0px;position:relative;z-index:3;min-height:100dvh;background:var(--bg);transform:translate3d(0,calc(-1 * var(--unlock-offset)),0);will-change:transform;backface-visibility:hidden}
-.sudoku-reveal-screen::after{content:"";position:absolute;left:0;right:0;bottom:-18px;height:18px;pointer-events:none;box-shadow:0 18px 30px rgba(24,33,38,.24)}
-.sudoku-reveal-screen.is-dragging{transition:none}
-.sudoku-reveal-screen.is-returning{transition:transform .26s cubic-bezier(.22,.76,.24,1)}
-.sudoku-reveal-screen.is-unlocking{transform:translate3d(0,-110%,0);transition:transform .34s cubic-bezier(.2,.78,.16,1)}
+.private-reveal-layer{position:fixed;inset:0;z-index:0;overflow:auto;background:var(--surface);pointer-events:none;transform:translate3d(0,22px,0) scale(.965);transform-origin:center bottom;opacity:.84;backface-visibility:hidden;will-change:transform,opacity}
+.private-reveal-layer.is-active{position:absolute;z-index:2;pointer-events:auto;transform:none;opacity:1;will-change:auto}
+.sudoku-reveal-screen{position:relative;z-index:3;min-height:100dvh;background:var(--bg);transform:translate3d(0,0,0);backface-visibility:hidden}
+.sudoku-reveal-screen::after{content:"";position:absolute;left:0;right:0;bottom:-20px;height:20px;pointer-events:none;box-shadow:0 18px 34px rgba(24,33,38,.22)}
+.sudoku-reveal-screen.is-dragging,.sudoku-reveal-screen.is-returning,.sudoku-reveal-screen.is-unlocking{will-change:transform}
 .primary-button,.secondary-button,.text-button,.new-chat-button,.create-group-button,.action,.digit,.back-button,.attach-button,.voice-button,.hide-chat-button{
   border:0;border-radius:12px;padding:0 14px;font-weight:650;cursor:pointer
 }
@@ -89,7 +87,7 @@ code{overflow-wrap:anywhere}
 .controls{display:grid;gap:9px}
 .digits{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:4px;width:100%}
 .digit{position:relative;padding:0;min-width:0;background:var(--surface);font-size:18px;font-weight:760}
-.secret-digit{touch-action:none}
+.secret-digit{touch-action:none;user-select:none;-webkit-user-select:none}
 .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 
 /* Private auth */
@@ -197,7 +195,6 @@ code{overflow-wrap:anywhere}
 @keyframes pulse{50%{opacity:.72;transform:scale(.96)}}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
-  .sudoku-reveal-screen.is-unlocking{transform:translate3d(0,-110%,0)!important}
 }
 @media (min-width:760px){
   .messenger-page{padding:24px}

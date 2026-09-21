@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  canPlace,
   colOf,
   conflictsFor,
   givensMask,
@@ -41,15 +40,7 @@ function formatElapsed(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-export function SudokuBoard({
-  onSecretUnlock,
-  onSecretRevealStart,
-  onSecretRevealCancel,
-}: {
-  onSecretUnlock: () => void;
-  onSecretRevealStart: () => void;
-  onSecretRevealCancel: () => void;
-}) {
+export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) {
   const givens = useMemo(() => givensMask(PUZZLE), []);
   const [grid, setGrid] = useState<CellValue[]>([...PUZZLE]);
   const [notes, setNotes] = useState<NotesMap>({});
@@ -69,8 +60,6 @@ export function SudokuBoard({
     cancel: cancelSecretUnlock,
   } = useSecretUnlock({
     onUnlock: onSecretUnlock,
-    onRevealStart: onSecretRevealStart,
-    onRevealCancel: onSecretRevealCancel,
   });
 
   useEffect(() => {
@@ -167,8 +156,9 @@ export function SudokuBoard({
     if (value !== SOLUTION[selected] && grid[selected] !== value) {
       setMistakes((current) => current + 1);
     }
-    if (!canPlace(grid, selected, value)) return;
-
+    // A real Sudoku keypad must always enter the requested digit into an
+    // editable cell. Conflicts and wrong answers are shown as errors instead
+    // of making the keypad appear unresponsive.
     const next = [...grid];
     next[selected] = value;
     setGrid(next);

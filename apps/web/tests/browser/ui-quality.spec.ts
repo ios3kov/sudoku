@@ -92,6 +92,31 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   );
   expect(unnamedButtons).toBe(0);
 
+  // The cover is a real Sudoku, not a decorative unlock screen. Every keypad
+  // digit, including 5, must remain usable for ordinary play.
+  const editableCell = page.getByRole("gridcell").nth(2);
+  await editableCell.click();
+  for (const digit of ["1", "2", "3", "4", "5", "6", "7", "8", "9"]) {
+    await page.getByRole("button", { name: digit, exact: true }).click();
+    await expect(editableCell).toHaveText(digit);
+    await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+  }
+
+  await page.getByRole("button", { name: "Erase", exact: true }).click();
+  await expect(editableCell).toHaveText("");
+
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await page.getByRole("button", { name: "2", exact: true }).click();
+  await expect(editableCell).toContainText("2");
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(editableCell).toHaveText("");
+
+  const givenCell = page.getByRole("gridcell").nth(0);
+  await givenCell.click();
+  await page.getByRole("button", { name: "1", exact: true }).click();
+  await expect(givenCell).toHaveText("5");
+
   // A short drag must reveal the private layer but snap the full Sudoku screen
   // back into place without opening it.
   const shortFive = await dragFive(page, 35, 6);
@@ -108,11 +133,16 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
     isPrimary: true,
     buttons: 0,
   });
-  await expect(page.locator(".private-reveal-layer")).toHaveCount(0, { timeout: 2_000 });
-  const returnedTop = await page.locator(".sudoku-reveal-screen").evaluate(
-    (element) => Math.round(element.getBoundingClientRect().top),
-  );
-  expect(returnedTop).toBe(0);
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "", {
+    timeout: 2_000,
+  });
+  await expect.poll(
+    () =>
+      page.locator(".sudoku-reveal-screen").evaluate(
+        (element) => Math.round(element.getBoundingClientRect().top),
+      ),
+    { timeout: 2_000 },
+  ).toBe(0);
 
   await unlockPrivate(page);
   const email = page.getByLabel("Email");

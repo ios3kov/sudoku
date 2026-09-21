@@ -17,20 +17,25 @@ Make the repository deployable/testable as a complete system rather than a set o
 - GitHub Actions workflow added for migrations, real-service API integration tests, domain tests, web typecheck and production build.
 - API integration flow covers admin login, hashed invite issuance, invite acceptance, direct chat, idempotent retry, durable message read, wrong-Origin rejection, signed upload/verification/download authorization, and push-endpoint SSRF rejection.
 
-## Important reproducibility note
+## Reproducibility status
 
-The active execution environment cannot reach npm, so a lockfile could not be generated here. CI currently uses `npm install` so the verification pipeline remains executable. Before production release, CI must generate/review/commit `package-lock.json` and switch to `npm ci`; until then dependency resolution is not fully reproducible.
+The repository now has a canonical `package-lock.json`, CI uses reproducible clean installs, and npm dependency auditing is part of the release gate. The earlier no-lockfile limitation from this bootstrap step is closed.
 
 ## Object-store note
 
-The bundled object store is for local/integration development only. Production remains generic S3-compatible storage; do not treat the local service/image as the production storage recommendation.
+The project keeps an S3-compatible API boundary. Current production uses the repository's pinned MinIO infrastructure behind Caddy: MinIO is private inside Docker and browser access goes through the dedicated TLS asset hostname. The application uses a dedicated least-privilege S3 credential rather than the MinIO root credential.
 
 ## Verification
 
-- Compose YAML parses successfully.
-- Docker/Podman are not installed in the current execution environment, so containers cannot be launched here.
-- Integration tests are committed but cannot be executed locally until PostgreSQL/Redis/S3 services and `asyncpg` are available.
+The original Step 10 bootstrap verification has since been superseded by the enhanced CI and live Step 70 work:
+- Compose policy validation runs in CI;
+- real API/Web production images are built in CI;
+- PostgreSQL/Redis/S3-backed integration tests run in CI;
+- non-root container users and production port publication are asserted;
+- the live Selectel stack has been started successfully on a verified production commit.
+
+Current operational state is tracked in `docs/PROGRESS.md`, `docs/PRODUCTION.md` and `docs/steps/70-live-verification.md`.
 
 ## Next step
 
-Add OpenTelemetry/structured observability, generate the npm lockfile in a network-enabled runner, then execute CI/service-backed tests and fix any real integration failures before deployment.
+Complete Step 70 live/physical verification, including the latest release deploy, persistence/reboot, destructive backup/restore, two-device MLS and installed iOS/Android PWA smoke.
