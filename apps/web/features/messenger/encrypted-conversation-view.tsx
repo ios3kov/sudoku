@@ -19,6 +19,7 @@ import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
+import { createRefreshQueue } from "./refresh-queue";
 import {
   MAX_VOICE_SECONDS,
   conversationTitle,
@@ -78,14 +79,12 @@ export function EncryptedConversationView({
   const recordTimerRef = useRef<number | null>(null);
   const recordStopTimerRef = useRef<number | null>(null);
   const lastEventRef = useRef<RealtimeEvent | null>(null);
-  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const queueRefresh = useMemo(() => createRefreshQueue(), []);
 
   useAutosizeTextarea(textareaRef, body);
 
   const refreshProjection = useCallback((): Promise<void> => {
-    if (refreshInFlightRef.current) return refreshInFlightRef.current;
-
-    const task = (async () => {
+    return queueRefresh(async () => {
       try {
         await adapter.syncTransport(conversation.id);
         const projection = adapter.projectConversation(conversation.id);
@@ -94,6 +93,8 @@ export function EncryptedConversationView({
         setQueuedCount(adapter.pendingApplicationCount(conversation.id));
         if (projection.rejectedEventIds.length > 0) {
           setError("Some encrypted updates were rejected");
+        } else {
+          setError((current) => current === "Secure sync is blocked" ? null : current);
         }
         const latest = Math.max(
           conversation.latest_sequence,
@@ -110,19 +111,8 @@ export function EncryptedConversationView({
       } finally {
         setLoading(false);
       }
-    })();
-
-    refreshInFlightRef.current = task;
-    void task.then(
-      () => {
-        if (refreshInFlightRef.current === task) refreshInFlightRef.current = null;
-      },
-      () => {
-        if (refreshInFlightRef.current === task) refreshInFlightRef.current = null;
-      },
-    );
-    return task;
-  }, [adapter, conversation.id, conversation.latest_sequence]);
+    });
+  }, [adapter, conversation.id, conversation.latest_sequence, queueRefresh]);
 
   useEffect(() => {
     setLoading(true);
@@ -706,5 +696,4 @@ function encryptedReadReceipt(
   if (conversation.type === "direct") return "Read";
   return `${readCount} read`;
 }
-
 

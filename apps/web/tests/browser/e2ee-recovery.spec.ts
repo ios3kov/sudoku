@@ -195,20 +195,52 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       timeout: 60_000,
     });
 
-    // When secure transport is unavailable, keep already-decrypted history but
-    // fail closed for new authoring until a successful sync.
-    await peer.route(
-      "**/v1/e2ee/conversations/**/transport-events**",
-      (route) => route.abort(),
-    );
-    await peer.evaluate(() => window.dispatchEvent(new Event("online")));
-    await expect(peer.getByText("Secure sync is blocked", { exact: true })).toBeVisible();
-    await expect(peer.locator("textarea").last()).toBeDisabled();
-    await expect(peer.getByText("persisted before reload", { exact: true })).toBeVisible();
+    // Keep markRead pending after a successful projection. An online event
+    // during this exact window used to reuse the old refresh and lose the
+    // notification entirely (post-merge CI #277).
+    const readPattern = "**/v1/conversations/*/read";
+    const transportPattern = "**/v1/e2ee/conversations/**/transport-events**";
+    let releaseReadReceipt!: () => void;
+    const readReceiptGate = new Promise<void>((resolve) => { releaseReadReceipt = resolve; });
+    let readReceiptHeld = false;
+    let blockedRequests = 0;
+    await peer.route(readPattern, async (route) => {
+      if (!readReceiptHeld) {
+        readReceiptHeld = true;
+        await readReceiptGate;
+      }
+      await route.continue();
+    });
 
-    await peer.unroute("**/v1/e2ee/conversations/**/transport-events**");
-    await peer.evaluate(() => window.dispatchEvent(new Event("online")));
-    await expect(peer.locator("textarea").last()).toBeEnabled({ timeout: 60_000 });
+    try {
+      await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+      await expect.poll(() => readReceiptHeld).toBe(true);
+      await expect(peer.locator("textarea").last()).toBeEnabled();
+
+      // Already-decrypted history stays visible, but the follow-up must make
+      // an actual transport request and fail closed for new authoring.
+      await peer.route(transportPattern, (route) => {
+        blockedRequests += 1;
+        return route.abort();
+      });
+      await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+      releaseReadReceipt();
+      await expect.poll(() => blockedRequests).toBeGreaterThan(0);
+      await expect(peer.getByText("Secure sync is blocked", { exact: true })).toBeVisible();
+      await expect(peer.locator("textarea").last()).toBeDisabled();
+      await expect(peer.getByText("persisted before reload", { exact: true })).toBeVisible();
+
+      await peer.unroute(transportPattern);
+      await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+      await expect(peer.locator("textarea").last()).toBeEnabled({ timeout: 60_000 });
+      await expect(peer.getByText("Secure sync is blocked", { exact: true })).toHaveCount(0);
+      await sendText(peer, "sent after secure recovery");
+      await expect(peer.getByText("sent after secure recovery", { exact: true })).toBeVisible();
+    } finally {
+      releaseReadReceipt();
+      await peer.unroute(readPattern);
+      await peer.unroute(transportPattern);
+    }
   } finally {
     // Close both browser contexts concurrently. On cold CI runners the MLS
     // scenario can legitimately consume most of the test budget; serial
