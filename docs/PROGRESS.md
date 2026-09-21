@@ -3,7 +3,7 @@
 ## Current milestone
 Global automated pre-production audit, polish, profiling and behavior-preserving structural refactor are complete. Step 70 live verification is now in progress.
 
-Production was successfully built and started on verified commit `68211e02`. Live preflight, DNS/TLS edge smoke, intended external port exposure, and first-administrator bootstrap have passed. Persistence/restore, two-device MLS, and installed iOS/Android PWA checks are still open. Live testing also reopened a small Sudoku-shell UX gate, currently addressed by the compact control/gesture/HUD polish branch.
+Production was successfully built and started on verified commit `68211e02`. Live preflight, DNS/TLS edge smoke, intended external port exposure, and first-administrator bootstrap have passed. The latest merged release is `6c0aefe95d02c3ee430904d3449ad6c8070cdf8b` (PR #25, CI #245 green), but its live deploy/smoke has not yet been recorded as passed. Persistence/restore, two-device MLS, and installed iOS/Android PWA checks are still open.
 
 ## Verified E2EE baseline
 Through Steps 69-72 the repository has verified:
@@ -57,7 +57,8 @@ Live-gate preparation now includes:
 - CI asserts that PostgreSQL, Redis, MinIO, API, Worker, Beat and Web publish no host ports;
 - `scripts/preflight-production.sh` validates Compose version, env-file permissions, required/independent secrets, VAPID key shape, E2EE policy, DNS and the final merged published-port boundary;
 - `scripts/smoke-production.sh` verifies live DNS, certificate-valid HTTPS, API readiness, CSP/security headers, asset-host TLS and HTTP -> HTTPS redirects;
-- `docs/steps/70-live-verification.md` defines the Selectel, persistence, destructive restore, two-device MLS and physical iOS/Android acceptance checklist.
+- `docs/steps/70-live-verification.md` defines the Selectel, persistence, destructive restore, two-device MLS and physical iOS/Android acceptance checklist;
+- `docs/PRODUCTION.md` is the canonical non-secret production inventory/runbook for DNS, host, ports, SSH hardening, deploy, rollback and recovery.
 
 These checks reduce deployment ambiguity but do not replace the actual live/physical Step 70 execution.
 
@@ -71,11 +72,15 @@ Verified on the Selectel production host:
 Current live findings:
 - first MinIO registry pull blocker was fixed and CI-verified in PR #21;
 - Web production image domain-workspace build blocker was fixed and CI-verified in PR #22;
-- Sudoku shell polish requested during device testing: hidden unlock starts from a held keypad digit 5, and the **entire Sudoku surface** now follows the finger upward to reveal the real private surface underneath; incomplete drags spring back. Mobile digits remain one row, a stable puzzle number replaces `Level 1`, and the visible shell gains app branding plus timer/mistakes/progress. The targeted UX/performance audit is documented in `docs/audits/sudoku-unlock-ux-2026-09-20.md`;
+- PR #25 corrected the hidden unlock so a held keypad digit 5 drives the **entire Sudoku surface** upward, revealing the real private surface underneath; incomplete drags spring back. Mobile digits remain one row, a stable puzzle number replaces `Level 1`, and the visible shell includes app branding plus timer/mistakes/progress;
+- PR #25 also hardened overlapping MLS transport refresh/recovery and passed the full CI #245 gate before squash-merge to `6c0aefe9`;
+- the first deploy attempt for `6c0aefe9` did not start because SSH was temporarily unreachable; administrator-source TCP/22 connectivity was subsequently re-confirmed. A successful deploy + live smoke for this SHA is still pending evidence;
 - two-device invite acceptance is not yet verified and remains part of the live gate.
 
+Targeted unlock UX/performance work is documented in `docs/audits/sudoku-unlock-ux-2026-09-20.md`.
+
 ## Automated verification
-Full enhanced CI passed after refactor on code-gate commit `b84fc7ef`:
+The latest release gate passed in PR #25 CI #245 before squash-merge to main SHA `6c0aefe95d02c3ee430904d3449ad6c8070cdf8b`. The broader enhanced pre-production gate also passed after refactor on code-gate commit `b84fc7ef`:
 - Python compile + Alembic migrations ✓
 - Ruff Python lint ✓
 - pip dependency audit ✓
@@ -119,7 +124,7 @@ No additional code-fixing stage is required before Step 70. Any failure found du
 
 ## Remaining production blockers
 These still require live/physical verification:
-- deploy and verify the latest Sudoku-shell UX patch;
+- deploy exact main SHA `6c0aefe95d02c3ee430904d3449ad6c8070cdf8b` and record a passing live smoke;
 - diagnose/verify second-account invite acceptance;
 - live PostgreSQL/Redis/MinIO persistence across stack restart and host reboot;
 - a real PostgreSQL + encrypted-object backup/restore drill;
