@@ -96,6 +96,8 @@ jobs:
         run: npm run test:domain
       - name: Build domain declarations
         run: npm --workspace @sudoku/domain run build
+      - name: Messenger refresh queue regression
+        run: node --experimental-strip-types --test scripts/refresh-queue.test.mjs
       - name: Web typecheck
         run: npm --workspace @sudoku/web run typecheck
       - name: Web production build
@@ -135,6 +137,15 @@ jobs:
                   raise SystemExit(f"browser acceptance service did not start: {url}")
           PY
           npm --workspace @sudoku/web run test:browser
+
+      - name: Retain browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Validate production operations scripts
         run: |

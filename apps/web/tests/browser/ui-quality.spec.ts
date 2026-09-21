@@ -134,10 +134,16 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   // must still follow the finger, then return instead of opening the messenger.
   const belowThreshold = await dragFive(page, 0.49, 6);
   await expect(page.locator(".private-reveal-layer")).toBeVisible();
-  const shortTop = await page.locator(".sudoku-reveal-screen").evaluate(
-    (element) => element.getBoundingClientRect().top,
-  );
-  expect(shortTop).toBeLessThan(-100);
+  // Pointer moves publish their transform on requestAnimationFrame. The
+  // underlay is already visible while inert, so it is not a frame barrier.
+  // Observe the same geometry condition rather than sampling before paint.
+  await expect.poll(
+    () => page.locator(".sudoku-reveal-screen").evaluate(
+      (element) => element.getBoundingClientRect().top,
+    ),
+    { timeout: 2_000 },
+  ).toBeLessThan(-100);
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
   await belowThreshold.five.dispatchEvent("pointerup", {
     clientX: belowThreshold.startX + 1,
     clientY: belowThreshold.targetY,
