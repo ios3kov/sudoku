@@ -27,6 +27,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const [conversationQuery, setConversationQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [latestEvent, setLatestEvent] = useState<RealtimeEvent | null>(null);
   const [reconnectTick, setReconnectTick] = useState(0);
@@ -44,19 +45,23 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
 
-  const loadConversations = useCallback(async () => {
+  const loadConversations = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    setConversationLoadError(null);
     try {
       const next = await messengerApi.conversations();
       const sorted = sortConversations(next);
       conversationsRef.current = sorted;
       setConversations(sorted);
+    } catch {
+      setConversationLoadError("Unable to load conversations");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadConversations();
+    void loadConversations(true);
   }, [loadConversations]);
 
   const reconcileDeviceChange = useCallback(async (
@@ -458,7 +463,19 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
                 aria-label="Search conversations"
               />
             </div>
-            <div className="conversation-list minimal-chat-list">
+            {conversationLoadError ? (
+              <div className="messenger-inline-status error" role="alert">
+                <span>{conversationLoadError}</span>
+                <button type="button" onClick={() => void loadConversations(true)}>Retry</button>
+              </div>
+            ) : null}
+            {e2eeState === "error" ? (
+              <div className="messenger-inline-status warning" role="status">
+                <span>Secure messaging needs a restart.</span>
+                <button type="button" onClick={() => window.location.reload()}>Reload</button>
+              </div>
+            ) : null}
+            <div className="conversation-list minimal-chat-list" aria-busy={loading}>
             <button
               className="new-chat-button minimal-new-chat-button"
               type="button"
@@ -467,7 +484,14 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             >
               {e2eeState === "initializing" ? "Preparing secure messaging…" : "New secure chat"}
             </button>
-            {loading ? <p className="muted center">Loading…</p> : conversations.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }, (_, index) => (
+                <div className="conversation-item minimal-chat-item is-skeleton" key={index} aria-hidden="true">
+                  <span className="avatar minimal-avatar" />
+                  <span className="conversation-copy"><strong /><small /></span>
+                </div>
+              ))
+            ) : conversations.length === 0 && !conversationLoadError ? (
               <div className="empty-conversations">
                 <div className="empty-icon" aria-hidden="true">•••</div>
                 <h2>No conversations yet</h2>
