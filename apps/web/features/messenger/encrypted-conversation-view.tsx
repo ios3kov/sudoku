@@ -444,6 +444,7 @@ export function EncryptedConversationView({
     setReplyingToId(null);
     setBody(message.body ?? "");
     setActionMessageId(null);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
   }
 
   return (
@@ -594,6 +595,7 @@ export function EncryptedConversationView({
                     setReplyingToId(message.id);
                     setEditingId(null);
                     setActionMessageId(null);
+                    window.setTimeout(() => textareaRef.current?.focus(), 0);
                   }}>Reply</button>
                   {own ? (
                     <button type="button" onClick={() => beginEdit(message)}>Edit</button>
