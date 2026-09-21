@@ -822,3 +822,39 @@ code{overflow-wrap:anywhere}
     border-radius:24px;
   }
 }
+
+.minimal-conversation-search{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:10px 10px 0;
+  padding:0 12px;
+  min-height:42px;
+  border:1px solid rgba(15,23,42,.06);
+  border-radius:14px;
+  background:#f8fafc;
+  color:#94a3b8;
+}
+.minimal-conversation-search input{
+  min-width:0;
+  width:100%;
+  min-height:40px;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:#0f172a;
+  outline:none;
+  box-shadow:none;
+}
+.minimal-conversation-search input:focus{
+  border:0;
+  outline:0;
+  box-shadow:none;
+}
+.empty-conversations.compact{
+  padding:24px 18px;
+}
+.messenger-reveal-preview .minimal-messenger-frame{
+  contain:layout paint style;
+}
