@@ -36,6 +36,7 @@ export function NewChat({
     if (term.length < 2) {
       setUsers([]);
       setLoading(false);
+      setError(null);
       return;
     }
 
@@ -119,7 +120,7 @@ export function NewChat({
   }
 
   return (
-    <section className="new-chat-panel">
+    <section className="new-chat-panel" role="dialog" aria-modal="true" aria-label="Create secure chat">
       <div className="new-chat-header"><strong>New chat</strong><button type="button" onClick={onCancel}>Close</button></div>
       <div className="chat-mode-tabs">
         <button
