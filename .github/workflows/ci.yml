@@ -87,7 +87,9 @@ jobs:
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=high
       - name: UI class contract
-        run: node scripts/check-web-ui-contract.mjs
+        run: |
+          node --test scripts/check-web-ui-contract.test.mjs
+          node scripts/check-web-ui-contract.mjs
       - name: Web lint
         run: npm --workspace @sudoku/web run lint
       - name: Domain tests
