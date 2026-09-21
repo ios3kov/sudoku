@@ -262,3 +262,18 @@ Current correction:
 - browser acceptance checks viewport metadata and auth-input font size.
 
 Physical iPhone retest must confirm the messenger visual scale remains unchanged while entering email/password and later while typing messages.
+
+
+### Messenger redesign / reveal performance follow-up
+
+The supplied Minimal Messenger reference is being adapted onto the existing production messenger rather than replacing its backend/runtime.
+
+Acceptance for this follow-up:
+- Sudoku reveal must remain compositor-smooth on physical iPhone;
+- before unlock, the visual underlay must use the lightweight conversation preview and must not initialize the full MLS/realtime messenger runtime;
+- after unlock, the authenticated runtime must replace the preview without changing the app scale;
+- conversation list/search, chat navigation, text/reply/edit/reaction, encrypted attachments/voice and settings/search drawers must remain functional;
+- the private shell remains max 460 px wide and mobile-first;
+- no API/MLS protocol behavior changes are permitted.
+
+The implementation/audit is tracked in `docs/audits/minimal-messenger-redesign-2026-09-21.md`.
