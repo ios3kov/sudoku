@@ -642,7 +642,7 @@ export function EncryptedConversationView({
         />
         <button
           type="button"
-          className="attach-button"
+          className={`attach-button ${uploadProgress !== null ? "is-uploading" : ""}`}
           aria-label="Attach encrypted file"
           disabled={busy || syncBlocked || recording || uploadProgress !== null}
           onClick={() => fileInputRef.current?.click()}
