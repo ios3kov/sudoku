@@ -42,7 +42,7 @@ export function DeviceSessions({ onClose, onCurrentRevoked }: { onClose: () => v
   }
 
   return (
-    <section className="settings-panel" role="dialog" aria-modal="true" aria-label="Devices and sessions">
+    <section className="settings-panel" role="dialog" aria-label="Devices and sessions">
       <div className="settings-header"><div><strong>Devices</strong><span>Signed-in sessions</span></div><button type="button" onClick={onClose}>Close</button></div>
       {error ? <p className="form-error">{error}</p> : null}
       {loading ? <p className="muted">Loading…</p> : (
