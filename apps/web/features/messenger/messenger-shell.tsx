@@ -33,6 +33,7 @@ function sortConversations(items: Conversation[]): Conversation[] {
 export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUser; onHide: () => void; onLoggedOut: () => void }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationQuery, setConversationQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -308,6 +309,11 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     });
   }
 
+  const visibleConversations = conversations.filter((conversation) =>
+    conversationTitle(conversation, user.id)
+      .toLocaleLowerCase()
+      .includes(conversationQuery.trim().toLocaleLowerCase()),
+  );
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
 
   if (selected?.encryption_required) {
@@ -450,7 +456,18 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             adapter={e2eeState === "ready" ? e2eeAdapter : null}
           />
         ) : (
-          <div className="conversation-list minimal-chat-list">
+          <>
+            <div className="minimal-conversation-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                type="search"
+                value={conversationQuery}
+                onChange={(event) => setConversationQuery(event.target.value)}
+                placeholder="Search conversations"
+                aria-label="Search conversations"
+              />
+            </div>
+            <div className="conversation-list minimal-chat-list">
             <button
               className="new-chat-button minimal-new-chat-button"
               type="button"
@@ -465,7 +482,11 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
                 <h2>No conversations yet</h2>
                 <p>Start a private chat with an invited member.</p>
               </div>
-            ) : conversations.map((conversation) => {
+            ) : visibleConversations.length === 0 ? (
+              <div className="empty-conversations compact">
+                <p>No matching conversations.</p>
+              </div>
+            ) : visibleConversations.map((conversation) => {
               const unread = Math.max(0, conversation.latest_sequence - conversation.last_read_sequence);
               return (
                 <button key={conversation.id} type="button" className="conversation-item minimal-chat-item" onClick={() => setSelectedId(conversation.id)}>
@@ -485,6 +506,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
               );
             })}
           </div>
+          </>
         )}
 
         {user.is_admin && showInvite ? <AdminInvite onClose={() => setShowInvite(false)} /> : null}
