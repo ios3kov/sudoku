@@ -3,6 +3,8 @@
 ## Goal
 Close the only remaining production gate on a real Selectel host and physical iOS/Android devices. Repository CI is necessary but cannot substitute for this step.
 
+The canonical non-secret host/DNS/deployment inventory is maintained in `docs/PRODUCTION.md`.
+
 ## Pass criteria
 Step 70 passes only when all checks below are verified against the same production commit:
 - public DNS and valid TLS for the app and encrypted-object host;
@@ -15,6 +17,8 @@ Step 70 passes only when all checks below are verified against the same producti
 - installed iOS and Android PWAs pass background/privacy, push and microphone/attachment smoke tests.
 
 ## 1. Provision Selectel host
+Current host: Selectel `sudoku-prod`, Moscow `ru-7a`, public IPv4 `185.31.167.36`.
+
 Baseline for the invite-only MVP: Ubuntu 24.04 LTS, 2 vCPU, 4 GB RAM, 50 GB disk.
 
 Use an SSH key. Do not enable password SSH login for routine administration.
@@ -211,3 +215,16 @@ The replacement implementation is tracked in the Sudoku unlock audit:
 - drag path uses compositor transform updates via `requestAnimationFrame`, not React state per pointer move;
 - private underlay is lazy-mounted only after real drag movement;
 - privacy/background concealment explicitly covers a partial reveal.
+
+
+## Execution log — 2026-09-21
+
+Release and device-test update:
+- PR #25 passed full CI #245 and was squash-merged as `6c0aefe95d02c3ee430904d3449ad6c8070cdf8b`;
+- the full-screen Sudoku reveal is now observable on the live device path, confirming the intended whole-screen interaction reached production testing;
+- live device testing found two follow-up issues: the release/return animation does not yet have iPhone-like smoothness, and normal Sudoku digit entry became too restrictive/appeared non-functional;
+- the follow-up implementation keeps the private surface pre-mounted and inert below Sudoku so the drag path does not trigger a heavy React mount, drives the screen and underlay with compositor transforms, adds underlay parallax/scale plus spring-like settle, and restores unrestricted 1–9 entry for editable cells while marking invalid entries visually;
+- ordinary tap on digit 5 remains a normal Sudoku input; only an upward hold-and-drag activates the hidden reveal;
+- automated acceptance is extended to verify all 1–9 keypad digits, erase/notes/reset, immutable givens, incomplete-drag return, full-screen reveal and privacy behavior.
+
+Do not mark this follow-up live-verified until its CI passes, it is merged/deployed as an exact SHA, and the physical-device animation/gameplay retest passes.
