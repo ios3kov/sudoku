@@ -44,6 +44,9 @@ async function unlockPrivate(page: Page) {
   });
 
   await expect(page.locator(".messenger-lock, .messenger-page").first()).toBeVisible();
+  await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "", {
+    timeout: 5_000,
+  });
 }
 
 async function login(page: Page, email: string) {
@@ -54,13 +57,19 @@ async function login(page: Page, email: string) {
   await emailInput.fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
 
-  const loginResponse = page.waitForResponse(
-    (response) =>
-      response.url().includes("/v1/auth/login")
-      && response.request().method() === "POST",
-  );
-  await page.getByRole("button", { name: "Sign in" }).click();
-  expect((await loginResponse).status()).toBe(200);
+  const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+  await expect(signIn).toBeEnabled();
+
+  const [loginResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().includes("/v1/auth/login")
+        && response.request().method() === "POST",
+      { timeout: 30_000 },
+    ),
+    signIn.click({ timeout: 30_000 }),
+  ]);
+  expect(loginResponse.status()).toBe(200);
 
   await expect(page.getByText("Messages", { exact: true })).toBeVisible({
     timeout: 30_000,
