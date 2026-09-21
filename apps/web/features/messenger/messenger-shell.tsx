@@ -440,7 +440,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <strong>Messages</strong>
             <span>{user.display_name} · {connectionState === "online" ? "online" : "reconnecting"}</span>
           </div>
-          <button className="minimal-header-action" type="button" onClick={() => setCreating(true)} aria-label="New secure chat">＋</button>
+          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={() => setCreating(true)} aria-label={e2eeState === "ready" ? "New secure chat" : "Preparing secure messaging"}>＋</button>
         </header>
 
         {creating ? (
