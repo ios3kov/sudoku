@@ -69,7 +69,7 @@ export function HomeClient() {
         aria-hidden={privateActive ? undefined : true}
         inert={privateActive ? undefined : true}
       >
-        <AuthGate onHide={hidePrivate} />
+        <AuthGate onHide={hidePrivate} active={privateActive} />
       </div>
 
       {mode === "sudoku" ? (
