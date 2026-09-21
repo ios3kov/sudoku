@@ -10,6 +10,7 @@ import { GroupSettings } from "./group-settings";
 import { ConversationPreferences } from "./conversation-preferences";
 import { MessageSearch } from "./message-search";
 import { ConversationHeader } from "./conversation-header";
+import { useAutosizeTextarea } from "./use-autosize-textarea";
 import {
   MAX_VOICE_SECONDS,
   conversationTitle,
@@ -71,6 +72,8 @@ export function ConversationView({
   const lastProcessedEventRef = useRef<RealtimeEvent | null>(null);
   const scrollTargetSequenceRef = useRef<number | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
+
+  useAutosizeTextarea(textareaRef, body);
 
   const lastSequence = useMemo(
     () => messages.reduce((max, message) => Math.max(max, message.sequence), 0),
