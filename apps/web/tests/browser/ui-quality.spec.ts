@@ -1,27 +1,35 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function unlockPrivate(page: Page) {
+async function dragFive(page: Page, distance: number, pointerId: number) {
   const five = page.getByRole("button", { name: "5", exact: true });
+  const startY = 740;
   await five.dispatchEvent("pointerdown", {
     clientX: 190,
-    clientY: 740,
-    pointerId: 7,
+    clientY: startY,
+    pointerId,
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
   });
   await five.dispatchEvent("pointermove", {
     clientX: 191,
-    clientY: 680,
-    pointerId: 7,
+    clientY: startY - distance,
+    pointerId,
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
   });
+  return five;
+}
 
-  await expect(five).toHaveClass(/is-dragging/);
-  await expect(page.locator(".unlock-gesture-visual")).toBeVisible();
-  expect(await five.evaluate((element) => getComputedStyle(element).transform)).not.toBe("none");
+async function unlockPrivate(page: Page) {
+  const five = await dragFive(page, 60, 7);
+
+  await expect(page.locator(".private-reveal-layer")).toBeVisible();
+  const draggedTop = await page.locator(".sudoku-reveal-screen").evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  expect(draggedTop).toBeLessThan(-45);
 
   await five.dispatchEvent("pointermove", {
     clientX: 192,
@@ -41,7 +49,7 @@ async function unlockPrivate(page: Page) {
   });
 }
 
-test("mobile Sudoku stays compact and unlock gesture is on digit five", async ({ page }) => {
+test("mobile Sudoku stays compact and unlock slides the whole screen over chat", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
@@ -61,6 +69,7 @@ test("mobile Sudoku stays compact and unlock gesture is on digit five", async ({
     }),
   );
   expect(new Set(digitBoxes.map((box) => box.top)).size).toBe(1);
+
   const boardBox = await page.getByRole("grid", { name: "Sudoku board" }).boundingBox();
   expect(boardBox).not.toBeNull();
   expect(Math.abs((digitBoxes.at(-1)?.right ?? 0) - (boardBox?.x ?? 0) - (boardBox?.width ?? 0))).toBeLessThanOrEqual(2);
@@ -83,6 +92,28 @@ test("mobile Sudoku stays compact and unlock gesture is on digit five", async ({
   );
   expect(unnamedButtons).toBe(0);
 
+  // A short drag must reveal the private layer but snap the full Sudoku screen
+  // back into place without opening it.
+  const shortFive = await dragFive(page, 35, 6);
+  await expect(page.locator(".private-reveal-layer")).toBeVisible();
+  const shortTop = await page.locator(".sudoku-reveal-screen").evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  expect(shortTop).toBeLessThan(-20);
+  await shortFive.dispatchEvent("pointerup", {
+    clientX: 191,
+    clientY: 705,
+    pointerId: 6,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+  });
+  await expect(page.locator(".private-reveal-layer")).toHaveCount(0, { timeout: 2_000 });
+  const returnedTop = await page.locator(".sudoku-reveal-screen").evaluate(
+    (element) => Math.round(element.getBoundingClientRect().top),
+  );
+  expect(returnedTop).toBe(0);
+
   await unlockPrivate(page);
   const email = page.getByLabel("Email");
   await expect(email).toBeVisible({ timeout: 30_000 });
@@ -92,7 +123,9 @@ test("mobile Sudoku stays compact and unlock gesture is on digit five", async ({
   );
   expect(privateOverflow).toBeLessThanOrEqual(1);
 
+  await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "", { timeout: 5_000 });
   await email.focus();
+  await expect(email).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("Password")).toBeFocused();
   await page.keyboard.press("Tab");

@@ -74,6 +74,10 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   private readonly stateStore: BrowserProtocolStateStore;
   private readonly stateKey: string;
   private operationQueue: Promise<void> = Promise.resolve();
+  private readonly transportSyncs = new Map<
+    string,
+    { promise: Promise<number>; rerun: boolean }
+  >();
 
   constructor(private readonly options: OpenMlsAdapterOptions) {
     this.stateStore = options.stateStore ?? new BrowserProtocolStateStore();
@@ -937,6 +941,40 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   }
 
   async syncTransport(conversationId: string): Promise<number> {
+    const existing = this.transportSyncs.get(conversationId);
+    if (existing) {
+      // Reconnect, realtime and explicit UI refreshes can arrive together.
+      // Coalesce them into one in-flight sync plus at most one follow-up pass
+      // instead of building an unbounded operationQueue backlog.
+      existing.rerun = true;
+      return existing.promise;
+    }
+
+    const record: { promise: Promise<number>; rerun: boolean } = {
+      promise: Promise.resolve(0),
+      rerun: false,
+    };
+
+    record.promise = (async () => {
+      let processed = 0;
+      try {
+        do {
+          record.rerun = false;
+          processed += await this.syncTransportOnce(conversationId);
+        } while (record.rerun);
+        return processed;
+      } finally {
+        if (this.transportSyncs.get(conversationId) === record) {
+          this.transportSyncs.delete(conversationId);
+        }
+      }
+    })();
+
+    this.transportSyncs.set(conversationId, record);
+    return record.promise;
+  }
+
+  private async syncTransportOnce(conversationId: string): Promise<number> {
     return this.enqueue(async () => {
       this.assertReady();
       await this.flushPendingOutboundTransition();

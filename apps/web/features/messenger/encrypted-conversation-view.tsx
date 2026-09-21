@@ -75,32 +75,48 @@ export function EncryptedConversationView({
   const recordTimerRef = useRef<number | null>(null);
   const recordStopTimerRef = useRef<number | null>(null);
   const lastEventRef = useRef<RealtimeEvent | null>(null);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
-  const refreshProjection = useCallback(async () => {
-    try {
-      await adapter.syncTransport(conversation.id);
-      const projection = adapter.projectConversation(conversation.id);
-      setMessages(projection.messages);
-      setSyncBlocked(false);
-      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
-      if (projection.rejectedEventIds.length > 0) {
-        setError("Some encrypted updates were rejected");
+  const refreshProjection = useCallback((): Promise<void> => {
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
+
+    const task = (async () => {
+      try {
+        await adapter.syncTransport(conversation.id);
+        const projection = adapter.projectConversation(conversation.id);
+        setMessages(projection.messages);
+        setSyncBlocked(false);
+        setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+        if (projection.rejectedEventIds.length > 0) {
+          setError("Some encrypted updates were rejected");
+        }
+        const latest = Math.max(
+          conversation.latest_sequence,
+          ...projection.messages.map((message) => message.sequence),
+          0,
+        );
+        if (latest > 0) {
+          await messengerApi.markRead(conversation.id, latest).catch(() => undefined);
+        }
+      } catch {
+        setSyncBlocked(true);
+        setError("Secure sync is blocked");
+        setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      } finally {
+        setLoading(false);
       }
-      const latest = Math.max(
-        conversation.latest_sequence,
-        ...projection.messages.map((message) => message.sequence),
-        0,
-      );
-      if (latest > 0) {
-        await messengerApi.markRead(conversation.id, latest).catch(() => undefined);
-      }
-    } catch {
-      setSyncBlocked(true);
-      setError("Secure sync is blocked");
-      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
-    } finally {
-      setLoading(false);
-    }
+    })();
+
+    refreshInFlightRef.current = task;
+    void task.then(
+      () => {
+        if (refreshInFlightRef.current === task) refreshInFlightRef.current = null;
+      },
+      () => {
+        if (refreshInFlightRef.current === task) refreshInFlightRef.current = null;
+      },
+    );
+    return task;
   }, [adapter, conversation.id, conversation.latest_sequence]);
 
   useEffect(() => {
@@ -137,6 +153,14 @@ export function EncryptedConversationView({
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
   }, [refreshProjection]);
+
+  useEffect(() => {
+    if (!syncBlocked || loading) return;
+    const timer = window.setInterval(() => {
+      if (navigator.onLine) void refreshProjection();
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [loading, refreshProjection, syncBlocked]);
 
   useEffect(() => {
     if (!stickToBottomRef.current) return;

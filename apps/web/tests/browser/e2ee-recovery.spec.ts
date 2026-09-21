@@ -18,6 +18,22 @@ async function unlockPrivate(page: Page) {
     isPrimary: true,
     buttons: 1,
   });
+  await five.dispatchEvent("pointermove", {
+    clientX: 191,
+    clientY: 680,
+    pointerId: 1,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
+  await five.dispatchEvent("pointermove", {
+    clientX: 192,
+    clientY: 620,
+    pointerId: 1,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
   await five.dispatchEvent("pointerup", {
     clientX: 192,
     clientY: 620,
@@ -28,6 +44,9 @@ async function unlockPrivate(page: Page) {
   });
 
   await expect(page.locator(".messenger-lock, .messenger-page").first()).toBeVisible();
+  await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "", {
+    timeout: 5_000,
+  });
 }
 
 async function login(page: Page, email: string) {
@@ -38,13 +57,19 @@ async function login(page: Page, email: string) {
   await emailInput.fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
 
-  const loginResponse = page.waitForResponse(
-    (response) =>
-      response.url().includes("/v1/auth/login")
-      && response.request().method() === "POST",
-  );
-  await page.getByRole("button", { name: "Sign in" }).click();
-  expect((await loginResponse).status()).toBe(200);
+  const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+  await expect(signIn).toBeEnabled();
+
+  const [loginResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().includes("/v1/auth/login")
+        && response.request().method() === "POST",
+      { timeout: 30_000 },
+    ),
+    signIn.click({ timeout: 30_000 }),
+  ]);
+  expect(loginResponse.status()).toBe(200);
 
   await expect(page.getByText("Messages", { exact: true })).toBeVisible({
     timeout: 30_000,
@@ -84,7 +109,11 @@ async function sendText(page: Page, value: string) {
 }
 
 test("MLS survives reload, offline retry and fails closed on transport outage", async ({ browser }) => {
-  test.setTimeout(240_000);
+  // Cold GitHub runners can spend several minutes compiling/initializing two
+  // independent OpenMLS browser sessions. Keep each functional assertion
+  // individually bounded below, but leave enough aggregate headroom so the
+  // suite fails on the real assertion rather than the outer test clock.
+  test.setTimeout(480_000);
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
@@ -155,7 +184,13 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await peer.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect(peer.locator("textarea").last()).toBeEnabled({ timeout: 60_000 });
   } finally {
-    await ownerContext.close();
-    await peerContext.close();
+    // Close both browser contexts concurrently. On cold CI runners the MLS
+    // scenario can legitimately consume most of the test budget; serial
+    // teardown must not turn a fully-passed scenario into an outer-timeout
+    // failure.
+    await Promise.allSettled([
+      ownerContext.close(),
+      peerContext.close(),
+    ]);
   }
 });
