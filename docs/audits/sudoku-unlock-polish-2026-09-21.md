@@ -85,7 +85,7 @@ Do not call this interaction closed from CI alone. After merge/deploy, repeat on
 The fix passes only when the motion feels continuous and the Sudoku remains fully playable.
 
 
-## Physical-device follow-up — grid integrity and 75% handoff
+## Physical-device follow-up — grid integrity and 50% handoff
 
 Live iPhone testing after PR #26 exposed two more concrete issues.
 
@@ -106,8 +106,19 @@ The previous gesture still completed after a short upward movement because it re
 The new rule is progress based:
 - the full gesture path is the available vertical distance from the pressed digit `5` to the top edge of the viewport;
 - the Sudoku surface follows the finger for the entire drag;
-- below 75% progress, release returns the Sudoku surface;
-- at 75% progress, the gesture hands off to the finishing animation and completes the remaining 25%;
+- below 50% progress, release returns the Sudoku surface;
+- at 50% progress, the gesture hands off to the finishing animation and completes the remaining 50%;
 - a normal tap on `5` remains ordinary Sudoku input.
 
 This makes the hidden transition deliberate and prevents short accidental reveals.
+
+
+## Mobile scale follow-up
+
+Physical iPhone feedback also requires the private messenger to keep a constant visual scale while typing.
+
+The fix uses two layers:
+- viewport is pinned to scale 1 with no user/focus zoom;
+- text inputs and textareas are explicitly 16px, preventing Safari's automatic focus zoom trigger.
+
+Acceptance verifies the rendered login input font size and viewport metadata. Physical iPhone verification remains required because desktop Chromium does not emulate Safari's visual-viewport zoom behavior exactly.

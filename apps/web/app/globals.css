@@ -27,7 +27,7 @@ button,input,textarea,a{-webkit-tap-highlight-color:transparent}
 button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:2px}
 button{min-height:var(--tap)}
 button:disabled{opacity:.48;cursor:not-allowed}
-input,textarea{min-height:var(--tap);color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+input,textarea{min-height:var(--tap);font-size:16px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 input::placeholder,textarea::placeholder{color:#879095}
 input:focus,textarea:focus{border-color:var(--accent)}
 img{display:block;max-width:100%}
