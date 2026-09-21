@@ -58,7 +58,7 @@ Redis fixed-window limits exist for login IP/account buckets and authenticated a
 
 - Installed name/manifest/icon: `Sudoku`.
 - Normal launch: real playable Sudoku.
-- Hidden gesture: tap a visible `5`, then constrained upward swipe in the arm window.
+- Hidden gesture: press and hold keypad digit `5`, then drag upward without releasing. The entire Sudoku surface follows the finger and reveals the private surface underneath; an incomplete drag returns the Sudoku surface to its original position.
 - Backgrounding for more than 30 seconds restores Sudoku before private content is shown again.
 
 ## Production runtime hardening
