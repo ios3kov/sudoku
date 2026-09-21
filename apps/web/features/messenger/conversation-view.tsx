@@ -653,7 +653,7 @@ export function ConversationView({
         <button type="button" className={`voice-button ${recording ? "recording" : ""}`} onClick={() => void toggleRecording()} disabled={uploadProgress !== null}>
           {recording ? "Stop" : "Mic"}
         </button>
-        <button type="submit" disabled={!body.trim() || recording}>{editingMessage ? "Save" : "Send"}</button>
+        <button type="submit" aria-label={editingMessage ? "Save" : "Send"} disabled={!body.trim() || recording}>{editingMessage ? "Save" : "Send"}</button>
       </form>
     </section>
   );
