@@ -5,7 +5,7 @@ import { messengerApi } from "./api";
 import { AdminInvite } from "./admin-invite";
 import { ConversationView } from "./conversation-view";
 import { EncryptedConversationView } from "./encrypted-conversation-view";
-import { conversationTitle } from "./chat-utils";
+import { conversationInitials, conversationTitle } from "./chat-utils";
 import { NewChat } from "./new-chat";
 import { clearPending } from "./outbox";
 import { RealtimeClient } from "./realtime";
@@ -13,15 +13,6 @@ import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
-
-function conversationInitials(value: string): string {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.slice(0, 1).toUpperCase())
-    .join("") || "•";
-}
 
 function sortConversations(items: Conversation[]): Conversation[] {
   return [...items].sort((a, b) => {
