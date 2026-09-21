@@ -665,7 +665,11 @@ export function EncryptedConversationView({
         >
           {recording ? "Stop" : "Mic"}
         </button>
-        <button type="submit" disabled={!body.trim() || busy || syncBlocked || recording || uploadProgress !== null}>
+        <button
+          type="submit"
+          aria-label={editing ? "Save" : "Send"}
+          disabled={!body.trim() || busy || syncBlocked || recording || uploadProgress !== null}
+        >
           {busy ? "…" : editing ? "Save" : "Send"}
         </button>
       </form>
