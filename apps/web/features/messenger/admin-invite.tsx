@@ -41,7 +41,7 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <section className="admin-invite-panel" role="dialog" aria-modal="true" aria-label="Create invite">
+    <section className="admin-invite-panel" role="dialog" aria-label="Create invite">
       <div className="admin-invite-header">
         <div><strong>Invite member</strong><span>Admin only</span></div>
         <button type="button" onClick={onClose}>Close</button>
