@@ -36,20 +36,24 @@ export function GroupSettings({
   }, [conversation.title]);
 
   useEffect(() => {
-    if (!isOwner || !query.trim()) {
+    const term = query.trim();
+    if (!isOwner || term.length < 2) {
       setDirectory([]);
       return;
     }
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
-        const results = await messengerApi.searchUsers(query);
+        const results = await messengerApi.searchUsers(term);
         const existing = new Set(conversation.members.map((member) => member.id));
         if (!cancelled) setDirectory(results.filter((item) => !existing.has(item.id)));
       } catch {
-        if (!cancelled) setError("Unable to search people");
+        if (!cancelled) {
+          setDirectory([]);
+          setError("Unable to search people");
+        }
       }
-    }, 180);
+    }, 220);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [conversation.members, isOwner, query]);
 
@@ -130,7 +134,7 @@ export function GroupSettings({
       {isOwner ? (
         <form className="group-rename" onSubmit={rename}>
           <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} aria-label="Group name" />
-          <button type="submit" disabled={busy || !title.trim()}>Save</button>
+          <button type="submit" disabled={busy || !title.trim() || title.trim() === conversation.title}>Save</button>
         </form>
       ) : null}
       <div className="settings-list">
@@ -150,7 +154,18 @@ export function GroupSettings({
       </div>
       {isOwner ? (
         <div className="member-search">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Add people" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Add people"
+            type="search"
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {query.trim().length < 2 ? <p className="muted member-search-hint">Type at least 2 characters.</p> : null}
+          {query.trim().length >= 2 && directory.length === 0 && !error ? <p className="muted member-search-hint">No new members found.</p> : null}
           {directory.map((item) => <button type="button" key={item.id} disabled={busy} onClick={() => void add(item.id)}><span>{item.display_name}</span><small>{item.email}</small></button>)}
         </div>
       ) : null}
