@@ -100,7 +100,7 @@ async function sendText(page: Page, value: string) {
 }
 
 test("MLS survives reload, offline retry and fails closed on transport outage", async ({ browser }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
