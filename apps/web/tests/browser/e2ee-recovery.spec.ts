@@ -149,6 +149,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     });
 
     const composer = owner.locator("textarea").last();
+    await expect(composer).toBeEnabled({ timeout: 60_000 });
     const initialComposerHeight = await composer.evaluate((element) =>
       Math.round(element.getBoundingClientRect().height),
     );
