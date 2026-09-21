@@ -123,7 +123,9 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   );
   expect(privateOverflow).toBeLessThanOrEqual(1);
 
+  await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "", { timeout: 5_000 });
   await email.focus();
+  await expect(email).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("Password")).toBeFocused();
   await page.keyboard.press("Tab");
