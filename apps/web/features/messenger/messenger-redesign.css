@@ -867,3 +867,7 @@
   color:#94a3b8;
   font-size:11px;
 }
+
+.chat-empty-state{
+  margin:auto 0;
+}
