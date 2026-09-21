@@ -240,8 +240,25 @@ Current correction:
 - Sudoku invalid cells use a dedicated `invalid` class with no layout-changing margin/padding/radius;
 - automated UI acceptance verifies invalid-cell geometry and board dimensions after a wrong entry;
 - the gesture uses the available vertical path from digit `5` to the top edge as 100% progress;
-- below 75%, release returns the whole Sudoku surface;
-- at 75%, the finishing animation takes over and completes the remaining 25%;
+- below 50%, release returns the whole Sudoku surface;
+- at 50%, the finishing animation takes over and completes the remaining 50%;
 - a normal tap on digit `5` still behaves as normal Sudoku input.
 
 This follow-up must pass CI, exact-SHA deploy/smoke and physical-device retest before the interaction gate can close.
+
+
+### Live interaction follow-up — 50% handoff + fixed chat scale
+
+Latest iPhone feedback:
+- the unlock should hand off earlier: at 50% of the available upward path, not 75%;
+- focusing login/chat text fields must not zoom or rescale the whole messenger UI.
+
+Current correction:
+- below 50%, release returns the Sudoku surface;
+- at 50%, the finishing animation takes over and completes the remaining half;
+- mobile viewport is fixed at scale 1;
+- browser zoom is disabled for this installed/private UI;
+- all text inputs/areas use at least 16px font size to prevent iOS focus auto-zoom;
+- browser acceptance checks viewport metadata and auth-input font size.
+
+Physical iPhone retest must confirm the messenger visual scale remains unchanged while entering email/password and later while typing messages.
