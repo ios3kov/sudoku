@@ -86,8 +86,8 @@ export function HomeClient() {
       {privateVisible ? (
         <div
           className={`private-reveal-layer${mode === "messenger-lock" ? " is-active" : ""}`}
-          aria-hidden={mode === "sudoku"}
-          inert={mode === "sudoku"}
+          aria-hidden={mode === "sudoku" ? true : undefined}
+          inert={mode === "sudoku" ? true : undefined}
         >
           <AuthGate onHide={hidePrivate} />
         </div>
