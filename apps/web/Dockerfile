@@ -8,6 +8,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fL \
+      --retry 5 \
+      --retry-delay 2 \
+      --retry-all-errors \
+      --connect-timeout 20 \
       https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.105/wasm-bindgen-0.2.105-x86_64-unknown-linux-musl.tar.gz \
       -o /tmp/wasm-bindgen.tar.gz \
     && echo "b391448c4926ac4b11425a6752484d85164e72489d97804461d5e868c643b88a  /tmp/wasm-bindgen.tar.gz" | sha256sum -c - \

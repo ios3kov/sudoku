@@ -9,6 +9,7 @@ import { uploadAsset } from "./uploads";
 import { GroupSettings } from "./group-settings";
 import { ConversationPreferences } from "./conversation-preferences";
 import { MessageSearch } from "./message-search";
+import { ConversationHeader } from "./conversation-header";
 import {
   MAX_VOICE_SECONDS,
   conversationTitle,
@@ -537,19 +538,19 @@ export function ConversationView({
 
   return (
     <section className="chat-view">
-      <header className="chat-header">
-        <button type="button" className="back-button" onClick={onBack} aria-label="Back">‹</button>
-        <div>
-          <strong>{conversationTitle(conversation, user.id)}</strong>
-          <span>{online ? "connected" : "offline"}</span>
-        </div>
-        <div className="chat-header-actions">
-          <button type="button" className="hide-chat-button" onClick={() => { setShowSearch((value) => !value); setShowPreferences(false); setShowGroupSettings(false); }}>Find</button>
-          {conversation.type === "group" ? <button type="button" className="hide-chat-button" onClick={() => { setShowGroupSettings((value) => !value); setShowSearch(false); setShowPreferences(false); }}>Group</button> : null}
-          <button type="button" className="hide-chat-button" aria-label="Conversation settings" onClick={() => { setShowPreferences((value) => !value); setShowSearch(false); setShowGroupSettings(false); }}>•••</button>
-          <button type="button" className="hide-chat-button" onClick={onHide}>Hide</button>
-        </div>
-      </header>
+      <ConversationHeader
+        title={conversationTitle(conversation, user.id)}
+        subtitle={online ? "connected" : "offline"}
+        onBack={onBack}
+        actions={
+          <>
+            <button type="button" className="hide-chat-button" onClick={() => { setShowSearch((value) => !value); setShowPreferences(false); setShowGroupSettings(false); }}>Find</button>
+            {conversation.type === "group" ? <button type="button" className="hide-chat-button" onClick={() => { setShowGroupSettings((value) => !value); setShowSearch(false); setShowPreferences(false); }}>Group</button> : null}
+            <button type="button" className="hide-chat-button" aria-label="Conversation settings" onClick={() => { setShowPreferences((value) => !value); setShowSearch(false); setShowGroupSettings(false); }}>•••</button>
+            <button type="button" className="hide-chat-button" onClick={onHide}>Hide</button>
+          </>
+        }
+      />
 
       {conversation.type === "group" && showGroupSettings ? (
         <GroupSettings
@@ -633,7 +634,7 @@ export function ConversationView({
         />
         <button
           type="button"
-          className="attach-button"
+          className={`attach-button ${uploadProgress !== null ? "is-uploading" : ""}`}
           aria-label="Attach file"
           disabled={uploadProgress !== null || recording}
           onClick={() => fileInputRef.current?.click()}
@@ -652,7 +653,7 @@ export function ConversationView({
         <button type="button" className={`voice-button ${recording ? "recording" : ""}`} onClick={() => void toggleRecording()} disabled={uploadProgress !== null}>
           {recording ? "Stop" : "Mic"}
         </button>
-        <button type="submit" disabled={!body.trim() || recording}>{editingMessage ? "Save" : "Send"}</button>
+        <button type="submit" aria-label={editingMessage ? "Save" : "Send"} disabled={!body.trim() || recording}>{editingMessage ? "Save" : "Send"}</button>
       </form>
     </section>
   );

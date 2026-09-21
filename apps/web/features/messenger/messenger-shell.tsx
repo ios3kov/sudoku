@@ -14,6 +14,15 @@ import { DeviceSessions } from "./device-sessions";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 
+function conversationInitials(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.slice(0, 1).toUpperCase())
+    .join("") || "•";
+}
+
 function sortConversations(items: Conversation[]): Conversation[] {
   return [...items].sort((a, b) => {
     if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
@@ -24,6 +33,7 @@ function sortConversations(items: Conversation[]): Conversation[] {
 export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUser; onHide: () => void; onLoggedOut: () => void }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationQuery, setConversationQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -299,6 +309,11 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     });
   }
 
+  const visibleConversations = conversations.filter((conversation) =>
+    conversationTitle(conversation, user.id)
+      .toLocaleLowerCase()
+      .includes(conversationQuery.trim().toLocaleLowerCase()),
+  );
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
 
   if (selected?.encryption_required) {
@@ -312,8 +327,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     ) {
       return (
         <main className="messenger-page">
-          <section className="messenger-shell">
-            <header className="messenger-topbar">
+          <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
+            <header className="messenger-topbar minimal-chat-topbar">
               <div>
                 <strong>{conversationTitle(selected, user.id)}</strong>
                 <span>Secure setup pending</span>
@@ -357,7 +372,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     ) {
       return (
         <main className="messenger-page">
-          <section className="messenger-shell">
+          <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
             <EncryptedConversationView
               conversation={selected}
               user={user}
@@ -379,8 +394,8 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
     return (
       <main className="messenger-page">
-        <section className="messenger-shell">
-          <header className="messenger-topbar">
+        <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
+          <header className="messenger-topbar minimal-chat-topbar">
             <div>
               <strong>{conversationTitle(selected, user.id)}</strong>
               <span>{e2eeState === "error" ? "Secure chat unavailable" : "Initializing secure chat…"}</span>
@@ -403,7 +418,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   if (selected) {
     return (
       <main className="messenger-page">
-        <section className="messenger-shell">
+        <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
           <ConversationView
             conversation={selected}
             user={user}
@@ -425,13 +440,13 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
   return (
     <main className="messenger-page">
-      <section className="messenger-shell">
-        <header className="messenger-topbar">
-          <div>
+      <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
+        <header className="messenger-topbar minimal-list-topbar">
+          <div className="minimal-list-heading">
             <strong>Messages</strong>
-            <span>{user.display_name} · {connectionState}</span>
+            <span>{user.display_name} · {connectionState === "online" ? "online" : "reconnecting"}</span>
           </div>
-          <button type="button" onClick={onHide}>Hide</button>
+          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={() => setCreating(true)} aria-label={e2eeState === "ready" ? "New secure chat" : "Preparing secure messaging"}>＋</button>
         </header>
 
         {creating ? (
@@ -441,9 +456,20 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             adapter={e2eeState === "ready" ? e2eeAdapter : null}
           />
         ) : (
-          <div className="conversation-list">
+          <>
+            <div className="minimal-conversation-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                type="search"
+                value={conversationQuery}
+                onChange={(event) => setConversationQuery(event.target.value)}
+                placeholder="Search conversations"
+                aria-label="Search conversations"
+              />
+            </div>
+            <div className="conversation-list minimal-chat-list">
             <button
-              className="new-chat-button"
+              className="new-chat-button minimal-new-chat-button"
               type="button"
               disabled={e2eeState !== "ready"}
               onClick={() => setCreating(true)}
@@ -456,20 +482,31 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
                 <h2>No conversations yet</h2>
                 <p>Start a private chat with an invited member.</p>
               </div>
-            ) : conversations.map((conversation) => {
+            ) : visibleConversations.length === 0 ? (
+              <div className="empty-conversations compact">
+                <p>No matching conversations.</p>
+              </div>
+            ) : visibleConversations.map((conversation) => {
               const unread = Math.max(0, conversation.latest_sequence - conversation.last_read_sequence);
               return (
-                <button key={conversation.id} type="button" className="conversation-item" onClick={() => setSelectedId(conversation.id)}>
-                  <span className="avatar">{conversationTitle(conversation, user.id).slice(0, 1).toUpperCase()}</span>
+                <button key={conversation.id} type="button" className="conversation-item minimal-chat-item" onClick={() => setSelectedId(conversation.id)}>
+                  <span className="avatar minimal-avatar">{conversationInitials(conversationTitle(conversation, user.id))}</span>
                   <span className="conversation-copy">
                     <strong>{conversation.is_pinned ? "★ " : ""}{conversationTitle(conversation, user.id)}</strong>
-                    <small>{[conversation.type === "group" ? "Group" : "Private chat", conversation.notifications_muted ? "Muted" : null].filter(Boolean).join(" · ")}</small>
+                    <small>{[
+                      conversation.type === "group" ? conversation.members.length + " members" : "Private chat",
+                      conversation.encryption_required ? "Encrypted" : null,
+                      conversation.notifications_muted ? "Muted" : null,
+                    ].filter(Boolean).join(" · ")}</small>
                   </span>
-                  {unread > 0 ? <span className="unread-badge">{unread > 99 ? "99+" : unread}</span> : null}
+                  {unread > 0
+                    ? <span className="unread-badge">{unread > 99 ? "99+" : unread}</span>
+                    : <span className="minimal-row-chevron" aria-hidden="true">›</span>}
                 </button>
               );
             })}
           </div>
+          </>
         )}
 
         {user.is_admin && showInvite ? <AdminInvite onClose={() => setShowInvite(false)} /> : null}
@@ -485,7 +522,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           }}
         /> : null}
 
-        <footer className="messenger-footer">
+        <footer className="messenger-footer minimal-messenger-footer">
           {user.is_admin ? <button type="button" onClick={() => setShowInvite((value) => !value)}>Invite</button> : null}
           <button type="button" onClick={() => setShowDevices((value) => !value)}>Devices</button>
           <button type="button" onClick={() => void enablePush()} disabled={pushState === "enabling" || pushState === "enabled"}>

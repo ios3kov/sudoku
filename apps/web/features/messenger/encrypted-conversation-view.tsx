@@ -17,6 +17,7 @@ import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 import { uploadEncryptedAsset } from "./uploads";
 import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
+import { ConversationHeader } from "./conversation-header";
 import {
   MAX_VOICE_SECONDS,
   conversationTitle,
@@ -443,26 +444,24 @@ export function EncryptedConversationView({
 
   return (
     <section className="conversation-view">
-      <header className="messenger-topbar">
-        <div className="conversation-header-copy">
-          <button className="back-button" type="button" onClick={onBack} aria-label="Back to conversations">←</button>
-          <div>
-            <strong>{conversationTitle(conversation, user.id)}</strong>
-            <span>End-to-end encrypted</span>
-          </div>
-        </div>
-        <div>
-          {conversation.type === "group" ? (
-            <button type="button" onClick={() => setShowGroupSettings((value) => !value)}>
-              Group
+      <ConversationHeader
+        title={conversationTitle(conversation, user.id)}
+        subtitle="End-to-end encrypted"
+        onBack={onBack}
+        actions={
+          <>
+            {conversation.type === "group" ? (
+              <button type="button" onClick={() => setShowGroupSettings((value) => !value)}>
+                Group
+              </button>
+            ) : null}
+            <button type="button" onClick={() => setShowSecurity((value) => !value)}>
+              Verify
             </button>
-          ) : null}
-          <button type="button" onClick={() => setShowSecurity((value) => !value)}>
-            Verify
-          </button>
-          <button type="button" onClick={onHide}>Hide</button>
-        </div>
-      </header>
+            <button type="button" onClick={onHide}>Hide</button>
+          </>
+        }
+      />
 
       {showGroupSettings ? (
         <GroupSettings
@@ -643,7 +642,7 @@ export function EncryptedConversationView({
         />
         <button
           type="button"
-          className="attach-button"
+          className={`attach-button ${uploadProgress !== null ? "is-uploading" : ""}`}
           aria-label="Attach encrypted file"
           disabled={busy || syncBlocked || recording || uploadProgress !== null}
           onClick={() => fileInputRef.current?.click()}
@@ -666,7 +665,11 @@ export function EncryptedConversationView({
         >
           {recording ? "Stop" : "Mic"}
         </button>
-        <button type="submit" disabled={!body.trim() || busy || syncBlocked || recording || uploadProgress !== null}>
+        <button
+          type="submit"
+          aria-label={editing ? "Save" : "Send"}
+          disabled={!body.trim() || busy || syncBlocked || recording || uploadProgress !== null}
+        >
           {busy ? "…" : editing ? "Save" : "Send"}
         </button>
       </form>

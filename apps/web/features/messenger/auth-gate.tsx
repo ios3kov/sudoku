@@ -2,11 +2,12 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { MessengerShell } from "./messenger-shell";
+import { MessengerRevealPreview } from "./messenger-reveal-preview";
 import type { CurrentUser } from "./types";
 
 type AuthView = "login" | "invite";
 
-export function AuthGate({ onHide }: { onHide: () => void }) {
+export function AuthGate({ onHide, active = true }: { onHide: () => void; active?: boolean }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<AuthView>("login");
@@ -43,6 +44,7 @@ export function AuthGate({ onHide }: { onHide: () => void }) {
   }
 
   if (user) {
+    if (!active) return <MessengerRevealPreview user={user} />;
     return <MessengerShell user={user} onHide={onHide} onLoggedOut={() => setUser(null)} />;
   }
 
