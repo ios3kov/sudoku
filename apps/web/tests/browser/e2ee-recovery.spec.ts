@@ -65,6 +65,14 @@ async function login(page: Page, email: string) {
   await expect(page.getByText("Messages", { exact: true })).toBeVisible({
     timeout: 30_000,
   });
+  await expect(page.locator(".messenger-runtime-shell")).toBeVisible();
+  await expect(page.getByLabel("Search conversations")).toBeVisible();
+
+  const runtimeShellWidth = await page.locator(".messenger-runtime-shell").evaluate(
+    (element) => Math.round(element.getBoundingClientRect().width),
+  );
+  expect(runtimeShellWidth).toBeLessThanOrEqual(460);
+  await expect(page.locator(".messenger-reveal-preview")).toHaveCount(0);
 
   // The first browser MLS initialization generates and publishes a KeyPackage
   // pool in WASM. On cold GitHub runners this can be materially slower than
