@@ -81,7 +81,7 @@ code{overflow-wrap:anywhere}
 .cell.related{background:#f2f5f3}
 .cell.same{background:#e4eeec}
 .cell.selected{background:#cfe3e5;box-shadow:inset 0 0 0 2px var(--accent)}
-.cell.error{color:var(--danger);background:#fbe6e4}
+.cell.invalid{color:var(--danger);background:#fbe6e4}
 .notes{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr)}
 .note{display:grid;place-items:center;font-size:clamp(7px,2vw,10px);font-weight:600;color:var(--muted)}
 .controls{display:grid;gap:9px}
