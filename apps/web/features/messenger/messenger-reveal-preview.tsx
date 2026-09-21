@@ -2,17 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { messengerApi } from "./api";
-import { conversationTitle } from "./chat-utils";
+import { conversationInitials, conversationTitle } from "./chat-utils";
 import type { Conversation, CurrentUser } from "./types";
-
-function initials(value: string): string {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.slice(0, 1).toUpperCase())
-    .join("") || "•";
-}
 
 export function MessengerRevealPreview({ user }: { user: CurrentUser }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -61,7 +52,7 @@ export function MessengerRevealPreview({ user }: { user: CurrentUser }) {
             );
             return (
               <div className="conversation-item minimal-chat-item" key={conversation.id}>
-                <span className="avatar minimal-avatar">{initials(title)}</span>
+                <span className="avatar minimal-avatar">{conversationInitials(title)}</span>
                 <span className="conversation-copy">
                   <strong>{title}</strong>
                   <small>
