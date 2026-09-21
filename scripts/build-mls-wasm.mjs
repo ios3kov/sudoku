@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 
 const root = resolve(import.meta.dirname, "..");
 const manifest = join(root, "packages", "mls-wasm", "Cargo.toml");
@@ -68,9 +69,29 @@ async function ensureWasmBindgen() {
   const url =
     `https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.105/` +
     `wasm-bindgen-0.2.105-${release.target}.tar.gz`;
-  const response = await fetch(url, { redirect: "follow" });
-  if (!response.ok) {
-    throw new Error(`Failed to download wasm-bindgen: HTTP ${response.status}`);
+  let response;
+  const attempts = 5;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      response = await fetch(url, { redirect: "follow" });
+      if (response.ok) break;
+      if (response.status < 500 && response.status !== 429) {
+        throw new Error(`Failed to download wasm-bindgen: HTTP ${response.status}`);
+      }
+    } catch (error) {
+      if (attempt === attempts) throw error;
+    }
+
+    if (attempt === attempts) {
+      throw new Error(
+        `Failed to download wasm-bindgen after ${attempts} attempts: HTTP ${response?.status ?? "network error"}`,
+      );
+    }
+    await delay(attempt * 2_000);
+  }
+
+  if (!response?.ok) {
+    throw new Error("Failed to download wasm-bindgen");
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
   const digest = createHash("sha256").update(bytes).digest("hex");
