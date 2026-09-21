@@ -46,6 +46,8 @@ Local entry point: `http://localhost:8080`.
 
 ## Production
 
+The canonical production inventory, deployment/rollback procedure and secret-handling rules live in `docs/PRODUCTION.md`.
+
 Create `.env.production` from `.env.production.example`, replace every placeholder, configure DNS for both `APP_DOMAIN` and `assets.APP_DOMAIN`, then run the fail-closed preflight:
 
 ```bash
@@ -55,4 +57,4 @@ docker compose --env-file .env.production -f compose.yaml -f compose.production.
 APP_DOMAIN=<host> bash scripts/smoke-production.sh
 ```
 
-Only Caddy ports 80/443 should be publicly exposed by the production Compose stack. Production is not verified until the physical-device and live-infrastructure checklist in `docs/steps/70-live-verification.md` passes. See `docs/steps/31-production-compose.md` and `docs/PROGRESS.md` for the security boundary and current status.
+Only Caddy ports 80/443 are published by the production Compose stack; SSH 22 is controlled separately by the Selectel security-group administrator allowlist. Production is not verified until the physical-device and live-infrastructure checklist in `docs/steps/70-live-verification.md` passes. See `docs/PRODUCTION.md`, `docs/steps/31-production-compose.md` and `docs/PROGRESS.md` for the operational/security boundary and current status.
