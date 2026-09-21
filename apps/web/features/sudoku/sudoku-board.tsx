@@ -60,7 +60,14 @@ export function SudokuBoard({
   const [completedAt, setCompletedAt] = useState<number | null>(null);
   const [clockNow, setClockNow] = useState(0);
   const [hydrated, setHydrated] = useState(false);
-  const gesture = useSecretUnlock({
+  const {
+    setScreenElement,
+    onFivePointerDown,
+    onFivePointerMove,
+    onFivePointerUp,
+    consumeFiveClick,
+    cancel: cancelSecretUnlock,
+  } = useSecretUnlock({
     onUnlock: onSecretUnlock,
     onRevealStart: onSecretRevealStart,
     onRevealCancel: onSecretRevealCancel,
@@ -197,7 +204,7 @@ export function SudokuBoard({
   }
 
   return (
-    <main ref={gesture.setScreenElement} className="page sudoku-reveal-screen">
+    <main ref={setScreenElement} className="page sudoku-reveal-screen">
       <section className="sudoku-shell" aria-label="Sudoku">
         <header className="topbar sudoku-topbar">
           <div className="sudoku-brand">
@@ -271,12 +278,12 @@ export function SudokuBoard({
                   key={value}
                   className={`digit${isSecretDigit ? " secret-digit" : ""}`}
                   type="button"
-                  onPointerDown={isSecretDigit ? gesture.onFivePointerDown : undefined}
-                  onPointerMove={isSecretDigit ? gesture.onFivePointerMove : undefined}
-                  onPointerUp={isSecretDigit ? gesture.onFivePointerUp : undefined}
-                  onPointerCancel={isSecretDigit ? gesture.cancel : undefined}
+                  onPointerDown={isSecretDigit ? onFivePointerDown : undefined}
+                  onPointerMove={isSecretDigit ? onFivePointerMove : undefined}
+                  onPointerUp={isSecretDigit ? onFivePointerUp : undefined}
+                  onPointerCancel={isSecretDigit ? cancelSecretUnlock : undefined}
                   onClick={() => {
-                    if (isSecretDigit && gesture.consumeFiveClick()) return;
+                    if (isSecretDigit && consumeFiveClick()) return;
                     enterDigit(value);
                   }}
                 >
