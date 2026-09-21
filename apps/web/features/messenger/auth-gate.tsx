@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { MessengerShell } from "./messenger-shell";
 import { MessengerRevealPreview } from "./messenger-reveal-preview";
+import { ConversationDraftProvider } from "./conversation-drafts";
 import type { CurrentUser } from "./types";
 
 type AuthView = "login" | "invite";
@@ -45,7 +46,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
 
   if (user) {
     if (!active) return <MessengerRevealPreview user={user} />;
-    return <MessengerShell user={user} onHide={onHide} onLoggedOut={() => setUser(null)} />;
+    return <ConversationDraftProvider key={user.id}><MessengerShell user={user} onHide={onHide} onLoggedOut={() => setUser(null)} /></ConversationDraftProvider>;
   }
 
   return (

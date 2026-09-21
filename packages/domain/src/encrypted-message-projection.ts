@@ -18,6 +18,8 @@ export interface EncryptedEventRecord {
   senderId: string;
   sequence: number;
   event: EncryptedApplicationEvent;
+  /** Server display metadata; never used to order or authorize events. */
+  createdAt?: string;
 }
 
 export interface ProjectedReaction {
@@ -30,6 +32,7 @@ export interface ProjectedEncryptedMessage {
   senderId: string;
   sequence: number;
   messageType: EncryptedMessageType;
+  createdAt?: string;
   body: string | null;
   replyTo: string | null;
   assetIds: string[];
@@ -43,6 +46,7 @@ export interface EncryptedProjectionResult {
   messages: ProjectedEncryptedMessage[];
   appliedEventIds: string[];
   rejectedEventIds: string[];
+  latestSequence: number;
 }
 
 function validRecord(record: EncryptedEventRecord): boolean {
@@ -85,6 +89,7 @@ export function projectEncryptedEvents(
         id: record.eventId,
         senderId: record.senderId,
         sequence: record.sequence,
+        ...(record.createdAt ? { createdAt: record.createdAt } : {}),
         messageType: event.messageType,
         body: event.body,
         replyTo: event.replyTo,
@@ -166,5 +171,6 @@ export function projectEncryptedEvents(
     ),
     appliedEventIds,
     rejectedEventIds,
+    latestSequence: ordered.at(-1)?.sequence ?? 0,
   };
 }

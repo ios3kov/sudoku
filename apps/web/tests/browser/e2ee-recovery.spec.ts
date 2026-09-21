@@ -121,6 +121,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
 
   try {
     await observeRealtimeSocket(peer);
+    await observeRealtimeSocket(owner);
     // Peer must publish a KeyPackage before the owner bootstraps the direct chat.
     await login(peer, PEER_EMAIL);
     await login(owner, OWNER_EMAIL);
@@ -165,6 +166,18 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await sendText(owner, "persisted before reload");
     await expect(owner.getByText("persisted before reload", { exact: true })).toBeVisible();
 
+    // UX3 must preserve actual encrypted history and drafts, not only fixture UI.
+    await expect(owner.locator(".message-date-separator")).toHaveCount(1);
+    await composer.fill("unsent secure draft");
+    await owner.getByRole("button", { name: "Back to conversations" }).click();
+    await openConversation(owner, "Browser Peer");
+    await expect(composer).toHaveValue("unsent secure draft");
+    await owner.getByRole("button", { name: "Encrypted message actions" }).last().click();
+    await expect(owner.getByRole("dialog", { name: "Message actions", exact: true })).toBeVisible();
+    await owner.keyboard.press("Escape");
+    await expect(owner.getByRole("dialog")).toHaveCount(0);
+    await composer.fill("");
+
     // Do not depend on realtime: reload must recover the assigned Welcome and
     // persisted OpenMLS/IndexedDB state by itself.
     await reopenMessenger(peer);
@@ -178,6 +191,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await reopenMessenger(peer);
     await openConversation(peer, "Browser Owner");
     await expect(peer.getByText("persisted before reload", { exact: true })).toBeVisible();
+    await expect(peer.locator(".message-date-separator")).toHaveCount(1);
 
     // Offline application sends must be encrypted + persisted locally and
     // delivered with the same client id/ciphertext after reconnect.
@@ -187,7 +201,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       .toBeVisible();
     await ownerContext.setOffline(false);
 
-    await expect(owner.getByText("queued while offline", { exact: true })).toBeVisible({
+    await expect(owner.locator(".message-bubble:not(.pending)").getByText("queued while offline", { exact: true })).toBeVisible({
       timeout: 60_000,
     });
 
@@ -197,36 +211,36 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       timeout: 60_000,
     });
 
-    // Keep markRead pending after a successful projection. An online event
-    // during this exact window used to reuse the old refresh and lose the
-    // notification entirely (post-merge CI #277).
-    const readPattern = "**/v1/conversations/*/read";
+    // Read receipts now follow visible history and are deduplicated. Hold a
+    // successful transport response itself to exercise the same queued-refresh
+    // race, rather than expecting another receipt for an unchanged watermark.
     const transportPattern = "**/v1/e2ee/conversations/**/transport-events**";
-    let releaseReadReceipt!: () => void;
-    const readReceiptGate = new Promise<void>((resolve) => { releaseReadReceipt = resolve; });
-    let readReceiptHeld = false;
+    let releaseTransport!: () => void;
+    const transportGate = new Promise<void>((resolve) => { releaseTransport = resolve; });
+    let firstTransport = true;
+    let transportHeld = false;
     let blockedRequests = 0;
-    await peer.route(readPattern, async (route) => {
-      if (!readReceiptHeld) {
-        readReceiptHeld = true;
-        await readReceiptGate;
+    await peer.route(transportPattern, async (route) => {
+      if (firstTransport) {
+        firstTransport = false;
+        const response = await route.fetch();
+        expect(response.ok()).toBe(true);
+        transportHeld = true;
+        await transportGate;
+        await route.fulfill({ response });
+      } else {
+        blockedRequests += 1;
+        await route.abort();
       }
-      await route.continue();
     });
 
     try {
       await peer.evaluate(() => window.dispatchEvent(new Event("online")));
-      await expect.poll(() => readReceiptHeld).toBe(true);
+      await expect.poll(() => transportHeld).toBe(true);
       await expect(peer.locator("textarea").last()).toBeEnabled();
-
-      // Already-decrypted history stays visible, but the follow-up must make
-      // an actual transport request and fail closed for new authoring.
-      await peer.route(transportPattern, (route) => {
-        blockedRequests += 1;
-        return route.abort();
-      });
+      // A second notification must not be lost while the first sync is held.
       await peer.evaluate(() => window.dispatchEvent(new Event("online")));
-      releaseReadReceipt();
+      releaseTransport();
       await expect.poll(() => blockedRequests).toBeGreaterThan(0);
       await expect(peer.getByText("Secure sync is blocked", { exact: true })).toBeVisible();
       await expect(peer.locator("textarea").last()).toBeDisabled();
@@ -239,12 +253,11 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       await sendText(peer, "sent after secure recovery");
       await expect(peer.getByText("sent after secure recovery", { exact: true })).toBeVisible();
     } finally {
-      releaseReadReceipt();
-      await peer.unroute(readPattern);
+      releaseTransport();
       await peer.unroute(transportPattern);
     }
 
-    await verifyActiveComposition(owner, peer, sendText, openConversation);
+    await verifyActiveComposition(owner, peer, sendText, openConversation, unlockPrivate);
   } finally {
     // Close both browser contexts concurrently. On cold CI runners the MLS
     // scenario can legitimately consume most of the test budget; serial

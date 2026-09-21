@@ -20,6 +20,11 @@ import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
 import { createRefreshQueue } from "./refresh-queue";
+import { useConversationDraft } from "./conversation-drafts";
+import { MessageActionSheet } from "./message-action-sheet";
+import { MessageInteraction } from "./message-interaction";
+import { MessageMeta } from "./message-meta";
+import { MessageTimeline, type MessageTimelineHandle } from "./message-timeline";
 import {
   MAX_VOICE_SECONDS,
   conversationTitle,
@@ -40,6 +45,7 @@ export function EncryptedConversationView({
   onBack,
   onHide,
   onConversationUpdated,
+  onReadAcknowledged,
   onConversationLeft,
 }: {
   conversation: Conversation;
@@ -50,10 +56,15 @@ export function EncryptedConversationView({
   onBack: () => void;
   onHide: () => void;
   onConversationUpdated: (conversation: Conversation) => void;
+  onReadAcknowledged: (conversationId: string, sequence: number) => void;
   onConversationLeft: () => void;
 }) {
   const [messages, setMessages] = useState<ProjectedEncryptedMessage[]>([]);
-  const [body, setBody] = useState("");
+  const [draft, setDraft] = useConversationDraft(conversation.id);
+  const [editBody, setEditBody] = useState("");
+  const [sendingText, setSendingText] = useState<string | null>(null);
+  const [queuedMessages, setQueuedMessages] = useState<ReturnType<OpenMlsProtocolAdapter["pendingApplicationMessages"]>>([]);
+  const [readSequence, setReadSequence] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,9 +79,7 @@ export function EncryptedConversationView({
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MESSAGES);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  const messageListRef = useRef<HTMLDivElement | null>(null);
-  const stickToBottomRef = useRef(true);
+  const timelineRef = useRef<MessageTimelineHandle>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -81,6 +90,11 @@ export function EncryptedConversationView({
   const lastEventRef = useRef<RealtimeEvent | null>(null);
   const queueRefresh = useMemo(() => createRefreshQueue(), []);
 
+  const body = editingId ? editBody : draft;
+  const setBody = (value: string) => editingId ? setEditBody(value) : setDraft(value);
+  const messageById = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
+  const actionMessage = actionMessageId ? messageById.get(actionMessageId) : undefined;
+  const peerReads = conversation.members.filter((member) => member.id !== user.id).map((member) => member.last_read_sequence);
   useAutosizeTextarea(textareaRef, body);
 
   const refreshProjection = useCallback((): Promise<void> => {
@@ -89,36 +103,33 @@ export function EncryptedConversationView({
         await adapter.syncTransport(conversation.id);
         const projection = adapter.projectConversation(conversation.id);
         setMessages(projection.messages);
+        setReadSequence(projection.latestSequence);
+        setQueuedMessages(adapter.pendingApplicationMessages(conversation.id));
         setSyncBlocked(false);
         setQueuedCount(adapter.pendingApplicationCount(conversation.id));
         if (projection.rejectedEventIds.length > 0) {
           setError("Some encrypted updates were rejected");
         } else {
-          setError((current) => current === "Secure sync is blocked" ? null : current);
-        }
-        const latest = Math.max(
-          conversation.latest_sequence,
-          ...projection.messages.map((message) => message.sequence),
-          0,
-        );
-        if (latest > 0) {
-          await messengerApi.markRead(conversation.id, latest).catch(() => undefined);
+          const hasPending = adapter.pendingApplicationCount(conversation.id) > 0;
+          setError((current) => current === "Secure sync is blocked"
+            || (!hasPending && current === "Encrypted message queued for retry") ? null : current);
         }
       } catch {
         setSyncBlocked(true);
         setError("Secure sync is blocked");
         setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+        setQueuedMessages(adapter.pendingApplicationMessages(conversation.id));
       } finally {
         setLoading(false);
       }
     });
-  }, [adapter, conversation.id, conversation.latest_sequence, queueRefresh]);
+  }, [adapter, conversation.id, queueRefresh]);
 
   // MessengerShell keys this view by conversation identity. Updates within
   // that conversation should sync history, never reset an active draft/edit.
   useEffect(() => {
     void refreshProjection();
-  }, [refreshProjection]);
+  }, [conversation.latest_sequence, refreshProjection]);
 
   useEffect(() => {
     if (reconnectTick > 0) void refreshProjection();
@@ -150,21 +161,6 @@ export function EncryptedConversationView({
     return () => window.clearInterval(timer);
   }, [loading, refreshProjection, syncBlocked]);
 
-  useEffect(() => {
-    if (!stickToBottomRef.current) return;
-    bottomRef.current?.scrollIntoView({
-      behavior: messages.length > INITIAL_VISIBLE_MESSAGES ? "smooth" : "auto",
-      block: "end",
-    });
-  }, [messages, queuedCount]);
-
-  const handleMessageScroll = useCallback(() => {
-    const node = messageListRef.current;
-    if (!node) return;
-    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-    stickToBottomRef.current = distanceFromBottom < 96;
-  }, []);
-
   useEffect(() => () => {
     if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
     if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
@@ -179,16 +175,12 @@ export function EncryptedConversationView({
   }, []);
 
   const replyingTo = useMemo(
-    () => messages.find((message) => message.id === replyingToId) ?? null,
-    [messages, replyingToId],
+    () => messageById.get(replyingToId ?? "") ?? null,
+    [messageById, replyingToId],
   );
   const editing = useMemo(
-    () => messages.find((message) => message.id === editingId) ?? null,
-    [messages, editingId],
-  );
-  const visibleMessages = useMemo(
-    () => messages.slice(Math.max(0, messages.length - visibleCount)),
-    [messages, visibleCount],
+    () => messageById.get(editingId ?? "") ?? null,
+    [messageById, editingId],
   );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -197,6 +189,9 @@ export function EncryptedConversationView({
     if (!text || busy || syncBlocked) return;
     setBusy(true);
     setError(null);
+    timelineRef.current?.toLatest();
+    if (!editing) setSendingText(text);
+    const clientId = crypto.randomUUID();
 
     try {
       if (editing) {
@@ -209,16 +204,19 @@ export function EncryptedConversationView({
           replyTo: replyingTo?.id ?? null,
           assetIds: [],
           attachments: [],
-        });
+        }, clientId);
       }
-      setBody("");
+      if (editing) setEditBody(""); else setDraft("");
+      setSendingText(null);
       setEditingId(null);
       setReplyingToId(null);
       await refreshProjection();
     } catch {
       const pending = adapter.pendingApplicationCount(conversation.id);
       setQueuedCount(pending);
-      if (pending > 0 && !editing) {
+      const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+      setQueuedMessages(pendingMessages);
+      if (!editing && pendingMessages.some((message) => message.id === clientId)) {
         setBody("");
         setReplyingToId(null);
         setError("Encrypted message queued for retry");
@@ -226,6 +224,7 @@ export function EncryptedConversationView({
         setError("Unable to send encrypted update");
       }
     } finally {
+      setSendingText(null);
       setBusy(false);
     }
   }
@@ -409,7 +408,7 @@ export function EncryptedConversationView({
       await adapter.sendDeleteDurably(conversation.id, message.id);
       if (editingId === message.id) {
         setEditingId(null);
-        setBody("");
+        setEditBody("");
       }
       if (replyingToId === message.id) setReplyingToId(null);
       await refreshProjection();
@@ -425,11 +424,29 @@ export function EncryptedConversationView({
     if (syncBlocked || message.senderId !== user.id || message.deleted) return;
     setEditingId(message.id);
     setReplyingToId(null);
-    setBody(message.body ?? "");
+    setEditBody(message.body ?? "");
     setActionMessageId(null);
-    window.setTimeout(() => textareaRef.current?.focus(), 0);
+    textareaRef.current?.focus({ preventScroll: true });
   }
 
+
+  function beginReply(message: ProjectedEncryptedMessage) {
+    if (busy || syncBlocked || recording || message.deleted) return;
+    setReplyingToId(message.id);
+    setEditingId(null);
+    setActionMessageId(null);
+    textareaRef.current?.focus({ preventScroll: true });
+  }
+
+  async function copyMessage(text: string) {
+    try { await navigator.clipboard.writeText(text); }
+    catch { setError("Unable to copy message"); }
+  }
+
+  async function markVisibleRead(sequence: number) {
+    await messengerApi.markRead(conversation.id, sequence);
+    onReadAcknowledged(conversation.id, sequence);
+  }
   return (
     <section className="conversation-view">
       <ConversationHeader
@@ -477,133 +494,75 @@ export function EncryptedConversationView({
         </p>
       ) : null}
 
-      <div
-        className="message-list"
-        ref={messageListRef}
-        onScroll={handleMessageScroll}
-      >
-        {loading ? <p className="muted center">Decrypting…</p> : messages.length === 0 ? (
+      <MessageTimeline
+        ref={timelineRef}
+        items={messages}
+        visibleCount={visibleCount}
+        currentUserId={user.id}
+        readSequence={readSequence}
+        onReadLatest={markVisibleRead}
+        childrenBefore={loading ? <p className="muted center">Decrypting…</p> : messages.length === 0 ? (
           <div className="empty-conversations">
             <div className="empty-icon" aria-hidden="true">•••</div>
             <h2>No encrypted messages yet</h2>
             <p>Messages are decrypted only on this device.</p>
           </div>
-        ) : (
-          <>
-            {messages.length > visibleCount ? (
-              <button
-                className="load-earlier-button"
-                type="button"
-                onClick={() => setVisibleCount((count) => count + INITIAL_VISIBLE_MESSAGES)}
-              >
-                Show earlier messages
-              </button>
-            ) : null}
-            {visibleMessages.map((message) => {
+        ) : messages.length > visibleCount ? (
+          <button className="load-earlier-button" type="button" onClick={() => setVisibleCount((count) => count + INITIAL_VISIBLE_MESSAGES)}>Show earlier messages</button>
+        ) : null}
+        renderMessage={(message) => {
           const own = message.senderId === user.id;
-          const reply = message.replyTo
-            ? messages.find((candidate) => candidate.id === message.replyTo) ?? null
-            : null;
-          const readLabel = own
-            ? encryptedReadReceipt(conversation, user.id, message.sequence)
-            : null;
-
+          const reply = message.replyTo ? messageById.get(message.replyTo) : undefined;
           return (
-            <div key={message.id} className={`message-row ${own ? "own" : ""}`}>
+            <div className={`message-row ${own ? "own" : ""}`}>
               <div className="message-bubble-wrap">
-                <div className={`message-bubble ${message.deleted ? "deleted" : ""}`}>
-                  {reply ? <div className="reply-preview">{encryptedPreview(reply)}</div> : null}
-                  {message.deleted ? <p>Message deleted</p> : (
-                    <>
-                      {message.body ? <p>{message.body}</p> : null}
-                      {message.attachments.length > 0 ? (
-                        <div className="encrypted-attachments">
-                          {message.attachments.map((raw, index) => {
-                            const metadata = isEncryptedAttachmentMetadata(raw) ? raw : null;
-                            if (
-                              !metadata
-                              || metadata.assetId !== message.assetIds[index]
-                              || !["image", "file", "voice"].includes(message.messageType)
-                            ) {
-                              return (
-                                <div className="file-attachment" key={`invalid-${index}`}>
-                                  <strong>Encrypted attachment unavailable</strong>
-                                </div>
-                              );
-                            }
-                            return (
-                              <EncryptedAttachment
-                                key={metadata.assetId}
-                                metadata={metadata}
-                                messageType={message.messageType as "image" | "file" | "voice"}
-                              />
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </>
-                  )}
-                  {message.reactions.length > 0 ? (
-                    <div className="reaction-row">
-                      {message.reactions.map((reaction) => (
-                        <span key={reaction.emoji}>
-                          {reaction.emoji} {reaction.userIds.length}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <small className="message-time">
-                    #{message.sequence}
-                    {message.edited ? " · edited" : ""}
-                    {readLabel ? ` · ${readLabel}` : ""}
-                  </small>
-                </div>
-                {!message.deleted ? (
-                  <button
-                    className="message-more-button"
-                    type="button"
-                    onClick={() => setActionMessageId((current) =>
-                      current === message.id ? null : message.id
+                <MessageInteraction disabled={busy || syncBlocked || recording || message.deleted} onActions={() => setActionMessageId(message.id)} onReply={() => beginReply(message)}>
+                  <div className={`message-bubble ${message.deleted ? "deleted" : ""}`}>
+                    {conversation.type === "group" && !own ? <strong className="message-sender">{conversation.members.find((member) => member.id === message.senderId)?.display_name ?? "Member"}</strong> : null}
+                    {reply ? <div className="reply-preview">{encryptedPreview(reply)}</div> : null}
+                    {message.deleted ? <p>Message deleted</p> : (
+                      <>
+                        {message.body ? <p>{message.body}</p> : null}
+                        {message.attachments.length > 0 ? (
+                          <div className="encrypted-attachments">
+                            {message.attachments.map((raw, index) => {
+                              const metadata = isEncryptedAttachmentMetadata(raw) ? raw : null;
+                              if (!metadata || metadata.assetId !== message.assetIds[index] || !["image", "file", "voice"].includes(message.messageType)) {
+                                return <div className="file-attachment" key={`invalid-${index}`}><strong>Encrypted attachment unavailable</strong></div>;
+                              }
+                              return <EncryptedAttachment key={metadata.assetId} metadata={metadata} messageType={message.messageType as "image" | "file" | "voice"} />;
+                            })}
+                          </div>
+                        ) : null}
+                      </>
                     )}
-                    aria-label="Encrypted message actions"
-                  >
-                    •••
-                  </button>
-                ) : null}
+                    {message.reactions.length > 0 ? <div className="reaction-row">{message.reactions.map((reaction) => <span key={reaction.emoji}>{reaction.emoji} {reaction.userIds.length}</span>)}</div> : null}
+                    <MessageMeta createdAt={message.createdAt} sequence={message.sequence} own={own} peerReads={peerReads} edited={message.edited} />
+                  </div>
+                </MessageInteraction>
+                {!message.deleted ? <button className="message-more-button" type="button" aria-label="Encrypted message actions" aria-haspopup="dialog" onClick={() => setActionMessageId(message.id)}>•••</button> : null}
               </div>
-
-              {actionMessageId === message.id && !message.deleted ? (
-                <div className="message-actions">
-                  <button type="button" onClick={() => {
-                    setReplyingToId(message.id);
-                    setEditingId(null);
-                    setActionMessageId(null);
-                    window.setTimeout(() => textareaRef.current?.focus(), 0);
-                  }}>Reply</button>
-                  {own ? (
-                    <button type="button" onClick={() => beginEdit(message)}>Edit</button>
-                  ) : null}
-                  {["👍", "❤️", "😂"].map((emoji) => (
-                    <button
-                      type="button"
-                      key={emoji}
-                      onClick={() => void toggleReaction(message, emoji)}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                  {own ? (
-                    <button type="button" onClick={() => void deleteMessage(message)}>Delete</button>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
-              );
-            })}
-          </>
-        )}
-        <div ref={bottomRef} />
-      </div>
+          );
+        }}
+        childrenAfter={<>
+          {queuedMessages.map((message) => <div className="message-row own" key={message.id}><div className="message-bubble pending"><p>{message.body ?? (message.messageType === "voice" ? "Voice message" : "Attachment")}</p><small>Queued</small></div></div>)}
+          {sendingText ? <div className="message-row own"><div className="message-bubble pending"><p>{sendingText}</p><small role="status">Sending…</small></div></div> : null}
+        </>}
+      />
+      {actionMessage && !actionMessage.deleted ? <MessageActionSheet
+        preview={encryptedPreview(actionMessage)}
+        onClose={() => setActionMessageId(null)}
+        actions={[
+          ...(actionMessage.body ? [{ id: "copy", label: "Copy", run: () => { void copyMessage(actionMessage.body!); } }] : []),
+          { id: "reply", label: "Reply", disabled: busy || syncBlocked || recording, run: () => beginReply(actionMessage) },
+          ...(actionMessage.senderId === user.id && actionMessage.messageType === "text" ? [{ id: "edit", label: "Edit", disabled: busy || syncBlocked || recording, run: () => beginEdit(actionMessage) }] : []),
+          { id: "👍", label: "👍", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "👍"); } },
+          { id: "❤️", label: "❤️", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "❤️"); } },
+          { id: "😂", label: "😂", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "😂"); } },
+          ...(actionMessage.senderId === user.id ? [{ id: "delete", label: "Delete", destructive: true, disabled: busy || syncBlocked, run: () => { void deleteMessage(actionMessage); } }] : []),
+        ]}
+      /> : null}
 
       {replyingTo ? (
         <div className="reply-compose-preview">
@@ -616,7 +575,7 @@ export function EncryptedConversationView({
           <span>Editing encrypted message</span>
           <button type="button" aria-label="Cancel edit" onClick={() => {
             setEditingId(null);
-            setBody("");
+            setEditBody("");
           }}>×</button>
         </div>
       ) : null}
@@ -640,6 +599,7 @@ export function EncryptedConversationView({
         </button>
         <textarea
           ref={textareaRef}
+          aria-label="Message"
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={1}
@@ -673,20 +633,5 @@ function encryptedPreview(message: ProjectedEncryptedMessage): string {
   if (message.messageType === "image") return "Photo";
   if (message.messageType === "file") return "Encrypted file";
   return (message.body ?? "Message").slice(0, 80);
-}
-
-function encryptedReadReceipt(
-  conversation: Conversation,
-  currentUserId: string,
-  sequence: number,
-): string | null {
-  const others = conversation.members.filter((member) => member.id !== currentUserId);
-  if (!others.length) return null;
-  const readCount = others.filter(
-    (member) => member.last_read_sequence >= sequence,
-  ).length;
-  if (readCount === 0) return null;
-  if (conversation.type === "direct") return "Read";
-  return `${readCount} read`;
 }
 

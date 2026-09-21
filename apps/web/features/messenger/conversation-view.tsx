@@ -11,6 +11,11 @@ import { ConversationPreferences } from "./conversation-preferences";
 import { MessageSearch } from "./message-search";
 import { ConversationHeader } from "./conversation-header";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
+import { useConversationDraft } from "./conversation-drafts";
+import { MessageActionSheet } from "./message-action-sheet";
+import { MessageInteraction } from "./message-interaction";
+import { MessageMeta } from "./message-meta";
+import { MessageTimeline, type MessageTimelineHandle } from "./message-timeline";
 import {
   MAX_VOICE_SECONDS,
   conversationTitle,
@@ -30,6 +35,7 @@ export function ConversationView({
   onBack,
   onHide,
   onConversationUpdated,
+  onReadAcknowledged,
   onConversationLeft,
 }: {
   conversation: Conversation;
@@ -40,11 +46,16 @@ export function ConversationView({
   onBack: () => void;
   onHide: () => void;
   onConversationUpdated: (conversation: Conversation) => void;
+  onReadAcknowledged: (conversationId: string, sequence: number) => void;
   onConversationLeft: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [pending, setPending] = useState<PendingMessage[]>([]);
-  const [body, setBody] = useState("");
+  const [draft, setDraft, restoreDraft] = useConversationDraft(conversation.id);
+  const [editBody, setEditBody] = useState("");
+  const [hasEarlier, setHasEarlier] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(120);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
@@ -62,7 +73,7 @@ export function ConversationView({
 
   const typingTimer = useRef<number | null>(null);
   const remoteTypingTimers = useRef<Map<string, number>>(new Map());
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const timelineRef = useRef<MessageTimelineHandle>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -74,6 +85,14 @@ export function ConversationView({
   const scrollTargetSequenceRef = useRef<number | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
 
+  const body = editingMessage ? editBody : draft;
+  const setBody = (value: string) => editingMessage ? setEditBody(value) : setDraft(value);
+  const messageById = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
+  const actionMessage = actionMessageId ? messageById.get(actionMessageId) : undefined;
+  const timelineMessages = useMemo(() => messages.map((message) => ({
+    ...message, senderId: message.sender_id, createdAt: message.created_at, deleted: Boolean(message.deleted_at),
+  })), [messages]);
+  const peerReads = conversation.members.filter((member) => member.id !== user.id).map((member) => member.last_read_sequence);
   useAutosizeTextarea(textareaRef, body);
 
   const lastSequence = useMemo(
@@ -96,9 +115,9 @@ export function ConversationView({
       .then(([history, queued]) => {
         if (cancelled) return;
         setMessages(history);
+        setHasEarlier(history.length === 50);
         setPending(queued.filter((item) => item.conversation_id === conversation.id));
-        const latest = history.at(-1)?.sequence ?? 0;
-        if (latest > 0) void messengerApi.markRead(conversation.id, latest).catch(() => undefined);
+
       })
       .catch(() => {
         if (!cancelled) setError("Unable to load messages");
@@ -112,16 +131,11 @@ export function ConversationView({
   }, [conversation.id]);
 
   useEffect(() => {
-    const targetSequence = scrollTargetSequenceRef.current;
-    if (targetSequence !== null) {
-      requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>(`[data-message-sequence="${targetSequence}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-      scrollTargetSequenceRef.current = null;
-      return;
-    }
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, pending]);
+    const sequence = scrollTargetSequenceRef.current;
+    if (sequence === null) return;
+    timelineRef.current?.toSequence(sequence);
+    scrollTargetSequenceRef.current = null;
+  }, [messages]);
 
   useEffect(() => {
     const syncOnline = () => setOnline(navigator.onLine);
@@ -151,11 +165,9 @@ export function ConversationView({
       setPending((current) => current.filter((item) => item.client_id !== message.client_id));
       void removePending(message.client_id).catch(() => undefined);
       if (message.sequence > 0) {
-        void messengerApi.markRead(conversation.id, message.sequence).catch(() => undefined);
         onConversationUpdated({
           ...conversation,
           latest_sequence: Math.max(conversation.latest_sequence, message.sequence),
-          last_read_sequence: Math.max(conversation.last_read_sequence, message.sequence),
         });
       }
       return;
@@ -165,22 +177,6 @@ export function ConversationView({
       const payload = realtimeEvent.payload as { message_id?: string; user_id?: string; emoji?: string; active?: boolean };
       if (payload.message_id && payload.user_id && payload.emoji && typeof payload.active === "boolean") {
         setMessages((current) => applyReaction(current, payload.message_id!, payload.user_id!, payload.emoji!, payload.active!));
-      }
-      return;
-    }
-
-    if (realtimeEvent.type === "receipt.updated" && realtimeEvent.payload) {
-      const payload = realtimeEvent.payload as { user_id?: string; last_read_sequence?: number };
-      if (payload.user_id && typeof payload.last_read_sequence === "number") {
-        const nextConversation = {
-          ...conversation,
-          members: conversation.members.map((member) =>
-            member.id === payload.user_id
-              ? { ...member, last_read_sequence: Math.max(member.last_read_sequence, payload.last_read_sequence!) }
-              : member,
-          ),
-        };
-        onConversationUpdated(nextConversation);
       }
       return;
     }
@@ -236,11 +232,9 @@ export function ConversationView({
       setPending((current) => current.filter((item) => !fresh.some((message) => message.client_id === item.client_id)));
       const latest = fresh.at(-1)?.sequence ?? 0;
       if (latest > 0) {
-        void messengerApi.markRead(conversation.id, latest).catch(() => undefined);
         onConversationUpdated({
           ...conversation,
           latest_sequence: Math.max(conversation.latest_sequence, latest),
-          last_read_sequence: latest,
         });
       }
     } catch {
@@ -297,6 +291,7 @@ export function ConversationView({
       return;
     }
 
+    timelineRef.current?.toLatest();
     setBody("");
     realtime?.sendTyping(conversation.id, false);
     const local: PendingMessage = {
@@ -313,6 +308,8 @@ export function ConversationView({
       try {
         await enqueuePending(local);
       } catch {
+        restoreDraft(text);
+        setPending((current) => current.filter((item) => item.client_id !== local.client_id));
         setError("Offline queue unavailable on this device");
       }
       return;
@@ -335,10 +332,13 @@ export function ConversationView({
         try {
           await enqueuePending(local);
         } catch {
+          restoreDraft(text);
+          setPending((current) => current.filter((item) => item.client_id !== local.client_id));
           setError("Message could not be queued");
         }
       } else {
         setPending((current) => current.filter((item) => item.client_id !== local.client_id));
+        restoreDraft(text);
         setError("Message was rejected");
       }
     }
@@ -379,16 +379,16 @@ export function ConversationView({
     setEditingMessage(null);
     setReplyingTo(message);
     setActionMessageId(null);
-    textareaRef.current?.focus();
+    textareaRef.current?.focus({ preventScroll: true });
   }
 
   function beginEdit(message: Message) {
     if (!message.body || message.type !== "text") return;
     setReplyingTo(null);
     setEditingMessage(message);
-    setBody(message.body);
+    setEditBody(message.body);
     setActionMessageId(null);
-    window.setTimeout(() => textareaRef.current?.focus(), 0);
+    textareaRef.current?.focus({ preventScroll: true });
   }
 
   async function removeMessage(message: Message) {
@@ -528,11 +528,6 @@ export function ConversationView({
       setHighlightedSequence(target.sequence);
       setMessages(mergeMessages([], [...before, target, ...after]));
       setShowSearch(false);
-      void messengerApi.markRead(conversation.id, target.sequence).catch(() => undefined);
-      onConversationUpdated({
-        ...conversation,
-        last_read_sequence: Math.max(conversation.last_read_sequence, target.sequence),
-      });
       if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
       highlightTimerRef.current = window.setTimeout(() => setHighlightedSequence(null), 1800);
     } catch {
@@ -540,6 +535,31 @@ export function ConversationView({
     }
   }
 
+
+  async function copyMessage(text: string) {
+    try { await navigator.clipboard.writeText(text); }
+    catch { setError("Unable to copy message"); }
+  }
+
+  async function markVisibleRead(sequence: number) {
+    await messengerApi.markRead(conversation.id, sequence);
+    onReadAcknowledged(conversation.id, sequence);
+  }
+
+  async function loadEarlier() {
+    if (loadingEarlier) return;
+    if (messages.length > visibleCount) { setVisibleCount((count) => count + 120); return; }
+    const before = messages[0]?.sequence;
+    if (!before || !hasEarlier) return;
+    setLoadingEarlier(true);
+    try {
+      const earlier = await messengerApi.messages(conversation.id, { before, limit: 50 });
+      setHasEarlier(earlier.length === 50);
+      setVisibleCount((count) => count + earlier.length);
+      setMessages((current) => mergeMessages(current, earlier));
+    } catch { setError("Unable to load earlier messages"); }
+    finally { setLoadingEarlier(false); }
+  }
   return (
     <section className="chat-view">
       <ConversationHeader
@@ -582,56 +602,54 @@ export function ConversationView({
         />
       ) : null}
 
-      <div className="message-list" aria-live="polite">
-        {loading ? <p className="muted center">Loading…</p> : null}
-        {error ? <p className="form-error center">{error}</p> : null}
-        {!loading && !error && messages.length === 0 && pending.length === 0 ? (
-          <div className="empty-conversations compact chat-empty-state">
-            <div className="empty-icon" aria-hidden="true">•••</div>
-            <h2>No messages yet</h2>
-            <p>Send the first message when you are ready.</p>
+      <MessageTimeline
+        ref={timelineRef}
+        items={timelineMessages}
+        visibleCount={visibleCount}
+        currentUserId={user.id}
+        onReadLatest={markVisibleRead}
+        childrenBefore={<>
+          {loading ? <p className="muted center">Loading…</p> : null}
+          {error ? <p className="form-error center" role="alert">{error}</p> : null}
+          {!loading && !error && messages.length === 0 && pending.length === 0 ? (
+            <div className="empty-conversations compact chat-empty-state"><div className="empty-icon" aria-hidden="true">•••</div><h2>No messages yet</h2><p>Send the first message when you are ready.</p></div>
+          ) : null}
+          {hasEarlier || messages.length > visibleCount ? <button className="load-earlier-button" type="button" disabled={loadingEarlier} onClick={() => void loadEarlier()}>{loadingEarlier ? "Loading earlier…" : "Show earlier messages"}</button> : null}
+        </>}
+        renderMessage={(message) => (
+          <div className={`message-stack ${message.sender_id === user.id ? "own" : ""} ${highlightedSequence === message.sequence ? "search-hit" : ""}`}>
+            <MessageBubble
+              message={message}
+              own={message.sender_id === user.id}
+              replyMessage={message.reply_to ? messageById.get(message.reply_to) ?? null : null}
+              peerReads={peerReads}
+              senderName={conversation.type === "group" && message.sender_id !== user.id ? conversation.members.find((member) => member.id === message.sender_id)?.display_name ?? "Member" : null}
+              onReply={() => beginReply(message)}
+              onToggleActions={() => setActionMessageId(message.id)}
+            />
           </div>
-        ) : null}
-        {messages.map((message) => {
-          const replyMessage = message.reply_to ? messages.find((candidate) => candidate.id === message.reply_to) ?? null : null;
-          const actionsOpen = actionMessageId === message.id;
-          return (
-            <div
-              className={`message-stack ${message.sender_id === user.id ? "own" : ""} ${highlightedSequence === message.sequence ? "search-hit" : ""}`}
-              data-message-sequence={message.sequence}
-              key={message.id}
-            >
-              <MessageBubble
-                message={message}
-                own={message.sender_id === user.id}
-                replyMessage={replyMessage}
-                readLabel={message.sender_id === user.id ? readReceiptLabel(conversation, user.id, message.sequence) : null}
-                onToggleActions={() => setActionMessageId(actionsOpen ? null : message.id)}
-              />
-              {actionsOpen && !message.deleted_at ? (
-                <div className="message-actions">
-                  <button type="button" onClick={() => beginReply(message)}>Reply</button>
-                  <button type="button" onClick={() => void toggleHeart(message)}>❤️</button>
-                  {message.sender_id === user.id && message.type === "text" ? <button type="button" onClick={() => beginEdit(message)}>Edit</button> : null}
-                  {message.sender_id === user.id ? <button type="button" onClick={() => void removeMessage(message)}>Delete</button> : null}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-        {pending.map((message) => (
-          <div className="message-row own" key={message.client_id}>
-            <div className="message-bubble pending"><p>{message.body}</p><small>Sending…</small></div>
-          </div>
-        ))}
-        {typingUsers.size > 0 ? <div className="typing-indicator">typing…</div> : null}
-        <div ref={bottomRef} />
-      </div>
+        )}
+        childrenAfter={<>
+          {pending.map((message) => <div className="message-row own" key={message.client_id}><div className="message-bubble pending"><p>{message.body}</p><small>{online ? "Sending…" : "Queued"}</small></div></div>)}
+          {typingUsers.size > 0 ? <div className="typing-indicator">typing…</div> : null}
+        </>}
+      />
+      {actionMessage && !actionMessage.deleted_at ? <MessageActionSheet
+        preview={previewMessage(actionMessage)}
+        onClose={() => setActionMessageId(null)}
+        actions={[
+          ...(actionMessage.body ? [{ id: "copy", label: "Copy", run: () => { void copyMessage(actionMessage.body!); } }] : []),
+          { id: "reply", label: "Reply", run: () => beginReply(actionMessage) },
+          { id: "heart", label: "❤️", run: () => { void toggleHeart(actionMessage); } },
+          ...(actionMessage.sender_id === user.id && actionMessage.type === "text" ? [{ id: "edit", label: "Edit", run: () => beginEdit(actionMessage) }] : []),
+          ...(actionMessage.sender_id === user.id ? [{ id: "delete", label: "Delete", destructive: true, run: () => { void removeMessage(actionMessage); } }] : []),
+        ]}
+      /> : null}
 
       {replyingTo || editingMessage ? (
         <div className="composer-context">
           <span>{editingMessage ? "Editing message" : `Replying to ${previewMessage(replyingTo!)}`}</span>
-          <button type="button" onClick={() => { setReplyingTo(null); setEditingMessage(null); if (editingMessage) setBody(""); }}>×</button>
+          <button type="button" aria-label={editingMessage ? "Cancel edit" : "Cancel reply"} onClick={() => { setReplyingTo(null); setEditingMessage(null); if (editingMessage) setEditBody(""); }}>×</button>
         </div>
       ) : null}
 
@@ -654,6 +672,7 @@ export function ConversationView({
         </button>
         <textarea
           ref={textareaRef}
+          aria-label="Message"
           value={body}
           onChange={(e) => updateTyping(e.target.value)}
           rows={1}
@@ -674,20 +693,26 @@ function MessageBubble({
   message,
   own,
   replyMessage,
-  readLabel,
+  peerReads,
+  senderName,
+  onReply,
   onToggleActions,
 }: {
   message: Message;
   own: boolean;
   replyMessage: Message | null;
-  readLabel: string | null;
+  peerReads: readonly number[];
+  senderName: string | null;
+  onReply: () => void;
   onToggleActions: () => void;
 }) {
   const deleted = Boolean(message.deleted_at);
   return (
     <div className={`message-row ${own ? "own" : ""}`}>
       <div className="message-bubble-wrap">
+        <MessageInteraction disabled={deleted} onActions={onToggleActions} onReply={onReply}>
         <div className={`message-bubble ${deleted ? "deleted" : ""}`}>
+          {senderName ? <strong className="message-sender">{senderName}</strong> : null}
           {replyMessage ? <div className="reply-preview">{previewMessage(replyMessage)}</div> : null}
           {deleted ? <p>Message deleted</p> : (
             <>
@@ -714,13 +739,10 @@ function MessageBubble({
               {message.reactions.map((reaction) => <span key={reaction.emoji}>{reaction.emoji} {reaction.user_ids.length}</span>)}
             </div>
           ) : null}
-          <small className="message-time">
-            {new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            {message.edited_at ? " · edited" : ""}
-            {readLabel ? ` · ${readLabel}` : ""}
-          </small>
+          <MessageMeta createdAt={message.created_at} sequence={message.sequence} own={own} peerReads={peerReads} edited={Boolean(message.edited_at)} />
         </div>
-        {!deleted ? <button className="message-more-button" type="button" onClick={onToggleActions} aria-label="Message actions">•••</button> : null}
+        </MessageInteraction>
+        {!deleted ? <button className="message-more-button" type="button" onClick={onToggleActions} aria-label="Message actions" aria-haspopup="dialog">•••</button> : null}
       </div>
     </div>
   );
@@ -750,15 +772,6 @@ function previewMessage(message: Message): string {
   if (message.type === "image") return "Photo";
   if (message.type === "file") return message.assets[0]?.filename ?? "File";
   return (message.body ?? "Message").slice(0, 80);
-}
-
-function readReceiptLabel(conversation: Conversation, currentUserId: string, sequence: number): string | null {
-  const others = conversation.members.filter((member) => member.id !== currentUserId);
-  if (!others.length) return null;
-  const readCount = others.filter((member) => member.last_read_sequence >= sequence).length;
-  if (readCount === 0) return null;
-  if (conversation.type === "direct") return "Read";
-  return `${readCount} read`;
 }
 
 function mergeMessages(current: Message[], incoming: Message[]): Message[] {

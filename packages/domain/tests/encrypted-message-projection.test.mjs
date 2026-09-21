@@ -75,3 +75,15 @@ test("events targeting unloaded messages fail closed", () => {
   assert.deepEqual(result.messages, []);
   assert.deepEqual(result.rejectedEventIds, ["e1"]);
 });
+
+test("display timestamp survives projection without affecting sequence or legacy records", () => {
+ const timestamp="2026-09-21T12:00:00.000Z";
+ const result=projectEncryptedEvents([
+  {...message("m1","alice",1),createdAt:timestamp},
+  {eventId:"edit",senderId:"alice",sequence:3,createdAt:"2026-09-20T12:00:00Z",event:{kind:"edit",targetMessageId:"m1",body:"updated"}},
+  message("m2","bob",2),
+ ]);
+ assert.equal(result.messages[0].createdAt,timestamp);
+ assert.equal(result.messages[0].body,"updated");assert.equal(result.messages[1].createdAt,undefined);
+ assert.equal(result.latestSequence,3);
+});

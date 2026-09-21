@@ -2,6 +2,7 @@ import asyncio
 import base64
 import hashlib
 import uuid
+from datetime import datetime
 
 import httpx
 import pytest
@@ -555,6 +556,10 @@ async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
         assert items[1]["message_id"] == first.json()["id"]
         assert items[2]["control"]["id"] == control.json()["id"]
         assert items[3]["message_id"] == second.json()["id"]
+        # Additive display metadata must be the accepted server timestamp,
+        # not a locally invented arrival time or an MLS cursor-derived date.
+        assert datetime.fromisoformat(items[1]["created_at"]) == datetime.fromisoformat(first.json()["created_at"])
+        assert datetime.fromisoformat(items[3]["created_at"]) == datetime.fromisoformat(second.json()["created_at"])
 
         after_two = await recipient_client.get(
             f"/v1/e2ee/conversations/{conversation_id}/devices/{recipient_device}/transport-events?after=2"

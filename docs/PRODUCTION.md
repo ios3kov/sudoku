@@ -29,13 +29,17 @@ Docker and Compose versions were verified during provisioning and must continue 
 
 ## Release status
 
-There are two different states and they must not be confused:
+Keep repository verification distinct from actual deployment evidence:
 
-- **last live-verified deployment:** `68211e02` — production stack started and the live edge smoke passed;
-- **current merged test candidate:** `47060e20a342ba99bbd1a52070d2fe33f3dbf9c1` — PR #26, full CI #248 green; physical iPhone testing confirmed full Sudoku gameplay and the whole-screen reveal path, then exposed a grid-style collision on invalid cells and an unlock threshold that was still too permissive;
-- **current follow-up:** isolate invalid-cell styling from generic form errors and require 50% of the available upward swipe path before the animation completes the final 25%. This follow-up is not production-verified until its own CI/deploy/device retest passes.
+- **Last formally live-verified deployment:** `68211e02` (historical stack/edge smoke). Do not infer the current running SHA from that older record or from repository CI.
+- **Merged repository candidate:** PR #32 / `9b4cf2be5dff938f03df9811f95e1f7b168afd4b`, after full PR CI #282 passed. Post-merge CI #283 is a separate gate; consult the final evidence in PR #32 and `docs/PROGRESS.md`.
+- **Final 1.0 product follow-up:** UX 3.0 on `feat/messenger-ux3-final`. It is not a deployed release. Its complete integrated checks, reviewed merge, verified deployment and Step 70 acceptance remain required.
+- The invalid-cell CSS and 50% whole-screen Sudoku reveal fixes are already in the repository baseline. They are not still an unimplemented PR #26 follow-up.
 
-Do not update the "last live-verified deployment" value until the exact release SHA has been deployed and `scripts/smoke-production.sh` has passed against the live host.
+Do not update the last live-verified deployment until the exact release SHA has
+been deployed and `scripts/smoke-production.sh` passes on the live host. Local
+component/browser checks and green CI never substitute for physical/mobile or
+backup/restore evidence. No deployment was performed by Steps 73/74 or UX3 work.
 
 ## DNS
 

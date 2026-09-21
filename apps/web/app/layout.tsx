@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { PwaRegister } from "../components/pwa-register";
 import "./globals.css";
 import "../features/messenger/messenger-redesign.css";
+import "../features/messenger/messenger-ux3.css";
 
 export const metadata: Metadata = {
   title: "Sudoku",

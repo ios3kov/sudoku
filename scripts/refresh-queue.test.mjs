@@ -1,3 +1,5 @@
+// Keep messenger state regressions in the existing CI test entry point.
+import "./message-receipts.test.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRefreshQueue } from "../apps/web/features/messenger/refresh-queue.ts";
