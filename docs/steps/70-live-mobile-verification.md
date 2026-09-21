@@ -15,7 +15,7 @@ Use a physical iPhone/iPad installed from the production hostname.
 
 Verify:
 1. normal launch opens Sudoku, not messenger;
-2. press and hold keypad digit `5`, drag upward, and confirm the entire Sudoku surface follows the finger to reveal the private area underneath; an incomplete drag must settle back smoothly;
+2. press and hold keypad digit `5` and drag upward: the entire Sudoku surface must follow the finger; release below 75% of the available path must settle back, while reaching 75% must smoothly finish the remaining 25% and reveal the private area;
 3. verify the Sudoku remains fully playable before unlock: all digits 1–9 enter normally, a normal tap on `5` does not unlock, and Notes/Erase/Reset still work;
 4. sign-in session persists across app restart;
 5. app backgrounding/privacy cover returns visible content to Sudoku according to the configured timeout, including when backgrounded during a partial unlock drag;
