@@ -1,0 +1,20 @@
+name: ux3-source-snapshot
+on:
+  push:
+    branches: [feat/messenger-ux3]
+    paths: [.github/workflows/ux3-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive tracked baseline only
+        run: git archive --format=zip ff97e0f4ed476cd33be095a8814f90936849805a -o /tmp/sudoku-ux3-baseline.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ux3-baseline-source
+          path: /tmp/sudoku-ux3-baseline.zip
+          retention-days: 1
