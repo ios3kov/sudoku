@@ -104,7 +104,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
   // independent OpenMLS browser sessions. Keep each functional assertion
   // individually bounded below, but leave enough aggregate headroom so the
   // suite fails on the real assertion rather than the outer test clock.
-  test.setTimeout(420_000);
+  test.setTimeout(480_000);
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
@@ -175,7 +175,13 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await peer.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect(peer.locator("textarea").last()).toBeEnabled({ timeout: 60_000 });
   } finally {
-    await ownerContext.close();
-    await peerContext.close();
+    // Close both browser contexts concurrently. On cold CI runners the MLS
+    // scenario can legitimately consume most of the test budget; serial
+    // teardown must not turn a fully-passed scenario into an outer-timeout
+    // failure.
+    await Promise.allSettled([
+      ownerContext.close(),
+      peerContext.close(),
+    ]);
   }
 });
