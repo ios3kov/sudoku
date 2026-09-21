@@ -25,6 +25,7 @@ export function GroupSettings({
   const [title, setTitle] = useState(conversation.title ?? "");
   const [query, setQuery] = useState("");
   const [directory, setDirectory] = useState<DirectoryUser[]>([]);
+  const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const me = conversation.members.find((member) => member.id === user.id);
@@ -39,10 +40,13 @@ export function GroupSettings({
     const term = query.trim();
     if (!isOwner || term.length < 2) {
       setDirectory([]);
+      setSearching(false);
       return;
     }
     let cancelled = false;
     const timer = window.setTimeout(async () => {
+      setSearching(true);
+      setError(null);
       try {
         const results = await messengerApi.searchUsers(term);
         const existing = new Set(conversation.members.map((member) => member.id));
@@ -52,6 +56,8 @@ export function GroupSettings({
           setDirectory([]);
           setError("Unable to search people");
         }
+      } finally {
+        if (!cancelled) setSearching(false);
       }
     }, 220);
     return () => { cancelled = true; window.clearTimeout(timer); };
@@ -153,7 +159,7 @@ export function GroupSettings({
         ))}
       </div>
       {isOwner ? (
-        <div className="member-search">
+        <div className="member-search" aria-busy={searching}>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -166,7 +172,8 @@ export function GroupSettings({
             spellCheck={false}
           />
           {query.trim().length < 2 ? <p className="muted member-search-hint">Type at least 2 characters.</p> : null}
-          {query.trim().length >= 2 && directory.length === 0 && !error ? <p className="muted member-search-hint">No new members found.</p> : null}
+          {query.trim().length >= 2 && searching ? <p className="muted member-search-hint">Searching…</p> : null}
+          {query.trim().length >= 2 && !searching && directory.length === 0 && !error ? <p className="muted member-search-hint">No new members found.</p> : null}
           {directory.map((item) => <button type="button" key={item.id} disabled={busy} onClick={() => void add(item.id)}><span>{item.display_name}</span><small>{item.email}</small></button>)}
         </div>
       ) : null}
