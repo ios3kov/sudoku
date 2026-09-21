@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 const CLICK_SUPPRESS_PX = 12;
-const UNLOCK_PROGRESS = 0.75;
+const UNLOCK_PROGRESS = 0.5;
 const RETURN_MS = 320;
 const FINISH_MIN_MS = 260;
 const FINISH_MAX_MS = 420;
@@ -214,7 +214,7 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
     pointerActive.current = true;
     startY.current = pointerY;
     // "Full swipe" is the available path from the digit to the top edge.
-    // At 75% we take over and smoothly finish the remaining 25%.
+    // At 50% we take over and smoothly finish the remaining half.
     unlockThreshold.current = Math.max(96, pointerY * UNLOCK_PROGRESS);
     viewportHeight.current = Math.max(360, window.innerHeight);
     currentOffset.current = 0;
