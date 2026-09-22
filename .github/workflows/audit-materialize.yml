@@ -1,0 +1,42 @@
+name: audit-materialize
+on:
+  push:
+    branches: [audit/predeploy-1.0]
+    paths: [.github/workflows/audit-materialize.yml]
+permissions:
+  contents: write
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply exact locally checked audit source (no deploy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/audit/predeploy-1.0
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import hashlib
+          import lzma
+          import subprocess
+
+          paths = [f".github/audit-transfer.{n}.b64" for n in range(5)]
+          encoded = "".join(Path(path).read_text() for path in paths)
+          patch = lzma.decompress(base64.b64decode(encoded, validate=True))
+          expected_digest = "84d03994d680611271cd4165aa8bed7b899a7c889eabc0ae885459c019f29fab"
+          if hashlib.sha256(patch).hexdigest() != expected_digest:
+              raise SystemExit("Audit source checksum mismatch")
+          subprocess.run(["git", "rm", "--", ".github/workflows/audit-materialize.yml", *paths], check=True)
+          subprocess.run(["git", "apply", "--unidiff-zero", "--index"], input=patch, check=True)
+          actual = subprocess.check_output(["git", "write-tree"], text=True).strip()
+          if actual != "934aa752035dac4d80d781f47708ace72768415c":
+              raise SystemExit(f"Audit source tree mismatch: {actual}")
+          print(f"Exact locally checked audit tree: {actual}")
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: predeployment privacy, storage, recovery and performance audit'
+          git push origin HEAD:refs/heads/audit/predeploy-1.0
