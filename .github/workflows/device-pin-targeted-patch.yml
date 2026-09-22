@@ -1,0 +1,49 @@
+name: device-pin-targeted-patch
+on:
+  push:
+    branches: [ops/device-pin-targeted-patch]
+permissions:
+  contents: write
+jobs:
+  patch-feature-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/device-pin-login
+      - name: Verify expected parent and apply only two reviewed replacements
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = f43b60015bf06cf3c7efa4e5f550fdc7797cc640
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          root = Path('apps/web/features/messenger')
+          expected = {'api.ts': '5bc07af0c357f2ea52664149504d0022cb751a4e', 'conversation-view.tsx': '9a7d09b904b5425ea3062b7a162e808c2afc8c7a'}
+          for name, digest in expected.items():
+              raw = (root / name).read_bytes()
+              assert hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest() == digest, name
+          api = root / 'api.ts'
+          api.write_text('import { privateFetch as fetch } from "./device-access";\n\n' + api.read_text())
+          view = root / 'conversation-view.tsx'
+          text = view.read_text()
+          start = text.index('{message.assets.map((asset) => asset.mime_type.startsWith("image/") ? (')
+          end = text.index('              {message.body &&', start)
+          original = text[start:end]
+          assert 'className="image-attachment"' in original and 'className="file-attachment"' in original
+          text = text[:start] + '{message.assets.map((asset) => <ProtectedAttachment key={asset.id} asset={asset} voice={message.type === "voice"} />)}\n' + text[end:]
+          text = text.replace('import { uploadAsset } from "./uploads";', 'import { uploadAsset } from "./uploads";\nimport { ProtectedAttachment } from "./protected-attachment";')
+          assert text.count('  formatBytes,\n') == 1
+          text = text.replace('  formatBytes,\n', '')
+          view.write_text(text)
+          PY
+          git diff --check
+          test "$(git diff --name-only | wc -l)" -eq 2
+          git diff --stat
+          git config user.name 'Sudoku implementation workflow'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/features/messenger/api.ts apps/web/features/messenger/conversation-view.tsx
+          git commit -m 'feat: route private requests and legacy attachments through device access boundary'
+          git push origin HEAD:feat/device-pin-login
