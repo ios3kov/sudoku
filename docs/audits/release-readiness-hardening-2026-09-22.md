@@ -71,7 +71,7 @@ No RR-005/006/007 workaround is accepted. They remain explicit blockers for the 
 
 ## Review framework
 
-Security/privacy review is mapped pragmatically to applicable OWASP ASVS areas: authentication/session management, access control, input/file handling, API/browser origin boundaries, cryptography/key lifecycle, logging/privacy, configuration and dependency supply chain. This is an engineering review, not a third-party certification.
+Security/privacy review is mapped pragmatically to the applicable areas of OWASP ASVS v5.0.0 (the current stable release at audit time): authentication/session management, access control, input/file handling, API/browser origin boundaries, cryptography/key lifecycle, logging/privacy, configuration and dependency supply chain. This is an engineering review, not a third-party certification.
 
 Performance distinguishes existing micro/profile evidence from the new DB-backed CI load/soak evidence. CI runner numbers are regression budgets, not production capacity claims.
 
