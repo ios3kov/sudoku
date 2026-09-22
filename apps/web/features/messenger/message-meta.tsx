@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { deliveryLabel } from "@sudoku/domain";
 
 export function MessageMeta({ createdAt, sequence, own, peerReads, edited = false }: {
@@ -7,10 +8,15 @@ export function MessageMeta({ createdAt, sequence, own, peerReads, edited = fals
   peerReads: readonly number[];
   edited?: boolean;
 }) {
-  const time = createdAt && Number.isFinite(Date.parse(createdAt)) ? new Date(createdAt) : null;
+  // Metadata re-renders with the composer/receipts. ICU formatting is expensive
+  // on mobile; unchanged timestamps must not be formatted on every keystroke.
+  const time = useMemo(() => {
+    if (!createdAt || !Number.isFinite(Date.parse(createdAt))) return null;
+    return new Date(createdAt).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  }, [createdAt]);
   return (
     <small className="message-time">
-      {time ? <time dateTime={createdAt!}>{time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time> : null}
+      {time ? <time dateTime={createdAt!}>{time}</time> : null}
       {edited ? <span>{time ? " · " : ""}edited</span> : null}
       {own ? <span className="message-delivery">{time || edited ? " · " : ""}{deliveryLabel(sequence, peerReads)}</span> : null}
     </small>

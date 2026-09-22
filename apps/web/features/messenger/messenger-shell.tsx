@@ -9,6 +9,7 @@ import { EncryptedConversationView } from "./encrypted-conversation-view";
 import { conversationInitials, conversationTitle } from "./chat-utils";
 import { NewChat } from "./new-chat";
 import { clearPending } from "./outbox";
+import { concealRevokedSession } from "./conceal-revoked-session";
 import { RealtimeClient } from "./realtime";
 import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
@@ -45,6 +46,21 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
+  const concealCallbacks = useRef({onHide, onLoggedOut});
+  useEffect(() => { concealCallbacks.current = {onHide, onLoggedOut}; }, [onHide, onLoggedOut]);
+  const revokeLocalSession = useCallback(() => {
+    realtimeRef.current?.stop();
+    const adapter = e2eeRef.current;
+    e2eeRef.current = null;
+    void concealRevokedSession({
+      conceal: () => {
+        concealCallbacks.current.onLoggedOut();
+        concealCallbacks.current.onHide();
+      },
+      clearProtocol: async () => { await adapter?.clearLocalState(); },
+      clearOutbox: clearPending,
+    });
+  }, []);
 
   const loadConversations = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -188,14 +204,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         setConnectionState("reconnecting");
         if (event.code !== 4401) return;
 
-        realtime.stop();
-        void (async () => {
-          await e2eeRef.current?.clearLocalState().catch(() => undefined);
-          await clearPending().catch(() => undefined);
-          e2eeRef.current = null;
-          onLoggedOut();
-          onHide();
-        })();
+        revokeLocalSession();
       },
       onEvent: (event) => {
         setLatestEvent(event);
@@ -273,7 +282,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       realtimeRef.current = null;
       setRealtimeClient(null);
     };
-  }, [acknowledgeRead, loadConversations, reconcileDeviceChange, user.id]);
+  }, [acknowledgeRead, loadConversations, reconcileDeviceChange, revokeLocalSession, user.id]);
 
   async function enablePush() {
     setPushState("enabling");
@@ -565,14 +574,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         {user.is_admin && showInvite ? <AdminInvite onClose={() => setShowInvite(false)} /> : null}
         {showDevices ? <DeviceSessions
           onClose={() => setShowDevices(false)}
-          onCurrentRevoked={() => {
-            void (async () => {
-              await e2eeRef.current?.clearLocalState().catch(() => undefined);
-              await clearPending().catch(() => undefined);
-              onLoggedOut();
-              onHide();
-            })();
-          }}
+          onCurrentRevoked={revokeLocalSession}
         /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">

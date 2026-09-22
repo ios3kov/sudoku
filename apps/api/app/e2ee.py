@@ -1350,12 +1350,27 @@ async def list_transport_events(
         )
     ).scalars().all()
 
+    # Resolve only IDs selected by the authorized feed above. Keep its ordering,
+    # but avoid one database round trip per event during history catch-up.
+    message_ids = [row.message_id for row in rows if row.kind == "message" and row.message_id is not None]
+    control_ids = [row.control_event_id for row in rows if row.kind == "mls_control" and row.control_event_id is not None]
+    messages_by_id = {}
+    controls_by_id = {}
+    if message_ids:
+        messages = (await db.execute(select(Message).where(
+            Message.id.in_(message_ids), Message.conversation_id == conversation_id,
+        ))).scalars().all()
+        messages_by_id = {message.id: message for message in messages}
+    if control_ids:
+        controls = (await db.execute(select(MlsControlEvent).where(
+            MlsControlEvent.id.in_(control_ids), MlsControlEvent.conversation_id == conversation_id,
+        ))).scalars().all()
+        controls_by_id = {control.id: control for control in controls}
+
     output: list[dict] = []
     for row in rows:
         if row.kind == "message" and row.message_id is not None:
-            message = (
-                await db.execute(select(Message).where(Message.id == row.message_id))
-            ).scalar_one_or_none()
+            message = messages_by_id.get(row.message_id)
             if message is None:
                 continue
             output.append(
@@ -1372,13 +1387,7 @@ async def list_transport_events(
             continue
 
         if row.kind == "mls_control" and row.control_event_id is not None:
-            control = (
-                await db.execute(
-                    select(MlsControlEvent).where(
-                        MlsControlEvent.id == row.control_event_id
-                    )
-                )
-            ).scalar_one_or_none()
+            control = controls_by_id.get(row.control_event_id)
             if control is None:
                 continue
             output.append(
