@@ -3,8 +3,11 @@ import asyncio
 import json
 import statistics
 import time
+import uuid
 
 import httpx
+from app.db import SessionFactory
+from app.models import Conversation, ConversationMember
 
 
 async def main() -> None:
@@ -26,6 +29,28 @@ async def main() -> None:
             },
         )
         response.raise_for_status()
+        user_id = uuid.UUID(response.json()["id"])
+
+        # Exercise a realistically large conversation list without consuming
+        # public API create-rate limits. The CI database is disposable.
+        async with SessionFactory() as db:
+            for index in range(200):
+                conversation = Conversation(
+                    type="group",
+                    title=f"Load profile {index:03d}",
+                    created_by=user_id,
+                    encryption_required=True,
+                    e2ee_ready=True,
+                )
+                db.add(conversation)
+                await db.flush()
+                db.add(ConversationMember(
+                    conversation_id=conversation.id,
+                    user_id=user_id,
+                    role="owner",
+                    e2ee_state="active",
+                ))
+            await db.commit()
 
         latencies: list[float] = []
         errors: list[int] = []
