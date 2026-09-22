@@ -18,7 +18,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "Production env file not found: $ENV_FILE" >&2
   exit 1
 fi
-if [[ ! -f "$BACKUP_DIR/postgres.dump" || ! -f "$BACKUP_DIR/SHA256SUMS" ]]; then
+if [[ ! -f "$BACKUP_DIR/postgres.dump" || ! -f "$BACKUP_DIR/SHA256SUMS" || ! -f "$BACKUP_DIR/manifest.txt" || ! -d "$BACKUP_DIR/objects" ]]; then
   echo "Backup is incomplete: $BACKUP_DIR" >&2
   exit 1
 fi
