@@ -1,0 +1,9 @@
+2026-09-22T06:48:02Z
+Checker source: ec557c2827b0d2b5329425016df3dfa8ddaf4f71
+The checker SHA does not identify the running production version.
+[smoke] DNS
+[smoke] HTTPS application
+[smoke] API readiness
+[smoke] asset TLS endpoint
+[smoke] HTTP redirects
+[smoke] live edge checks passed for sudoku.moscow

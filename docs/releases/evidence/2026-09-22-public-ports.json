@@ -1,0 +1,19 @@
+{
+  "checked_utc": "2026-09-22T06:48:15.243357+00:00",
+  "source": "GitHub hosted runner, not the administrator SSH source",
+  "host": "185.31.167.36",
+  "ports": {
+    "22": "timeout",
+    "80": "reachable",
+    "443": "reachable",
+    "3000": "timeout",
+    "5432": "timeout",
+    "6379": "timeout",
+    "8000": "timeout",
+    "9000": "timeout",
+    "9001": "timeout"
+  },
+  "unexpected_reachable": [],
+  "required_unreachable": [],
+  "note": "Timeouts indicate non-reachability from this runner, not proof of firewall configuration."
+}
