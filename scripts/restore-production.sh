@@ -31,12 +31,20 @@ fi
 compose=(docker compose --env-file "$ENV_FILE" -f compose.yaml -f compose.production.yaml)
 
 restart_apps() {
-  "${compose[@]}" up -d api worker beat web caddy >/dev/null 2>&1 || true
+  "${compose[@]}" up -d api worker beat web caddy >/dev/null
 }
-trap restart_apps EXIT
+
+restore_failed() {
+  status=$?
+  trap - EXIT
+  echo "[restore] FAILED after entering maintenance mode; application services remain stopped." >&2
+  echo "[restore] Inspect PostgreSQL and object-store state, then recover explicitly before restarting traffic." >&2
+  exit "$status"
+}
 
 echo "[restore] entering maintenance mode"
 "${compose[@]}" stop caddy web api worker beat >/dev/null
+trap restore_failed EXIT
 "${compose[@]}" up -d postgres minio minio-init >/dev/null
 
 echo "[restore] PostgreSQL"
@@ -52,6 +60,6 @@ echo "[restore] encrypted object store"
     mc mirror --overwrite /backup "local/$S3_BUCKET"
   '
 
-trap - EXIT
 restart_apps
+trap - EXIT
 echo "[restore] complete"
