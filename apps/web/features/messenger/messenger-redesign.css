@@ -51,7 +51,7 @@
   color:#0f172a;
 }
 .minimal-list-heading span{
-  color:#94a3b8;
+  color:#5f6f84;
   font-size:11px;
   line-height:1.2;
 }
@@ -71,7 +71,7 @@
   line-height:1!important;
 }
 .minimal-header-action:disabled{
-  color:#94a3b8!important;
+  color:#5f6f84!important;
   background:#f8fafc!important;
 }
 .minimal-chat-list{
@@ -191,7 +191,7 @@
   letter-spacing:-.025em;
 }
 .private-header p{
-  color:#94a3b8;
+  color:#5f6f84;
 }
 .auth-form{
   gap:12px;
@@ -250,7 +250,7 @@
 }
 .messenger-topbar span,
 .chat-header span{
-  color:#94a3b8;
+  color:#5f6f84;
   font-size:11px;
 }
 .back-button{
@@ -327,11 +327,11 @@
 }
 .message-time{
   margin-top:5px;
-  color:#94a3b8;
+  color:#5f6f84;
   font-size:10px;
 }
 .own .message-time{
-  color:rgba(255,255,255,.72);
+  color:rgba(255,255,255,.92);
 }
 .message-more-button{
   width:34px;
@@ -339,7 +339,7 @@
   border:0;
   border-radius:50%;
   background:transparent;
-  color:#94a3b8;
+  color:#5f6f84;
 }
 .message-more-button:hover{
   background:#f1f5f9;
@@ -603,7 +603,7 @@
   border:1px solid rgba(15,23,42,.06);
   border-radius:14px;
   background:#f8fafc;
-  color:#94a3b8;
+  color:#5f6f84;
 }
 .minimal-conversation-search input{
   min-width:0;
@@ -674,7 +674,7 @@
 }
 .settings-header span{
   margin-top:3px;
-  color:#94a3b8;
+  color:#5f6f84;
   font-size:11px;
 }
 .settings-header button{
@@ -705,7 +705,7 @@
   text-align:left;
 }
 .message-search-results small{
-  color:#94a3b8;
+  color:#5f6f84;
 }
 @keyframes messenger-drawer-in{
   from{opacity:0;transform:translate3d(24px,0,0)}
@@ -828,7 +828,7 @@
   margin:0;
   padding:18px 4px;
   text-align:center;
-  color:#94a3b8;
+  color:#5f6f84;
 }
 .directory-list{
   min-height:96px;
@@ -864,7 +864,7 @@
 .member-search-hint{
   margin:0;
   padding:8px 2px;
-  color:#94a3b8;
+  color:#5f6f84;
   font-size:11px;
 }
 
