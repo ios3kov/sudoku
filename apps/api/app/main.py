@@ -10,8 +10,10 @@ from .db import engine, get_db
 from .middleware import RequestObservabilityMiddleware, SameOriginMutationMiddleware
 from .observability import configure_structured_logging, configure_telemetry
 from .routes.auth import router as auth_router
+from .routes.device_access import router as device_access_router
 from .routes.messaging import router as messaging_router
 from .routes.assets import router as assets_router
+from .routes.asset_links import router as asset_links_router
 from .routes.push import router as push_router
 from .realtime import router as realtime_router
 from .e2ee import router as e2ee_router
@@ -27,8 +29,10 @@ app = FastAPI(title="Sudoku API", version="0.1.0", docs_url=None, redoc_url=None
 app.add_middleware(RequestObservabilityMiddleware)
 app.add_middleware(SameOriginMutationMiddleware)
 app.include_router(auth_router)
+app.include_router(device_access_router)
 app.include_router(messaging_router)
 app.include_router(assets_router)
+app.include_router(asset_links_router)
 app.include_router(push_router)
 app.include_router(realtime_router)
 app.include_router(e2ee_router)

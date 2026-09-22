@@ -13,6 +13,7 @@ from sqlalchemy import select
 
 from .config import get_settings
 from .db import SessionFactory
+from .device_pin import DevicePinLocked, pin_allows
 from .metrics import websocket_connection_delta
 from .models import ConversationMember, Session, User
 from .security import hash_secret
@@ -24,6 +25,20 @@ _parsed_origin = urlparse(settings.public_origin)
 EXPECTED_ORIGIN = f"{_parsed_origin.scheme}://{_parsed_origin.netloc}"
 SESSION_CHECK_SECONDS = 30
 MAX_CLIENT_FRAME_CHARS = 4096
+
+
+def websocket_unlock_token(websocket: WebSocket) -> str | None:
+    # Never carry credentials in URLs. Echo only the public protocol name.
+    protocols = websocket.headers.get("sec-websocket-protocol", "").split(",")
+    matches = [p.strip()[len("sudoku-unlock."):] for p in protocols if p.strip().startswith("sudoku-unlock.")]
+    return matches[0] if len(matches) == 1 and 32 <= len(matches[0]) <= 128 else None
+
+
+async def accept_socket(websocket: WebSocket) -> None:
+    if "sudoku.v1" in [p.strip() for p in websocket.headers.get("sec-websocket-protocol", "").split(",")]:
+        await websocket.accept(subprotocol="sudoku.v1")
+    else:
+        await websocket.accept()
 
 
 async def authenticate_websocket(websocket: WebSocket) -> tuple[User, uuid.UUID] | None:
@@ -43,10 +58,12 @@ async def authenticate_websocket(websocket: WebSocket) -> tuple[User, uuid.UUID]
                 )
             )
         ).first()
+        if row and not await pin_allows(db, row[0].id, websocket_unlock_token(websocket)):
+            raise DevicePinLocked()
         return (row[1], row[0].id) if row else None
 
 
-async def session_still_valid(session_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+async def session_still_valid(session_id: uuid.UUID, user_id: uuid.UUID, unlock_token: str | None = None) -> bool:
     async with SessionFactory() as db:
         value = (
             await db.execute(
@@ -61,6 +78,8 @@ async def session_still_valid(session_id: uuid.UUID, user_id: uuid.UUID) -> bool
                 )
             )
         ).scalar_one_or_none()
+        if value is not None and not await pin_allows(db, session_id, unlock_token):
+            raise DevicePinLocked()
         return value is not None
 
 
@@ -98,13 +117,19 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4403)
         return
 
-    authenticated = await authenticate_websocket(websocket)
+    try:
+        authenticated = await authenticate_websocket(websocket)
+    except DevicePinLocked:
+        await accept_socket(websocket)
+        await websocket.close(code=4423)
+        return
     if authenticated is None:
         await websocket.close(code=4401)
         return
 
     user, session_id = authenticated
-    await websocket.accept()
+    unlock_token = websocket_unlock_token(websocket)
+    await accept_socket(websocket)
     websocket_connection_delta(1)
 
     pubsub = redis.pubsub()
@@ -123,10 +148,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     if event.get("type") == "message":
                         # A client can withhold application pings. Never rely on
                         # client cooperation to revoke server-to-client access.
-                        if not await session_still_valid(session_id, user.id):
+                        if not await session_still_valid(session_id, user.id, unlock_token):
                             await websocket.close(code=4401)
                             return
                         await websocket.send_text(str(event["data"]))
+            except DevicePinLocked:
+                await websocket.close(code=4423)
             except Exception:
                 # Authentication-store or forwarding failure is fail-closed.
                 await websocket.close(code=1011)
@@ -138,7 +165,7 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 raw = await asyncio.wait_for(websocket.receive_text(), timeout=SESSION_CHECK_SECONDS)
             except TimeoutError:
-                if not await session_still_valid(session_id, user.id):
+                if not await session_still_valid(session_id, user.id, unlock_token):
                     await websocket.close(code=4401)
                     break
                 continue
@@ -154,7 +181,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             if payload.get("type") == "ping":
-                if not await session_still_valid(session_id, user.id):
+                if not await session_still_valid(session_id, user.id, unlock_token):
                     await websocket.close(code=4401)
                     break
                 await redis.set(presence_key, "1", ex=70)
@@ -163,7 +190,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if payload.get("type") not in {"typing.started", "typing.stopped"}:
                 continue
-            if not await session_still_valid(session_id, user.id):
+            if not await session_still_valid(session_id, user.id, unlock_token):
                 await websocket.close(code=4401)
                 break
 
@@ -179,6 +206,8 @@ async def websocket_endpoint(websocket: WebSocket):
             except (TypeError, ValueError):
                 continue
             await publish_typing(user, conversation_id, str(payload["type"]))
+    except DevicePinLocked:
+        await websocket.close(code=4423)
     except WebSocketDisconnect:
         pass
     finally:

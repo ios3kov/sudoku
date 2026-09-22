@@ -1,0 +1,8 @@
+.device-access-choice { display: flex !important; flex-direction: row !important; align-items: center; gap: 10px; min-height: 44px; }
+.device-access-choice input { width: 20px !important; height: 20px; flex: 0 0 20px; }
+.device-access-panel { padding: 16px; border-bottom: 1px solid #e2e8f0; }
+.device-access-panel h3 { margin: 0 0 8px; }
+.device-access-panel p { overflow-wrap: anywhere; }
+.device-pin-input { letter-spacing: .35em; font-size: 20px !important; }
+.device-access-panel button { min-height: 44px; }
+.device-access-help { font-size: 14px; line-height: 1.5; color: #475569; }

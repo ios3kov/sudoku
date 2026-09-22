@@ -164,7 +164,7 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   ).toBe(0);
 
   await unlockPrivate(page);
-  const email = page.getByLabel("Email");
+  const email = page.getByLabel("Email", { exact: true });
   await expect(email).toBeVisible({ timeout: 30_000 });
   await expect(email).toHaveCSS("font-size", "16px");
   const viewportMeta = await page.locator('meta[name="viewport"]').getAttribute("content");
@@ -180,9 +180,11 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await email.focus();
   await expect(email).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByLabel("Password")).toBeFocused();
+  await expect(page.getByLabel("Password", { exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeFocused();
+  await expect(page.getByRole("checkbox", { name: "Remember email on this device", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeFocused();
 
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
   await expect(page.getByRole("heading", { name: "Sudoku" })).toBeVisible();

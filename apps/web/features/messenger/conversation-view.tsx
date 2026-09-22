@@ -6,6 +6,7 @@ import { enqueuePending, listPending, removePending } from "./outbox";
 import type { RealtimeClient } from "./realtime";
 import type { Conversation, CurrentUser, Message, PendingMessage, RealtimeEvent } from "./types";
 import { uploadAsset } from "./uploads";
+import { ProtectedAttachment } from "./protected-attachment";
 import { GroupSettings } from "./group-settings";
 import { ConversationPreferences } from "./conversation-preferences";
 import { MessageSearch } from "./message-search";
@@ -19,7 +20,6 @@ import { MessageMeta } from "./message-meta";
 import { MessageTimeline, type MessageTimelineHandle } from "./message-timeline";
 import {
   conversationTitle,
-  formatBytes,
   formatDuration,
   voiceFileExtension,
 } from "./chat-utils";
@@ -640,21 +640,7 @@ function MessageBubble({
           {replyMessage ? <div className="reply-preview">{previewMessage(replyMessage)}</div> : null}
           {deleted ? <p>Message deleted</p> : (
             <>
-              {message.assets.map((asset) => asset.mime_type.startsWith("image/") ? (
-                <a className="image-attachment" href={asset.content_url} target="_blank" rel="noreferrer" key={asset.id}>
-                  <img src={asset.content_url} alt={asset.filename} loading="lazy" />
-                </a>
-              ) : message.type === "voice" && asset.mime_type.startsWith("audio/") ? (
-                <div className="voice-attachment" key={asset.id}>
-                  <audio controls preload="metadata" src={asset.content_url} />
-                </div>
-              ) : (
-                <a className="file-attachment" href={asset.content_url} target="_blank" rel="noreferrer" key={asset.id}>
-                  <span>File</span>
-                  <strong>{asset.filename}</strong>
-                  <small>{formatBytes(asset.size_bytes)}</small>
-                </a>
-              ))}
+              {message.assets.map((asset) => <ProtectedAttachment key={asset.id} asset={asset} voice={message.type === "voice"} />)}
               {message.body && (message.type === "text" || message.assets.length === 0) ? <p>{message.body}</p> : null}
             </>
           )}

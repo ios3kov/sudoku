@@ -8,6 +8,8 @@ from sqlalchemy import select
 USERS = (
     ("browser-owner@example.com", "Browser Owner"),
     ("browser-peer@example.com", "Browser Peer"),
+    ("browser-pin-member@example.com", "PIN Member"),
+    ("browser-pin-admin@example.com", "PIN Admin"),
 )
 PASSWORD = "browser acceptance password"
 
@@ -24,7 +26,7 @@ async def main() -> None:
                     display_name=display_name,
                     password_hash=hash_password(PASSWORD),
                     status="active",
-                    is_admin=False,
+                    is_admin=email == "browser-pin-admin@example.com",
                 )
                 db.add(user)
             else:

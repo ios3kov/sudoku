@@ -1,3 +1,5 @@
+import { privateFetch as fetch } from "./device-access";
+
 import type {
   AssetSummary,
   EncryptedAttachmentMetadata,

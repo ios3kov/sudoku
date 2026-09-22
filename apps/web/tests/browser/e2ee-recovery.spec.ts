@@ -44,11 +44,11 @@ async function unlockPrivate(page: Page) {
 
 async function login(page: Page, email: string) {
   await unlockPrivate(page);
-  const emailInput = page.getByLabel("Email");
+  const emailInput = page.getByLabel("Email", { exact: true });
 
   await expect(emailInput).toBeVisible({ timeout: 30_000 });
   await emailInput.fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
 
   const signIn = page.getByRole("button", { name: "Sign in", exact: true });
   await expect(signIn).toBeEnabled();
