@@ -2,8 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = "browser acceptance password";
 
-async function reveal(page: Page) {
-  await page.goto("/");
+async function revealCurrentPage(page: Page) {
   const five = page.getByRole("button", { name: "5", exact: true });
   await expect(five).toBeVisible();
   const box = await five.boundingBox();
@@ -12,6 +11,11 @@ async function reveal(page: Page) {
   await five.dispatchEvent("pointerdown", { clientX: x, clientY: y, pointerId: 1, pointerType: "touch", isPrimary: true, buttons: 1 });
   await five.dispatchEvent("pointermove", { clientX: x + 1, clientY: y * .45, pointerId: 1, pointerType: "touch", isPrimary: true, buttons: 1 });
   await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "");
+}
+
+async function reveal(page: Page) {
+  await page.goto("/");
+  await revealCurrentPage(page);
 }
 
 async function passwordLogin(page: Page, email: string) {
@@ -46,7 +50,8 @@ for (const role of ["member", "admin"]) {
 
     // A navigation/reload must lock the private area without poisoning the
     // persisted OpenMLS state. PIN unlock must then fully bootstrap E2EE.
-    await reveal(page);
+    await page.reload();
+    await revealCurrentPage(page);
     await expect(page.getByLabel("Device PIN", { exact: true })).toBeVisible();
     await expect(page.getByText("Messages", { exact: true })).toHaveCount(0);
     await expect(page.locator(".messenger-reveal-preview")).toHaveCount(0);
@@ -103,7 +108,8 @@ test("Not now enters the app without enabling a device PIN", async ({ page }) =>
   const storage = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } }));
   expect(JSON.stringify(storage)).not.toContain(PASSWORD);
 
-  await reveal(page);
+  await page.reload();
+  await revealCurrentPage(page);
   await expect(page.getByText("Messages", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Device PIN", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toHaveCount(0);
