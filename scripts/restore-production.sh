@@ -60,6 +60,10 @@ echo "[restore] encrypted object store"
     mc mirror --overwrite /backup "local/$S3_BUCKET"
   '
 
-restart_apps
 trap - EXIT
+if ! restart_apps; then
+  echo "[restore] data restore completed, but application services failed to restart." >&2
+  echo "[restore] Inspect service health before restoring traffic." >&2
+  exit 1
+fi
 echo "[restore] complete"
