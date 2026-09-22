@@ -98,6 +98,8 @@ jobs:
         run: npm --workspace @sudoku/domain run build
       - name: Messenger refresh queue regression
         run: node --experimental-strip-types --test scripts/refresh-queue.test.mjs
+      - name: Release hardening regressions
+        run: node --test scripts/release-hardening.test.mjs
       - name: Web typecheck
         run: npm --workspace @sudoku/web run typecheck
       - name: Web production build
