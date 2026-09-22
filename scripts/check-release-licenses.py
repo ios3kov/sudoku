@@ -25,6 +25,7 @@ def check(label: str, rows: list[tuple[str, str | None]]) -> None:
         "ecosystem": label,
         "packages": len(rows),
         "unknown_license": len(unknown),
+        "unknown_packages": sorted(unknown),
         "forbidden": forbidden,
     }, sort_keys=True))
     if forbidden:
