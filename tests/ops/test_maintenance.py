@@ -1,10 +1,10 @@
 """Exercise production scripts with a fake Docker binary; never touch services."""
 import hashlib
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -43,7 +43,7 @@ if 'pg_dump' in args: sys.stdout.write('test-only dump')
         (self.backup / "SHA256SUMS").write_text("".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  ./{p.relative_to(self.backup)}\n" for p in files))
 
     def run_script(self, name, fail=""):
-        result = subprocess.run(["bash", str(ROOT / "scripts" / name), str(self.backup)], cwd=self.cwd, env={**self.env, "FAIL_STAGE": fail}, text=True, capture_output=True, timeout=10)
+        result = subprocess.run(["bash", str(ROOT / "scripts" / name), str(self.backup)], cwd=self.cwd, env={**self.env, "FAIL_STAGE": fail}, text=True, capture_output=True, timeout=10, check=False)
         log = (self.cwd / "docker.log").read_text() if (self.cwd / "docker.log").exists() else ""
         return result, log
 

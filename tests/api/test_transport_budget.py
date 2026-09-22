@@ -1,11 +1,17 @@
 """Count real SQLAlchemy query construction against a controlled result set."""
+import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
-import uuid
 
 import pytest
 from app import e2ee
-from app.models import Conversation, ConversationMember, ConversationTransportEvent, Message, MlsControlEvent
+from app.models import (
+    Conversation,
+    ConversationMember,
+    ConversationTransportEvent,
+    Message,
+    MlsControlEvent,
+)
 
 
 class Result:

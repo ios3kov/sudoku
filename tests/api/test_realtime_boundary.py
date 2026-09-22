@@ -1,12 +1,12 @@
 """Run the actual endpoint with controlled sockets/auth/pubsub; no user data."""
 import asyncio
+import uuid
 from contextlib import suppress
 from types import SimpleNamespace
-import uuid
 
 import pytest
+from app import realtime
 from fastapi import WebSocketDisconnect
-import app.realtime as realtime
 
 
 class Socket:
