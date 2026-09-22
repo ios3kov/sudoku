@@ -120,28 +120,28 @@ test("an aborted wrapping-key insertion cannot orphan encrypted state", async ({
 test("put and delete promises settle only after transaction complete", async ({ page }) => {
   const result = await page.evaluate(async () => {
     const store = window.__stateStore;
-    const put = IDBObjectStore.prototype.put;
-    const remove = IDBObjectStore.prototype.delete;
-    let putComplete = false;
-    let deleteComplete = false;
-    IDBObjectStore.prototype.put = function(value, key) {
-      const request = put.call(this, value, key);
-      if (this.name === "state") this.transaction.addEventListener("complete", () => { putComplete = true; });
-      return request;
-    };
-    IDBObjectStore.prototype.delete = function(key) {
-      const request = remove.call(this, key);
-      this.transaction.addEventListener("complete", () => { deleteComplete = true; });
-      return request;
+    const native = IDBDatabase.prototype.transaction;
+    const committed = { put: false, delete: false };
+    let operation: "put" | "delete" = "put";
+    IDBDatabase.prototype.transaction = function(storeNames, mode, options) {
+      const tx = native.call(this, storeNames, mode, options);
+      if (tx.mode === "readwrite" && tx.objectStoreNames.contains("state")) {
+        const current = operation;
+        // Register BEFORE the production listener. Native event dispatch may
+        // run promise microtasks between listeners; a later observer is not
+        // evidence that the production completion callback ran too early.
+        tx.addEventListener("complete", () => { committed[current] = true; });
+      }
+      return tx;
     };
     try {
       await store.put("target", new Uint8Array([5]));
-      const putCommitted = putComplete;
+      const putCommitted = committed.put;
+      operation = "delete";
       await store.delete("target");
-      return { putCommitted, deleteCommitted: deleteComplete, remaining: await store.get("target") };
+      return { putCommitted, deleteCommitted: committed.delete, remaining: await store.get("target") };
     } finally {
-      IDBObjectStore.prototype.put = put;
-      IDBObjectStore.prototype.delete = remove;
+      IDBDatabase.prototype.transaction = native;
     }
   });
   expect(result).toEqual({ putCommitted: true, deleteCommitted: true, remaining: null });

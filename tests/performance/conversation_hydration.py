@@ -35,7 +35,10 @@ def load_baseline():
     # Both functions use identical serializers/models; the batch option defaults
     # to the original per-conversation query when the old function calls it.
     scope = dict(vars(messaging))
-    exec(compile(ast.Module(body=[node], type_ignores=[]), "baseline-list", "exec"), scope)
+    # Compile only this named function from the hard-coded, immutable Git SHA.
+    # No caller input, network response or mutable ref is executable here.
+    code = compile(ast.Module(body=[node], type_ignores=[]), "baseline-list", "exec")
+    exec(code, scope)  # noqa: S102 -- reviewed immutable baseline fixture
     return scope["list_conversations"], hashlib.sha256(source.encode()).hexdigest()
 
 
@@ -48,7 +51,10 @@ async def main():
     host = urlsplit(os.environ.get("DATABASE_URL", "")).hostname
     if os.environ.get("SUDOKU_DISPOSABLE_PROFILE") != "YES" or host not in {"localhost", "127.0.0.1", "::1"}:
         raise SystemExit("This mutating profile requires an explicitly disposable loopback database")
-    baseline, source_sha256 = load_baseline()
+    baseline, source_sha256 = await asyncio.to_thread(load_baseline)
+    candidate_sha = (await asyncio.to_thread(
+        subprocess.check_output, ["git", "rev-parse", "HEAD"], text=True,
+    )).strip()
     run = uuid.uuid4().hex
     user_ids = []
     conversation_ids = []
@@ -108,7 +114,7 @@ async def main():
             "profile": "paired-postgresql-conversation-list",
             "baseline_sha": BASELINE,
             "baseline_source_sha256": source_sha256,
-            "candidate_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+            "candidate_sha": candidate_sha,
             "conversations": 200, "members_each": 2, "excluded_pending_each": 1,
             "samples_each": 10, "warmup_pairs": 2, "responses_identical": True,
             "before": {"queries": 201, "median_ms": round(statistics.median(samples["before"]), 3),
