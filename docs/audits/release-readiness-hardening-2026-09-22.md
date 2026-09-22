@@ -82,3 +82,24 @@ Accessibility distinguishes automated semantics/focus/viewport checks from WCAG 
 This hardening branch may merge only after its exact full CI is green and code review finds no open repository-reproducible P0/P1. After merge, post-merge CI must also pass.
 
 Even then, the *full user-defined Release Readiness DoD* remains **not complete** until RR-005/006/007 have real evidence. Do not broaden feature scope after repository hardening closes. Production deploy and production smoke are separate later commands.
+
+
+## Automated verification evidence — PR #34
+
+Verified on commit `16d35ed8c3475391f73685ffadc25477186ff097`, GitHub Actions run `35701106074`:
+
+- Python lint, dependency audit, migrations and API integration: pass (11 API tests).
+- OpenMLS Rust tests/build and RustSec audit: pass.
+- License inventory: pass policy; npm 409 packages (2 unknown are local workspaces), Cargo 193/0 unknown, Python environment 153/9 metadata-unknown. No forbidden AGPL/GPL/SSPL/BUSL license detected by the release policy.
+- npm production audit, UI contract, web lint, domain tests, declarations, refresh regression, release-hardening regressions, typecheck and production build: pass.
+- Encrypted projection: 10,000 events -> **29.30 ms** (budget <1000 ms).
+- Chromium production-mode browser acceptance: **13/13 passed**.
+- Cross-browser public/privacy acceptance: Chromium + Firefox + WebKit **3/3 passed**.
+- 200-conversation authenticated load: 1000 requests, 0 errors, p50 **333.66 ms**, p95 **450.21 ms**, p99 **726.0 ms**, 55.0 req/s (p95 budget <500 ms).
+- 60-second soak: 1191 requests, 0 errors, p95 **126.62 ms**.
+- production operations script validation/preflight: pass.
+- pinned MinIO infrastructure image build: pass.
+- production Compose policy validation: pass.
+- production API/Web image build and non-root-user assertions: pass.
+
+Repository automation is green. This does **not** close RR-005/006/007; those require external real-device/staging/alert evidence.
