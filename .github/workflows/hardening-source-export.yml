@@ -11,12 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 7b4a0fadcef60750d503db2a79d90c5b5b29f766
+          ref: 3c57cfcfa0fb8b06d0c2fdb372653b9f6db11552
           fetch-depth: 0
           persist-credentials: false
-      - name: Export immutable source for isolated behavior verification
+      - name: Export immutable concurrent heads without changing either
         run: |
-          git bundle create /tmp/sudoku-hardening.bundle HEAD
+          git update-ref refs/heads/audit-upstream 24f1152f24e5f9d661866ce30ffafe3ce550cd33
+          git bundle create /tmp/sudoku-hardening.bundle HEAD refs/heads/audit-upstream
           git bundle verify /tmp/sudoku-hardening.bundle
           sha256sum /tmp/sudoku-hardening.bundle > /tmp/sudoku-hardening.sha256
       - uses: actions/upload-artifact@v4
