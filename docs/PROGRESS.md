@@ -4,8 +4,9 @@
 
 2026-09-22. PR #34 remains open. Its behavioral-hardening branch has been
 reconciled with the independently merged audit PR #35 (`24f1152f`) and its
-four-file documentation follow-up PR #36 (`a4da4b0f`). This is not a production
-deployment and does not replace the user's full pre-release acceptance.
+four-file documentation follow-up PR #36 (`a4da4b0f`). The later documentation-only
+commit `21bc4fe9` and its Step 76 access record are also retained. This is not a
+production deployment and does not replace the user's full pre-release acceptance.
 
 Both implementations are retained: shared voice recording, abortable/retryable
 attachments, stale-writer protection in atomic encrypted storage, realtime
@@ -37,6 +38,11 @@ Earlier progress is preserved byte-for-byte in [the upstream historical checkpoi
 The upstream implementation and client-profile evidence remain in [its audit](audits/predeployment-2026-09-22.md).
 Any statement in historical documents about fixed/no-pinch viewport or only the
 next deployment being outstanding is superseded for PR #34 by the active review.
+
+Step 76 records a separately authorized deployment of the upstream application
+`24f1152f`, blocked before server changes by authenticated execution access.
+That record is preserved in [the access handoff](steps/76-deployment-access.md);
+it does not certify or authorize deployment of this unmerged PR #34 candidate.
 
 ## Remaining release boundary
 
