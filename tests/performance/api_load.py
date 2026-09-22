@@ -95,7 +95,7 @@ async def main() -> None:
                 try:
                     item = await client.get("/v1/conversations")
                     soak_errors += int(item.status_code != 200)
-                except Exception:
+                except httpx.HTTPError:
                     soak_errors += 1
                 soak_latencies.append((time.perf_counter() - started) * 1000)
                 soak_count += 1
