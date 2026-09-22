@@ -13,7 +13,7 @@ from ..deps import AuthContext, get_session_context
 from ..device_pin import PIN_LIMIT, UNLOCK_HEADER, SessionPin, forget_unlock, issue_unlock, pin_token_matches
 from ..models import AuditEvent, Session
 from ..rate_limit import enforce_ip_rate_limit, enforce_login_rate_limit, enforce_user_rate_limit
-from ..security import hash_password, verify_password
+from ..security import hash_device_pin, verify_device_pin, verify_password
 
 router = APIRouter(prefix="/v1/auth/device-access", tags=["auth"])
 
@@ -85,7 +85,7 @@ async def configure(
 ):
     code = read_pin(payload.pin) if payload.pin is not None else None
     await check_password(request, auth, payload.password)
-    encoded = await run_in_threadpool(hash_password, code) if code is not None else None
+    encoded = await run_in_threadpool(hash_device_pin, code) if code is not None else None
     current = await current_locked(db, auth)
     pin = await load_pin(db, current)
     if code is None:
@@ -120,7 +120,7 @@ async def unlock(
         raise HTTPException(status_code=409, detail="Device PIN is not enabled")
     if pin.failed_attempts >= PIN_LIMIT:
         raise HTTPException(status_code=429, detail="Password required", headers={"X-PIN-Password-Required": "true"})
-    if not await run_in_threadpool(verify_password, pin.pin_hash, code):
+    if not await run_in_threadpool(verify_device_pin, pin.pin_hash, code):
         pin.failed_attempts += 1
         if pin.failed_attempts >= PIN_LIMIT:
             forget_unlock(pin)
