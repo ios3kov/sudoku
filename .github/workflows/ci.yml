@@ -144,7 +144,7 @@ jobs:
                   raise SystemExit(f"browser acceptance service did not start: {url}")
           PY
           npm --workspace @sudoku/web run test:browser
-          python tests/performance/api_load.py | tee /tmp/api-load-profile.jsonl
+          PYTHONPATH=apps/api python tests/performance/api_load.py | tee /tmp/api-load-profile.jsonl
           npx playwright test --config=apps/web/playwright.cross-browser.config.ts
 
       - name: Retain release performance evidence
