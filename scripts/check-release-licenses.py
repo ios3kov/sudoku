@@ -4,7 +4,12 @@ import subprocess
 from importlib import metadata
 from pathlib import Path
 
-FORBIDDEN = re.compile(r"(^|[^A-Z])(AGPL|GPL|SSPL|BUSL)(-|$)", re.I)
+FORBIDDEN = re.compile(
+    r"(^|[^A-Z])(AGPL|GPL|SSPL|BUSL)(?:[-v0-9.]|$)|"
+    r"GNU (?:AFFERO )?GENERAL PUBLIC LICENSE|SERVER SIDE PUBLIC LICENSE|"
+    r"BUSINESS SOURCE LICENSE",
+    re.I,
+)
 
 
 def check(label: str, rows: list[tuple[str, str | None]]) -> None:
