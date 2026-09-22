@@ -152,7 +152,10 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    command: ["celery", "-A", "app.worker:celery_app", "beat", "--loglevel=INFO"]
+    # Keep scheduler state out of the non-writable application directory.
+    command: ["celery", "-A", "app.worker:celery_app", "beat", "--loglevel=INFO", "--schedule=/var/lib/sudoku-beat/celerybeat-schedule"]
+    volumes:
+      - beat-data:/var/lib/sudoku-beat
     restart: unless-stopped
 
   web:
@@ -181,3 +184,4 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+  beat-data:
