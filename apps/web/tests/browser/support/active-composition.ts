@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { acceptedMessage } from "./accepted-message";
 import type { Conversation } from "../../../features/messenger/types";
 
 type ObservedWindow = Window & { __sudokuE2eRealtimeSocket?: WebSocket };
@@ -31,7 +32,7 @@ export async function verifyActiveComposition(
   async function receiveWhileWriting(label: string, draft: string) {
     await composer.fill(draft);
     await sendText(owner, label);
-    await expect(owner.getByText(label, { exact: true })).toBeVisible();
+    await expect(acceptedMessage(owner, label)).toBeVisible();
     const response = await peer.request.get("/v1/conversations");
     expect(response.ok()).toBe(true);
     const conversations = await response.json() as Conversation[];
@@ -52,7 +53,7 @@ export async function verifyActiveComposition(
         data: JSON.stringify({ type: "message.created", conversation_id: id, payload: { sequence } }),
       }));
     }, { id: conversation.id, sequence: conversation.latest_sequence });
-    await expect(peer.getByText(label, { exact: true })).toBeVisible();
+    await expect(acceptedMessage(peer, label)).toBeVisible();
     await expect(composer).toHaveValue(draft);
   }
 

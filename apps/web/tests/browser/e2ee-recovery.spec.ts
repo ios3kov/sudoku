@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { acceptedMessage } from "./support/accepted-message";
 import { observeRealtimeSocket, verifyActiveComposition } from "./support/active-composition";
 
 const OWNER_EMAIL = "browser-owner@example.com";
@@ -164,7 +165,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await composer.fill("");
 
     await sendText(owner, "persisted before reload");
-    await expect(owner.getByText("persisted before reload", { exact: true })).toBeVisible();
+    await expect(acceptedMessage(owner, "persisted before reload")).toBeVisible();
 
     // UX3 must preserve actual encrypted history and drafts, not only fixture UI.
     await expect(owner.locator(".message-date-separator")).toHaveCount(1);
@@ -182,7 +183,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     // persisted OpenMLS/IndexedDB state by itself.
     await reopenMessenger(peer);
     await openConversation(peer, "Browser Owner");
-    await expect(peer.getByText("persisted before reload", { exact: true })).toBeVisible({
+    await expect(acceptedMessage(peer, "persisted before reload")).toBeVisible({
       timeout: 60_000,
     });
 
@@ -190,7 +191,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     // rather than reconstructed from a one-off Welcome.
     await reopenMessenger(peer);
     await openConversation(peer, "Browser Owner");
-    await expect(peer.getByText("persisted before reload", { exact: true })).toBeVisible();
+    await expect(acceptedMessage(peer, "persisted before reload")).toBeVisible();
     await expect(peer.locator(".message-date-separator")).toHaveCount(1);
 
     // Offline application sends must be encrypted + persisted locally and
@@ -201,13 +202,13 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       .toBeVisible();
     await ownerContext.setOffline(false);
 
-    await expect(owner.locator(".message-bubble:not(.pending)").getByText("queued while offline", { exact: true })).toBeVisible({
+    await expect(acceptedMessage(owner, "queued while offline")).toBeVisible({
       timeout: 60_000,
     });
 
     // Recipient catches up without relying on push/realtime.
     await peer.evaluate(() => window.dispatchEvent(new Event("online")));
-    await expect(peer.getByText("queued while offline", { exact: true })).toBeVisible({
+    await expect(acceptedMessage(peer, "queued while offline")).toBeVisible({
       timeout: 60_000,
     });
 
@@ -244,14 +245,14 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       await expect.poll(() => blockedRequests).toBeGreaterThan(0);
       await expect(peer.getByText("Secure sync is blocked", { exact: true })).toBeVisible();
       await expect(peer.locator("textarea").last()).toBeDisabled();
-      await expect(peer.getByText("persisted before reload", { exact: true })).toBeVisible();
+      await expect(acceptedMessage(peer, "persisted before reload")).toBeVisible();
 
       await peer.unroute(transportPattern);
       await peer.evaluate(() => window.dispatchEvent(new Event("online")));
       await expect(peer.locator("textarea").last()).toBeEnabled({ timeout: 60_000 });
       await expect(peer.getByText("Secure sync is blocked", { exact: true })).toHaveCount(0);
       await sendText(peer, "sent after secure recovery");
-      await expect(peer.getByText("sent after secure recovery", { exact: true })).toBeVisible();
+      await expect(acceptedMessage(peer, "sent after secure recovery")).toBeVisible();
     } finally {
       releaseTransport();
       await peer.unroute(transportPattern);
