@@ -12,37 +12,67 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feat/device-pin-login
-      - name: Complete reviewed integration on the expected feature parent only
+      - name: Canonicalize session response identity without mutating ORM identifiers
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 7aebb8509a2223520936b6bca0fb8cc534eac599
+          test "$(git rev-parse HEAD)" = 3c649edadcecbce70ada55476ac11a1eaf622755
           python3 - <<'PY'
-          import hashlib
           from pathlib import Path
-          root = Path('apps/web/features/messenger')
-          expected = {'push.ts': '09177954e76340283f42d49d0362f775c1c1cf8b', 'uploads.ts': '69964e6972fc7b4affe6b49993fd7a21640f3a12'}
-          for name, digest in expected.items():
-              p = root / name
-              raw = p.read_bytes()
-              assert hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest() == digest, name
-              p.write_text('import { privateFetch as fetch } from "./device-access";\n\n' + raw.decode())
-          p = root / 'device-sessions.tsx'
+          p = Path('apps/api/app/routes/auth.py')
           text = p.read_text()
-          before = 'import { messengerApi } from "./api";'
-          assert text.count(before) == 1 and 'DeviceAccessSettings' not in text
-          text = text.replace(before, before + '\nimport { DeviceAccessSettings } from "./device-access-settings";')
-          before = '      {error ? <p className="form-error">{error}</p> : null}'
-          assert text.count(before) == 1
-          text = text.replace(before, '      <DeviceAccessSettings />\n' + before)
+          start = text.index('@router.get("/sessions",')
+          end = text.index('@router.delete("/sessions/{session_id}"', start)
+          section = text[start:end]
+          assert section.count('id=item.id,') == 1
+          assert section.count('current=item.id == auth.session.id,') == 1
+          section = section.replace('id=item.id,', 'id=uuid.UUID(str(item.id)),')
+          section = section.replace('current=item.id == auth.session.id,', 'current=uuid.UUID(str(item.id)) == uuid.UUID(str(auth.session.id)),')
+          text = text[:start] + section + text[end:]
+          p.write_text(text)
+          p = Path('tests/api/test_device_access.py')
+          text = p.read_text()
+          assert 'test_session_list_canonicalizes_equivalent_uuid_representations' not in text
+          text += '''\n\n@pytest.mark.parametrize("representation", ["uuid", "hyphenated", "hex"])
+          async def test_session_list_canonicalizes_equivalent_uuid_representations(monkeypatch, representation):
+              from app.routes import auth as routes
+
+              sid = uuid.uuid4()
+              observed = {"uuid": sid, "hyphenated": str(sid), "hex": sid.hex}[representation]
+              now = datetime.now(UTC)
+              row = SimpleNamespace(id=observed, device_name="PIN test", created_at=now,
+                                    expires_at=now + timedelta(days=1), revoked_at=None)
+
+              class Result:
+                  def scalars(self):
+                      return self
+
+                  def all(self):
+                      return [row]
+
+              class Database:
+                  async def execute(self, _query):
+                      return Result()
+
+              async def no_rate_limit(*_args):
+                  pass
+
+              monkeypatch.setattr(routes, "enforce_user_rate_limit", no_rate_limit)
+              auth = SimpleNamespace(user=SimpleNamespace(id=uuid.uuid4()), session=SimpleNamespace(id=sid))
+              response = await routes.list_sessions(auth=auth, db=Database())
+              assert len(response) == 1
+              assert str(response[0].id) == str(sid)
+              assert response[0].current is True
+              assert row.id == observed  # Never mutate database identity as a display fix.
+          '''
           p.write_text(text)
           PY
+          python3 -m compileall -q apps/api/app/routes/auth.py tests/api/test_device_access.py
           git diff --check
-          test "$(git diff --name-only | wc -l)" -eq 3
+          test "$(git diff --name-only | wc -l)" -eq 2
           git diff --stat
-          node --experimental-strip-types --test scripts/device-access.test.mjs
           git config user.name 'Sudoku implementation workflow'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add apps/web/features/messenger/push.ts apps/web/features/messenger/uploads.ts apps/web/features/messenger/device-sessions.tsx
-          git commit -m 'feat: wire PIN access into Devices, attachments and push requests'
+          git add apps/api/app/routes/auth.py tests/api/test_device_access.py
+          git commit -m 'fix: canonicalize current-session identity in device list responses'
           git push origin HEAD:feat/device-pin-login
