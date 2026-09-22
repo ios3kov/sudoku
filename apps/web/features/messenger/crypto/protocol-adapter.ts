@@ -36,6 +36,7 @@ export interface EncryptedTransportRecord {
   id: string;
   senderId: string;
   sequence: number;
+  createdAt?: string;
   envelope: E2eeEnvelope;
 }
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
+import { applyReadReceipt } from "./conversation-receipts";
 import { AdminInvite } from "./admin-invite";
 import { ConversationView } from "./conversation-view";
 import { EncryptedConversationView } from "./encrypted-conversation-view";
@@ -148,6 +149,15 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     };
   }, [reconcileDeviceChange, user.id]);
 
+  const acknowledgeRead = useCallback((conversationId: string, sequence: number, readerId = user.id) => {
+    setConversations((current) => {
+      const next = current.map((item) => item.id === conversationId
+        ? applyReadReceipt(item, user.id, readerId, sequence) : item);
+      conversationsRef.current = next;
+      return next;
+    });
+  }, [user.id]);
+
   useEffect(() => {
     const realtime = new RealtimeClient({
       onOpen: () => {
@@ -189,6 +199,12 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       },
       onEvent: (event) => {
         setLatestEvent(event);
+        if (event.type === "receipt.updated" && event.conversation_id && event.payload) {
+          const receipt = event.payload as { user_id?: unknown; last_read_sequence?: unknown };
+          if (typeof receipt.user_id === "string" && typeof receipt.last_read_sequence === "number") {
+            acknowledgeRead(event.conversation_id, receipt.last_read_sequence, receipt.user_id);
+          }
+        }
         if (["conversation.created", "conversation.updated", "conversation.members_added", "conversation.member_role_updated", "conversation.member_removed"].includes(event.type)) void loadConversations();
         if (
           (
@@ -257,7 +273,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       realtimeRef.current = null;
       setRealtimeClient(null);
     };
-  }, [loadConversations, reconcileDeviceChange, user.id]);
+  }, [acknowledgeRead, loadConversations, reconcileDeviceChange, user.id]);
 
   async function enablePush() {
     setPushState("enabling");
@@ -397,6 +413,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
               onBack={() => setSelectedId(null)}
               onHide={onHide}
               onConversationUpdated={updateConversation}
+              onReadAcknowledged={acknowledgeRead}
               onConversationLeft={() => {
                 setSelectedId(null);
                 void loadConversations();
@@ -435,6 +452,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
       <main className="messenger-page">
         <section className="messenger-shell minimal-messenger-frame messenger-runtime-shell">
           <ConversationView
+            key={selected.id}
             conversation={selected}
             user={user}
             realtime={realtimeClient}
@@ -443,6 +461,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             onBack={() => setSelectedId(null)}
             onHide={onHide}
             onConversationUpdated={updateConversation}
+              onReadAcknowledged={acknowledgeRead}
             onConversationLeft={() => {
               setSelectedId(null);
               void loadConversations();

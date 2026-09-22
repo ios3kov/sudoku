@@ -186,6 +186,7 @@ export type MlsTransportEvent =
       message_id: string;
       sender_user_id: string;
       message_sequence: number;
+      created_at?: string;
       envelope: E2eeEnvelope;
     }
   | {

@@ -873,6 +873,15 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     ).length;
   }
 
+  pendingApplicationMessages(conversationId: string): Array<{ id: string; body: string | null; messageType: "text" | "image" | "file" | "voice" }> {
+    this.assertReady();
+    return this.localState!.pendingApplicationSends.flatMap((item) =>
+      item.conversationId === conversationId && item.event.kind === "message"
+        ? [{ id: item.clientId, body: item.event.body, messageType: item.event.messageType }]
+        : [],
+    );
+  }
+
   async decryptAndJournal(
     conversationId: string,
     record: EncryptedTransportRecord,
@@ -904,6 +913,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
           eventId: record.id,
           senderId: record.senderId,
           sequence: record.sequence,
+          ...(record.createdAt ? { createdAt: record.createdAt } : {}),
           event: toDomainEvent(decrypted.event),
         });
         this.localState!.eventJournal[conversationId] = journal;
@@ -1102,6 +1112,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     if (existing) {
       const snapshot = this.snapshotRuntime();
       try {
+        if (!existing.createdAt && item.created_at) existing.createdAt = item.created_at;
         this.localState!.transportCursors[conversationId] = item.transport_sequence;
         await this.persistCurrentState();
       } catch (error) {
@@ -1129,6 +1140,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         eventId: item.message_id,
         senderId: item.sender_user_id,
         sequence: item.message_sequence,
+        ...(item.created_at ? { createdAt: item.created_at } : {}),
         event: toDomainEvent(decrypted.event),
       });
       this.localState!.eventJournal[conversationId] = journal;
@@ -1585,6 +1597,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
             eventId: response.id,
             senderId: response.sender_id,
             sequence: response.sequence,
+            createdAt: response.created_at,
             event: cloneDomainEvent(pending.event),
           });
           this.localState!.eventJournal[pending.conversationId] = journal;

@@ -1365,6 +1365,7 @@ async def list_transport_events(
                     "message_id": str(message.id),
                     "sender_user_id": str(message.sender_id),
                     "message_sequence": message.sequence,
+                    "created_at": message.created_at.isoformat(),
                     "envelope": message.envelope,
                 }
             )
