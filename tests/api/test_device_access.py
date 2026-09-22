@@ -181,7 +181,7 @@ async def test_session_list_canonicalizes_equivalent_uuid_representations(repres
     uid = uuid.uuid4()
     observed = {"uuid": sid, "hyphenated": str(sid), "hex": sid.hex}[representation]
     now = datetime.now(UTC)
-    row = SimpleNamespace(id=observed, device_name="PIN test", created_at=now,
+    row = SimpleNamespace(id=observed, device_name="PIN test", ip_hash=None, created_at=now,
                           expires_at=now + timedelta(days=1), revoked_at=None)
 
     class Result:
