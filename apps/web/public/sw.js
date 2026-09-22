@@ -23,7 +23,15 @@ self.addEventListener("fetch", (event) => {
 
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match("/").then((cached) => cached || Response.error())),
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok && url.pathname === "/") {
+            const copy = response.clone();
+            event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put("/", copy)));
+          }
+          return response;
+        })
+        .catch(() => caches.match("/").then((cached) => cached || Response.error())),
     );
     return;
   }
