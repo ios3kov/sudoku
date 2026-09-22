@@ -178,6 +178,7 @@ async def test_session_list_canonicalizes_equivalent_uuid_representations(repres
     from app.deps import get_auth_context
 
     sid = uuid.uuid4()
+    uid = uuid.uuid4()
     observed = {"uuid": sid, "hyphenated": str(sid), "hex": sid.hex}[representation]
     now = datetime.now(UTC)
     row = SimpleNamespace(id=observed, device_name="PIN test", created_at=now,
@@ -194,7 +195,11 @@ async def test_session_list_canonicalizes_equivalent_uuid_representations(repres
         async def execute(self, _query):
             return Result()
 
-    auth = SimpleNamespace(user=SimpleNamespace(id=uuid.uuid4()), session=SimpleNamespace(id=sid))
+    # Supply the same identity through the route's scalar and ORM context views.
+    # Only this response-format test overrides authentication; the real PIN
+    # and recovery tests above exercise the unmodified authentication chain.
+    auth = SimpleNamespace(user_id=uid, session_id=sid,
+                           user=SimpleNamespace(id=uid), session=SimpleNamespace(id=sid))
 
     async def override_auth():
         return auth
