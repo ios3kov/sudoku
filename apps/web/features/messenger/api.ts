@@ -1,3 +1,5 @@
+import { privateFetch as fetch } from "./device-access";
+
 import type { AssetSummary, ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsMembershipChange, MlsTransportEvent, PendingMlsMembershipChange } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
