@@ -79,3 +79,13 @@ test("small messenger text keeps WCAG AA contrast tokens", () => {
   assert.match(ux3, /message-date-separator[^}]*color:#5f6f84/);
   assert.match(globals, /placeholder\{color:#64748b\}/);
 });
+
+// GitHub's explicit bash shell includes -o pipefail. Without it, a failed
+// profiler piped through tee could be mistaken for a successful release gate.
+test("profile pipelines propagate failure instead of tee's success", () => {
+  for (const file of [".github/workflows/ci.yml", ".github/workflows/hardening-behavior.yml"]) {
+    assert.match(readFileSync(file, "utf8"), /defaults:\s+run:\s+shell: bash/);
+  }
+  const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", "(exit 42) | cat; exit 0"], { encoding: "utf8" });
+  assert.equal(result.status, 42);
+});

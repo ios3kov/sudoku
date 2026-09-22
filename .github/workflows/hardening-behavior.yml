@@ -8,6 +8,9 @@ permissions:
 concurrency:
   group: hardening-behavior-${{ github.ref }}
   cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
 jobs:
   browser-lifecycle:
     runs-on: ubuntu-latest
