@@ -55,7 +55,7 @@ jobs:
         working-directory: apps/api
         run: python -m compileall -q app alembic
       - name: Python lint
-        run: ruff check apps/api/app apps/api/alembic tests/api tests/browser
+        run: ruff check apps/api/app apps/api/alembic tests/api tests/browser tests/performance
       - name: Python dependency audit
         run: pip-audit --local
       - name: Migrate database
@@ -141,6 +141,15 @@ jobs:
           npm --workspace @sudoku/web run test:browser
           python tests/performance/api_load.py | tee /tmp/api-load-profile.jsonl
           npx playwright test --config=apps/web/playwright.cross-browser.config.ts
+
+      - name: Retain release performance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/api-load-profile.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Retain browser failure evidence
         if: failure()
