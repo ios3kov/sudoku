@@ -9,7 +9,7 @@
 .messenger-runtime-shell .timeline-item.group-continues .message-bubble{border-bottom-left-radius:7px}
 .messenger-runtime-shell .timeline-item.grouped .own .message-bubble{border-top-left-radius:18px;border-top-right-radius:7px}
 .messenger-runtime-shell .timeline-item.group-continues .own .message-bubble{border-bottom-left-radius:18px;border-bottom-right-radius:7px}
-.messenger-runtime-shell .message-date-separator{display:flex;justify-content:center;margin:18px 0 10px;color:#64748b;font-size:11px;font-weight:600}
+.messenger-runtime-shell .message-date-separator{display:flex;justify-content:center;margin:18px 0 10px;color:#5f6f84;font-size:11px;font-weight:600}
 .messenger-runtime-shell .message-date-separator time{padding:5px 11px;border-radius:16px;background:#f1f5f9}
 .messenger-runtime-shell .message-interaction{min-width:0;touch-action:pan-y pinch-zoom;transition:transform 160ms ease-out;-webkit-touch-callout:none}
 .messenger-runtime-shell .message-interaction.is-reply-dragging{transition:none;will-change:transform;user-select:none;-webkit-user-select:none}
