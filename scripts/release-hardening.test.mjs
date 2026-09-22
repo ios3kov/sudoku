@@ -92,3 +92,19 @@ test("service worker refreshes the offline root without caching private APIs", (
       < source.indexOf('event.request.mode === "navigate"'),
   );
 });
+
+test("small messenger text keeps WCAG AA contrast tokens", () => {
+  const redesign = readFileSync(
+    "apps/web/features/messenger/messenger-redesign.css",
+    "utf8",
+  );
+  const ux3 = readFileSync(
+    "apps/web/features/messenger/messenger-ux3.css",
+    "utf8",
+  );
+  const globals = readFileSync("apps/web/app/globals.css", "utf8");
+  assert.doesNotMatch(redesign, /color:#94a3b8/);
+  assert.match(redesign, /\.own \.message-time\{\s*color:rgba\(255,255,255,\.92\)/);
+  assert.match(ux3, /message-date-separator[^}]*color:#5f6f84/);
+  assert.match(globals, /placeholder\{color:#64748b\}/);
+});
