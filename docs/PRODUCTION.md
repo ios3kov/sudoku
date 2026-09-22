@@ -29,20 +29,21 @@ Docker and Compose versions were verified during provisioning and must continue 
 
 ## Release status
 
-Release documentation checkpoint: 2026-09-22. Keep repository verification distinct from actual deployment evidence:
+Checkpoint: 2026-09-22. Repository verification and production evidence are separate.
 
-- **Last formally live-verified deployment:** `68211e02` (historical stack/edge smoke). Do not infer the current running SHA from that older record or from repository CI.
-- **Merged application candidate:** PR #35 / `24f1152f24e5f9d661866ce30ffafe3ce550cd33`, including the previously merged UX 3.0 and pre-deployment audit corrections. Its tree `3b87cc0aeb7e7d8e43a2fc8900d143ecbaa8cf64` exactly matches the reviewed PR tree.
-- **Full PR gate:** [CI #311](https://github.com/ios3kov/sudoku/actions/runs/35702589645), completed / success on `4aea0f4888a4ed86028afacab0df4d973e1a6670`.
-- **Exact post-merge gate:** [CI #313](https://github.com/ios3kov/sudoku/actions/runs/35705703951). The observed result and gate decision are recorded in [Step 75](steps/75-audit-merge-verification.md); success is required before deployment. See [current progress](PROGRESS.md) for the project boundary.
-- **Production:** no deployment, restart, real restore or infrastructure/secret change was performed in Step 75. Deployment requires separate explicit authorization; live/physical Step 70 remains deferred and open.
+- **Last operator-reported live smoke:** `1e404b2c25d4c2582b42ab8e774a60ddde5a2f4b`, reported in [issue #38](https://github.com/ios3kov/sudoku/issues/38). Beat remained running with restart count `0 -> 0`; the worker executed empty outbox jobs; DNS, HTTPS, API readiness, asset TLS and redirects passed. This is bounded operator evidence, not a fresh host inspection or full Step70 acceptance.
+- **Merged PIN candidate:** [PR #40](https://github.com/ios3kov/sudoku/pull/40), `5205a4add164fdf84702afea870040413e5acfb9`. Its tree `38c0e5ee3188d314272371457daf2b37e8128983` exactly matches reviewed head `a2d86e2a5b1db458b5eff761583a2f6ff26d93d1`.
+- **PR gate:** all three workflows completed successfully on that reviewed head: [CI #332](https://github.com/ios3kov/sudoku/actions/runs/35738803026), [device-access #15](https://github.com/ios3kov/sudoku/actions/runs/35738803218), [beat-runtime #17](https://github.com/ios3kov/sudoku/actions/runs/35738803136).
+- **Exact post-merge gate:** [CI #333](https://github.com/ios3kov/sudoku/actions/runs/35741488200), [device-access #16](https://github.com/ios3kov/sudoku/actions/runs/35741488216), [beat-runtime #18](https://github.com/ios3kov/sudoku/actions/runs/35741488232). Their observed terminal results and release decision are recorded in [Step79](steps/79-device-pin-merge.md).
+- **Production:** the PIN candidate has not been deployed by this step. No host command, migration, restart, backup/restore or secret/infrastructure change was performed. A separate deployment authorization and the release prerequisites below are required.
 
-The immutable application candidate above, not an arbitrary moving main ref or a later documentation-only commit, is the candidate covered by that application CI. Documentation-only updates do not claim a new application build or deployment. Subsequent code/dependency/build/workflow/infrastructure changes require their own exact-SHA gate.
+Deploy the immutable application candidate, not an arbitrary moving main ref. Documentation-only follow-ups do not designate a new application candidate or claim new full application CI. Any later code, dependency, workflow, build or infrastructure change requires its own exact-SHA gate.
 
-Do not update the last live-verified deployment until the exact release SHA has
-been deployed and `scripts/smoke-production.sh` passes on the live host. Local
-component/browser checks and green CI never substitute for physical/mobile or
-backup/restore evidence.
+The earlier backup at `/home/deploy/sudoku-safe-backups/20260922T111443Z` passed dump-structure and checksum checks only. A raw archive of a running MinIO volume plus a separately timed database dump is not evidence of a consistent database/object recovery point or a successful restore. Do not treat it as the new release's completed backup/restore gate.
+
+Before the PIN rollout, establish a fresh consistent database/object backup and an explicit rollback plan. Apply `0015_session_pins` with the PIN-aware API before exposing PIN controls. After any session enables PIN, do not roll back to an API that ignores the PIN table while those sessions remain active. Prefer a forward fix; deliberate pre-PIN rollback requires controlled session revocation/password reauthentication, not blind schema downgrade. See [device-access design](features/device-access.md) and Step79.
+
+Update live-release evidence only after the exact candidate is deployed and live smoke passes. Physical iOS/Android, two-device encrypted flows and controlled restore acceptance remain separate in [Step70](steps/70-live-verification.md).
 
 ## DNS
 
@@ -198,7 +199,7 @@ The committed `.env.production.example` contains placeholders only.
 
 ## Standard deployment
 
-Deploy an exact SHA that has passed the full CI pipeline.
+Deploy an exact SHA that has passed the full CI pipeline. The generic command below is not a complete PIN rollout: first satisfy the consistent-backup, migration-order, rollback and authorization prerequisites in Release status and Step79. Do not execute it merely because a merge succeeded.
 
 From an administrator workstation:
 
@@ -271,7 +272,7 @@ Also verify the public port boundary from an external machine.
 
 ## Rollback
 
-Rollback means redeploying a previously verified application SHA, not restoring arbitrary old container state.
+Rollback means redeploying a previously verified application SHA, not restoring arbitrary old container state. The PIN release additionally requires the session-safety boundary in Release status: a previously verified pre-PIN SHA is not a safe rollback for active PIN-enabled sessions.
 
 1. Identify the last known-good SHA.
 2. Check whether any database migration introduced by the failed release is backward-compatible.

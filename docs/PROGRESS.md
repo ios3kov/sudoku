@@ -1,23 +1,25 @@
 # Progress
 
-## Current work — remembered login and device PIN
+## Current milestone — device PIN merged; release verification
 
-Date: 2026-09-22. Feature branch: `feat/device-pin-login`, based on `1e404b2c25d4c2582b42ab8e774a60ddde5a2f4b`. The user authorized implementation for both regular users and administrators. This feature has not been deployed.
+Date: 2026-09-22. [PR #40](https://github.com/ios3kov/sudoku/pull/40) is merged as application candidate `5205a4add164fdf84702afea870040413e5acfb9`. The PIN feature has not been deployed by this step.
 
-[Step78](steps/78-device-pin-login.md) records the requirements/security design. [Device access](features/device-access.md) documents endpoints, client lifecycle, migration, limitations and verification. Exact reviewed PR/SHA/CI evidence belongs in the feature PR; pending checks are not successful checks.
+The merged source tree `38c0e5ee3188d314272371457daf2b37e8128983` exactly matches reviewed head `a2d86e2a5b1db458b5eff761583a2f6ff26d93d1`. All three PR workflows passed. [Step79](steps/79-device-pin-merge.md) records exact post-merge runs, their final decision, documentation checks and the next release boundary. Earlier pending/branch-only checkpoints in Step78 and the feature audit are historical; Step79 supersedes their status, not their limitations.
 
-Implemented on this branch: opt-in remembered email, session-bound four-digit PIN setup/change/removal, password recovery preserving session/MLS identity, durable five-attempt lockout, RAM-only unlock capability, protected HTTP/WebSocket access and attachment handling that does not forward the capability to object storage. Local client/transport tests and syntax checks passed; full PostgreSQL/API/browser/build CI remains the merge gate.
+Included for both members and administrators: opt-in remembered email; four-digit PIN setup/change/removal; password recovery preserving the session/MLS identity; durable five-attempt lockout; a RAM-only unlock capability; protected HTTP/WebSocket and attachment access. [Step78](steps/78-device-pin-login.md) and [device-access design](features/device-access.md) remain the requirements and architecture references.
 
-## Production baseline
+## Production and recovery baseline
 
-The operator supplied successful deployment and live smoke output for `1e404b2c25d4c2582b42ab8e774a60ddde5a2f4b`, including beat restart count `0 -> 0` and periodic outbox task execution by the worker. This closes the reported beat permission-loop incident, not all of [Step70](steps/70-live-verification.md). An empty outbox result is not a two-device encrypted-message delivery test.
+The operator supplied successful deployment and live smoke output for `1e404b2c25d4c2582b42ab8e774a60ddde5a2f4b`, including beat restart count `0 -> 0` and periodic empty outbox jobs. [Issue #38](https://github.com/ios3kov/sudoku/issues/38) records that bounded verification. It is not a fresh inspection of the running host, a real queued-message delivery test, or completion of [Step70](steps/70-live-verification.md).
 
-The earlier no-restart backup was structurally/checksum checked only. A raw archive of a running MinIO volume plus a separately timed DB dump does not establish a consistent database/object pair or successful restoration. Do not describe it as a tested recovery point. Controlled consistent backup/restore acceptance remains open.
+The previous no-restart backup was structurally/checksum checked only. A raw archive of a running MinIO volume plus a separately timed DB dump does not establish a consistent database/object pair or successful restoration. A fresh consistent recovery point and a controlled restore drill remain required; no recovery success is claimed here.
 
-## Release boundary
+## Next release boundary
 
-The PIN change adds database migration `0015_session_pins`. Deploy only after exact candidate checks and review, with the API migration before PIN-enabled clients. Do not roll back to a server that ignores PIN requirements while retaining active PIN-enabled sessions. No production or infrastructure change was performed for this feature.
+Use [the production runbook](PRODUCTION.md) and Step79. Do not deploy on a pending/failed/mismatched exact-SHA gate. Production deployment requires separate authorization and authenticated administrator execution access; this merge neither deploys nor connects the assistant to the operator's terminal.
 
-Retained separate acceptance: physical iOS/Android installed-PWA behavior, two-device encrypted direct/group/media/revocation flows, restart/reboot persistence and a controlled restore drill. Existing encrypted-snapshot write amplification, multi-tab conflict handling, CSP architecture and fixed-viewport accessibility tradeoffs remain documented; this feature does not certify or fix them.
+The PIN change adds migration `0015_session_pins`. Before exposing PIN-enabled clients, apply the migration with the PIN-aware API. Preserve rollback evidence and never fall back to a server that ignores active PIN requirements. No production command, backup, migration, restart, secret or infrastructure change ran in this step.
 
-Earlier audit/progress evidence is retained in [the historical index](audits/progress-before-pr35-merge-2026-09-22.md), [Step75](steps/75-audit-merge-verification.md), [Step76](steps/76-deployment-access.md), [Step77](steps/77-beat-state-directory.md) and their PRs.
+Physical iOS/Android installed-PWA acceptance, two-device encrypted direct/group/media/revocation flows, restart/reboot persistence and controlled restore remain open. Existing snapshot-write amplification, multi-tab behavior, CSP architecture and fixed-viewport accessibility tradeoffs are unchanged. Four-digit PIN is online-only, not MFA or an E2EE wrapping key.
+
+Earlier audit/progress evidence remains in [the historical index](audits/progress-before-pr35-merge-2026-09-22.md), [Step75](steps/75-audit-merge-verification.md), [Step76](steps/76-deployment-access.md), [Step77](steps/77-beat-state-directory.md) and their PRs. Documentation-only follow-ups do not change the immutable application candidate above.
