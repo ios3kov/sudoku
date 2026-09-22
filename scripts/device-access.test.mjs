@@ -74,3 +74,16 @@ test('asset redirect is resolved as JSON; capability and cookies never reach obj
   assert.equal(calls[1][1].redirect, 'error');
   assert.equal(new Headers(calls[1][1].headers).get(UNLOCK_HEADER), null);
 });
+
+test('a stale rejected ticket cannot clear a newer successful unlock', async () => {
+  acceptUnlock(ticket, accessEpoch());
+  let finish; let locks = 0;
+  window.addEventListener(DEVICE_LOCK_EVENT, () => locks++);
+  globalThis.fetch = () => new Promise((resolve) => { finish = resolve; });
+  const request = privateFetch('/v1/me');
+  const newer = 'b'.repeat(43);
+  acceptUnlock(newer, accessEpoch());
+  finish(new Response('', { status: 423 }));
+  await assert.rejects(request, { name: 'AbortError' });
+  assert.equal(currentUnlockToken(), newer); assert.equal(locks, 0);
+});

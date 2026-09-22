@@ -40,10 +40,11 @@ export async function privateFetch(input: RequestInfo | URL, init?: RequestInit)
   const path = typeof input === "string" ? input : "";
   if (!path.startsWith("/v1/")) return globalThis.fetch(input, init);
   const started = epoch;
+  const requestToken = unlockToken;
   const headers = new Headers(init?.headers);
-  if (unlockToken) headers.set(UNLOCK_HEADER, unlockToken);
+  if (requestToken) headers.set(UNLOCK_HEADER, requestToken);
   const content = /^\/v1\/assets\/([a-f0-9-]+)\/content$/.exec(path);
-  if (content && unlockToken) {
+  if (content && requestToken) {
     const link = await resolveAssetLink(content[1], init?.signal ?? undefined);
     if (started !== epoch) throw new DOMException("Device locked", "AbortError");
     // New request, with no custom header or cookies carried across origins.
@@ -51,10 +52,11 @@ export async function privateFetch(input: RequestInfo | URL, init?: RequestInit)
     if (started !== epoch) throw new DOMException("Device locked", "AbortError");
     return contentResponse;
   }
-  const response = await globalThis.fetch(input, { ...init, headers, ...(unlockToken ? { redirect: "error" as const } : {}) });
+  const response = await globalThis.fetch(input, { ...init, headers, ...(requestToken ? { redirect: "error" as const } : {}) });
   if (started !== epoch) throw new DOMException("Device locked", "AbortError");
   if (response.status === 423 && started === epoch) {
-    requireDevicePin();
+    if (requestToken === unlockToken) requireDevicePin();
+    // A stale rejection cannot lock a newer successful unlock.
     // Lock is retryable, not a permanent message rejection. Existing outbox
     // clients must never discard a queued message because its tab was locked.
     throw new DOMException("Device locked", "AbortError");
