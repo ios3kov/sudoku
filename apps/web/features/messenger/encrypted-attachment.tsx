@@ -41,8 +41,11 @@ export function EncryptedAttachment({
   const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const objectUrlRef = useRef<string | null>(null);
   const imageButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mountedRef = useRef(true);
+  const decryptGenerationRef = useRef(0);
 
   const releaseDecrypted = useCallback(() => {
+    decryptGenerationRef.current += 1;
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = null;
@@ -54,10 +57,14 @@ export function EncryptedAttachment({
 
   const decrypt = useCallback(async (): Promise<File> => {
     if (decryptedFile) return decryptedFile;
+    const generation = ++decryptGenerationRef.current;
     setState("loading");
     try {
       const asset = await messengerApi.asset(metadata.assetId);
       const file = await downloadEncryptedAsset(asset, metadata);
+      if (!mountedRef.current || generation !== decryptGenerationRef.current) {
+        throw new Error("Encrypted attachment view is no longer active");
+      }
       const url = URL.createObjectURL(file);
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = url;
@@ -66,7 +73,9 @@ export function EncryptedAttachment({
       setState("ready");
       return file;
     } catch (error) {
-      setState("error");
+      if (mountedRef.current && generation === decryptGenerationRef.current) {
+        setState("error");
+      }
       throw error;
     }
   }, [decryptedFile, metadata]);
@@ -94,8 +103,14 @@ export function EncryptedAttachment({
     return () => observer.disconnect();
   }, [decrypt, messageType, releaseDecrypted, state]);
 
-  useEffect(() => () => {
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      decryptGenerationRef.current += 1;
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    };
   }, []);
 
   async function download() {
