@@ -284,8 +284,13 @@ export function EncryptedConversationView({
       return;
     }
 
+    let acquiredStream: MediaStream | null = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      acquiredStream = stream;
+      // Own the stream immediately. MediaRecorder construction can throw on
+      // partially-supported mobile browsers; cleanup must still stop the mic.
+      mediaStreamRef.current = stream;
       const supportedMime = findSupportedVoiceMime();
       const recorder = supportedMime
         ? new MediaRecorder(stream, { mimeType: supportedMime })
@@ -297,7 +302,6 @@ export function EncryptedConversationView({
         return;
       }
 
-      mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
       recordChunksRef.current = [];
       setRecordSeconds(0);
@@ -327,9 +331,10 @@ export function EncryptedConversationView({
         MAX_VOICE_SECONDS * 1000,
       );
     } catch {
+      acquiredStream?.getTracks().forEach((track) => track.stop());
       stopRecorderResources();
       setRecording(false);
-      setError("Microphone permission is required for voice notes");
+      setError("Unable to start voice recording");
     }
   }
 
