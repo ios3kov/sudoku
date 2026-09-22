@@ -101,3 +101,12 @@ test("revocation deletion prevents a stale adapter from resurrecting state", asy
   await assert.rejects(a.put("same", new Uint8Array([4])), /closed|reload/i);
   assert.equal(await new Store().get("same"),null);
 });
+
+test("retiring one adapter blocks its stale writes without deleting durable state", async () => {
+  const {Store} = harness(); const active = new Store(), retired = new Store();
+  await active.put("same", new Uint8Array([8]));
+  await retired.get("same");
+  retired.close("same");
+  await assert.rejects(retired.put("same", new Uint8Array([9])), /closed|reload/i);
+  assert.deepEqual(await new Store().get("same"), new Uint8Array([8]));
+});
