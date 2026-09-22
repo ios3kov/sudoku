@@ -120,7 +120,6 @@ export class BrowserProtocolStateStore {
   }
 
   async get(id: string): Promise<Uint8Array | null> {
-    if (this.closed.has(id)) throw new Error("Crypto state is closed; reload secure messaging");
     const db = await openDatabase();
     try {
       const stored = await requestInTransaction(db, STATE_STORE, "readonly", (store) => store.get(id)) as StoredCiphertext | undefined;
@@ -131,7 +130,6 @@ export class BrowserProtocolStateStore {
         key,
         stored.ciphertext,
       );
-      if (this.closed.has(id)) throw new Error("Crypto state is closed; reload secure messaging");
       this.observed.set(id, stored);
       return new Uint8Array(plaintext);
     } finally {
