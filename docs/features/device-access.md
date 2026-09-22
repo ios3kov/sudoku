@@ -2,7 +2,9 @@
 
 ## UX and scope
 
-All users, including admins, have the same controls under **Devices → Login and device PIN**. Remembering email is opt-in and can be undone on the login form or Devices. The existing persistent HttpOnly session cookie continues to represent account login; remembering email does not store a password or grant access.
+All users, including admins, follow the same primary flow. After a successful normal email + account-password login, the app immediately asks **Use PIN for quick sign-in on this device?**. **Set PIN** collects and confirms four digits; **Not now** enters the messenger immediately. The Devices screen remains the secondary place to change/remove an existing PIN and manage the optional remembered email.
+
+Remembering email is opt-in and can be undone on the login form or Devices. The existing persistent HttpOnly session cookie continues to represent account login; remembering email does not store a password or grant access. During first-login enrollment, the already-verified account password is retained only in component memory for the optional PIN request and is cleared after enrollment, skip, sign-out, hide/unmount, or session teardown.
 
 Set/change/remove PIN requires the account password. A PIN has exactly four ASCII digits and can start with zero. On reopening the private surface, reloading or backgrounding the page, a PIN-enabled session needs a new online unlock. After five wrong guesses the account password is required; reloading or deleting browser storage does not reset the server counter. Password recovery resets the counter and retains the current session UUID/MLS device identity. Expired/revoked sessions need a normal account login.
 
