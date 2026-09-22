@@ -1,0 +1,33 @@
+name: hardening-behavior
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: hardening-behavior-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npm --workspace @sudoku/domain run build
+      - run: npx playwright install --with-deps chromium
+      - name: Real components and native IndexedDB failure injection
+        run: npx playwright test --config=apps/web/playwright.hardening.config.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: hardening-behavior-failure-${{ github.run_id }}
+          path: apps/web/test-results/
+          retention-days: 3
+          if-no-files-found: ignore

@@ -8,14 +8,14 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 
 // Test-only fixture, compiled with the project's pinned Next/TypeScript tools.
 // No test route or observer is shipped in the Next application.
-export default async function buildFixture() {
+export default async function buildFixture({ entry = "ux-fixture.tsx", aliases = {} } = {}) {
   const outputPath = await fs.mkdtemp(path.join(os.tmpdir(), "sudoku-ux-fixture-"));
   const compiler = nextWebpack.webpack({
     mode: "production", devtool: false, target: "web",
-    entry: path.join(directory, "ux-fixture.tsx"),
+    entry: path.join(directory, entry),
     output: { path: outputPath, filename: "fixture.js" },
     optimization: { minimize: false },
-    resolve: { extensions: [".tsx", ".ts", ".js"] },
+    resolve: { extensions: [".tsx", ".ts", ".js"], alias: aliases },
     module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(directory, "fixture-loader.mjs") }] },
   });
   try {
