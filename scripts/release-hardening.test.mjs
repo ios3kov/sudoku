@@ -13,7 +13,12 @@ test("restore failure leaves application traffic stopped", () => {
   mkdirSync(join(backup, "objects"), { recursive: true });
   writeFileSync(join(root, ".env.production"), "APP_DOMAIN=sudoku.test\n");
   writeFileSync(join(backup, "postgres.dump"), "not-a-real-dump");
-  const sum = execFileSync("sha256sum", ["postgres.dump"], { cwd: backup, encoding: "utf8" });
+  writeFileSync(join(backup, "manifest.txt"), "created_utc=test\\n");
+  const sum = execFileSync(
+    "sha256sum",
+    ["postgres.dump", "manifest.txt"],
+    { cwd: backup, encoding: "utf8" },
+  );
   writeFileSync(join(backup, "SHA256SUMS"), sum);
 
   const docker = `#!/usr/bin/env bash
