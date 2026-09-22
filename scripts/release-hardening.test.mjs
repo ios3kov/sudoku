@@ -23,7 +23,7 @@ test("restore failure leaves application traffic stopped", () => {
 
   const docker = `#!/usr/bin/env bash
 set -eu
-echo "$*" >> "${DOCKER_LOG}"
+echo "$*" >> "\${DOCKER_LOG}"
 if [[ "$*" == *"pg_restore"* ]]; then exit 42; fi
 exit 0
 `;
