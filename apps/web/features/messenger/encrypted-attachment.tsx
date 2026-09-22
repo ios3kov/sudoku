@@ -93,7 +93,9 @@ export function EncryptedAttachment({
         const nearViewport = entries.some((entry) => entry.isIntersecting);
         if (nearViewport && state === "idle") {
           void decrypt().catch(() => undefined);
-        } else if (!nearViewport && state === "ready") {
+        } else if (!nearViewport && state !== "idle") {
+          // Invalidate in-flight decryption too; otherwise a slow download can
+          // finish after the item has left the memory window.
           releaseDecrypted();
         }
       },
