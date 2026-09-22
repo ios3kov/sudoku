@@ -1,4 +1,5 @@
 import type { RealtimeEvent } from "./types";
+import { currentUnlockToken, DEVICE_UNLOCK_EVENT, requireDevicePin } from "./device-access";
 
 export interface RealtimeHandlers {
   onEvent: (event: RealtimeEvent) => void;
@@ -12,17 +13,20 @@ export class RealtimeClient {
   private reconnectTimer: number | null = null;
   private attempts = 0;
   private stopped = true;
+  private readonly unlockChanged = () => { this.stop(); this.start(); };
 
   constructor(private readonly handlers: RealtimeHandlers) {}
 
   start() {
     if (!this.stopped) return;
     this.stopped = false;
+    window.addEventListener?.(DEVICE_UNLOCK_EVENT, this.unlockChanged);
     this.connect();
   }
 
   stop() {
     this.stopped = true;
+    window.removeEventListener?.(DEVICE_UNLOCK_EVENT, this.unlockChanged);
     if (this.reconnectTimer !== null) window.clearTimeout(this.reconnectTimer);
     if (this.heartbeat !== null) window.clearInterval(this.heartbeat);
     this.reconnectTimer = this.heartbeat = null;
@@ -42,7 +46,9 @@ export class RealtimeClient {
   private connect() {
     if (this.stopped) return;
     const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(`${scheme}//${window.location.host}/v1/ws`);
+    const token = currentUnlockToken();
+    const url = `${scheme}//${window.location.host}/v1/ws`;
+    const socket = token ? new WebSocket(url, ["sudoku.v1", `sudoku-unlock.${token}`]) : new WebSocket(url);
     this.socket = socket;
 
     socket.onopen = () => {
@@ -69,6 +75,9 @@ export class RealtimeClient {
       this.socket = null;
       if (this.heartbeat !== null) window.clearInterval(this.heartbeat);
       this.heartbeat = null;
+      if (event.code === 4423) {
+        this.stop(); requireDevicePin(); return;
+      }
       this.handlers.onClose?.(event);
       if (this.stopped) return;
       const delay = Math.min(10_000, 500 * 2 ** Math.min(this.attempts, 5));
