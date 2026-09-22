@@ -65,6 +65,8 @@ for (const role of ["member", "admin"]) {
     }
     await page.getByRole("button", { name: "Unlock", exact: true }).click();
     await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+    await expect(page.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "New secure chat", exact: true })).toBeEnabled({ timeout: 120_000 });
     // Locked-page sign-out remains available without the ephemeral capability.
     expect((await context.request.post("/v1/auth/logout", { headers: { origin: "http://127.0.0.1:3000" } })).status()).toBe(204);
     await reveal(page);
