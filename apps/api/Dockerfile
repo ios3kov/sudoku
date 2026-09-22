@@ -9,7 +9,8 @@ COPY apps/api/ /srv/api/
 RUN pip install --no-cache-dir . \
     && groupadd --system sudoku \
     && useradd --system --gid sudoku --home-dir /nonexistent --shell /usr/sbin/nologin sudoku \
-    && install -d -o sudoku -g sudoku -m 0700 /var/lib/sudoku-beat
+    && install -d -o sudoku -g sudoku -m 0700 /var/lib/sudoku-beat \
+    && chmod -R a+rX /srv/api
 
 USER sudoku
 
