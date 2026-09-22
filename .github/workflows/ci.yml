@@ -78,6 +78,8 @@ jobs:
         run: |
           cargo +1.91.0 install cargo-audit --version 0.22.2 --locked
           cargo +1.91.0 audit --file packages/mls-wasm/Cargo.lock
+      - name: Release license audit
+        run: python scripts/check-release-licenses.py
       - name: Install web dependencies
         run: |
           cd "$GITHUB_WORKSPACE"
