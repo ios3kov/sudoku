@@ -64,6 +64,11 @@ async function login(page: Page, email: string) {
   ]);
   expect(loginResponse.status()).toBe(200);
 
+  await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "Not now", exact: true }).click();
+
   await expect(page.getByText("Messages", { exact: true })).toBeVisible({
     timeout: 30_000,
   });
