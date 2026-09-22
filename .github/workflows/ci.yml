@@ -139,6 +139,12 @@ jobs:
                   raise SystemExit(f"browser acceptance service did not start: {url}")
           PY
           npm --workspace @sudoku/web run test:browser
+          python tests/performance/api_load.py | tee /tmp/api-load-profile.jsonl
+
+      - name: Cross-browser public-surface acceptance
+        run: |
+          npx playwright install --with-deps firefox webkit
+          npx playwright test --config=apps/web/playwright.cross-browser.config.ts
 
       - name: Retain browser failure evidence
         if: failure()
