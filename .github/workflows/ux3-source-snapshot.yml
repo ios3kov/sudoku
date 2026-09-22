@@ -18,8 +18,7 @@ jobs:
         run: |
           git bundle create /tmp/sudoku-development.bundle \
             refs/remotes/origin/main \
-            refs/remotes/origin/fix/preserve-active-composition \
-            refs/remotes/origin/feat/messenger-ux3
+            refs/remotes/origin/feat/messenger-ux3-final
           git bundle verify /tmp/sudoku-development.bundle
       - uses: actions/upload-artifact@v4
         with:
