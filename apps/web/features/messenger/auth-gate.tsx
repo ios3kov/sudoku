@@ -5,7 +5,8 @@ import { MessengerShell } from "./messenger-shell";
 import { MessengerRevealPreview } from "./messenger-reveal-preview";
 import { ConversationDraftProvider } from "./conversation-drafts";
 import { DevicePinUnlock } from "./device-pin-unlock";
-import { DEVICE_LOCK_EVENT, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberEmail, savedEmail } from "./device-access";
+import { DevicePinOnboarding } from "./device-pin-onboarding";
+import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberEmail, savedEmail } from "./device-access";
 import type { CurrentUser } from "./types";
 import "./device-access.css";
 
@@ -15,17 +16,53 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [pinRequired, setPinRequired] = useState(false);
+  const [pendingLogin, setPendingLogin] = useState<CurrentUser | null>(null);
   const [view, setView] = useState<AuthView>("login");
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(false);
   const requestId = useRef(0);
   const hideRef = useRef(onHide);
+  const loginPasswordRef = useRef<string | null>(null);
   useEffect(() => { hideRef.current = onHide; }, [onHide]);
 
   const signedOut = useCallback(() => {
+    loginPasswordRef.current = null;
+    setPendingLogin(null);
     forgetUnlock(); setUser(null); setPinRequired(false); setError(null); setLoading(false);
   }, []);
   const hide = useCallback(() => { lockDevice(); hideRef.current(); }, []);
+
+  const completePendingLogin = useCallback(() => {
+    if (!pendingLogin) return;
+    loginPasswordRef.current = null;
+    setPendingLogin(null);
+    setUser(pendingLogin);
+  }, [pendingLogin]);
+
+  const configurePendingPin = useCallback(async (pin: string) => {
+    const password = loginPasswordRef.current;
+    if (!pendingLogin || !password) throw new Error("Sign in again to set a PIN.");
+    const started = accessEpoch();
+    const response = await privateFetch("/v1/auth/device-access", {
+      method: "PUT",
+      credentials: "include",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password, pin }),
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error("Session expired. Sign in again.");
+      if (response.status === 429) throw new Error("Too many attempts. Try later.");
+      throw new Error("Unable to save PIN. Try again.");
+    }
+    const result = await response.json() as { unlock_token?: unknown };
+    if (!acceptUnlock(result.unlock_token, started)) {
+      throw new Error("Device state changed. Try again.");
+    }
+    loginPasswordRef.current = null;
+    setPendingLogin(null);
+    setUser(pendingLogin);
+  }, [pendingLogin]);
 
   const checkSession = useCallback(async () => {
     const id = ++requestId.current;
@@ -69,6 +106,12 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
 
   if (pinRequired) return <DevicePinUnlock onUnlocked={checkSession} onSignedOut={signedOut} onHide={hide} />;
 
+  if (pendingLogin) return <DevicePinOnboarding
+    onSetPin={configurePendingPin}
+    onSkip={completePendingLogin}
+    onHide={() => { completePendingLogin(); hide(); }}
+  />;
+
   if (user) {
     if (!active) return <MessengerRevealPreview user={user} />;
     return <ConversationDraftProvider key={user.id}><MessengerShell user={user} onHide={hide} onLoggedOut={signedOut} /></ConversationDraftProvider>;
@@ -78,7 +121,10 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
     <section className="messenger-lock auth-card">
       <div className="private-header"><div><h2>{view === "login" ? "Sign in" : "Join"}</h2><p>{view === "login" ? "Private access" : "Invite-only access"}</p></div>
         <button className="text-button" type="button" onClick={hide}>Hide</button></div>
-      {view === "login" ? <LoginForm onSuccess={setUser} onError={setError} /> : <InviteForm onSuccess={setUser} onError={setError} />}
+      {view === "login" ? <LoginForm onSuccess={(current, password) => {
+        loginPasswordRef.current = password;
+        setPendingLogin(current);
+      }} onError={setError} /> : <InviteForm onSuccess={setUser} onError={setError} />}
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="secondary-button" type="button" onClick={() => { setError(null); setView(view === "login" ? "invite" : "login"); }}>
         {view === "login" ? "Use an invite" : "I already have an account"}
@@ -87,7 +133,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   </main>;
 }
 
-function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => void; onError: (message: string | null) => void }) {
+function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, password: string) => void; onError: (message: string | null) => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [email, setEmail] = useState("");
   const [remember, setRemember] = useState(false);
@@ -103,18 +149,19 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => v
     if (submitting) return;
     setSubmitting(true); onError(null);
     const data = new FormData(event.currentTarget);
+    const password = String(data.get("password") ?? "");
     const started = accessEpoch();
     try {
       const response = await fetch("/v1/auth/login", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password: data.get("password"), device_name: "Sudoku web app" }),
+        body: JSON.stringify({ email, password, device_name: "Sudoku web app" }),
       });
       if (!alive.current || started !== accessEpoch()) return;
       if (!response.ok) { onError(response.status === 429 ? "Too many attempts. Try later." : "Invalid email or password"); return; }
       const current = await response.json() as CurrentUser;
       if (!alive.current || started !== accessEpoch()) return;
       rememberEmail(current.email, remember);
-      forgetUnlock(); onSuccess(current);
+      forgetUnlock(); onSuccess(current, password);
     } catch { if (alive.current) onError("Network unavailable"); }
     finally { if (alive.current) setSubmitting(false); }
   }
