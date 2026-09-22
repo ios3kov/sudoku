@@ -10,6 +10,7 @@ USERS = (
     ("browser-peer@example.com", "Browser Peer"),
     ("browser-pin-member@example.com", "PIN Member"),
     ("browser-pin-admin@example.com", "PIN Admin"),
+    ("browser-pin-skip@example.com", "PIN Skip"),
 )
 PASSWORD = "browser acceptance password"
 
@@ -33,6 +34,7 @@ async def main() -> None:
                 user.display_name = display_name
                 user.password_hash = hash_password(PASSWORD)
                 user.status = "active"
+                user.is_admin = email == "browser-pin-admin@example.com"
         await db.commit()
 
 
