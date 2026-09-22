@@ -104,10 +104,49 @@ async def conversation_members_response(
     ]
 
 
+async def conversation_members_responses(
+    db: AsyncSession,
+    conversation_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, list[ConversationMemberResponse]]:
+    if not conversation_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(
+                ConversationMember.conversation_id,
+                User,
+                ConversationMember.role,
+                ConversationMember.last_read_sequence,
+            )
+            .join(User, ConversationMember.user_id == User.id)
+            .where(
+                ConversationMember.conversation_id.in_(conversation_ids),
+                ConversationMember.e2ee_state != "pending_add",
+            )
+            .order_by(ConversationMember.conversation_id, User.display_name)
+        )
+    ).all()
+    grouped: dict[uuid.UUID, list[ConversationMemberResponse]] = {
+        conversation_id: [] for conversation_id in conversation_ids
+    }
+    for conversation_id, user, role, last_read_sequence in rows:
+        grouped[conversation_id].append(
+            ConversationMemberResponse(
+                id=user.id,
+                display_name=user.display_name,
+                email=user.email,
+                role=role,
+                last_read_sequence=last_read_sequence,
+            )
+        )
+    return grouped
+
+
 async def conversation_response(
     db: AsyncSession,
     conversation: Conversation,
     membership: ConversationMember,
+    members: list[ConversationMemberResponse] | None = None,
 ) -> ConversationResponse:
     return ConversationResponse(
         id=conversation.id,
@@ -121,7 +160,7 @@ async def conversation_response(
         notifications_muted=membership.notifications_muted,
         encryption_required=conversation.encryption_required,
         e2ee_ready=conversation.e2ee_ready,
-        members=await conversation_members_response(db, conversation.id),
+        members=members if members is not None else await conversation_members_response(db, conversation.id),
     )
 
 
