@@ -1,5 +1,10 @@
 # Release Readiness Review + Hardening — 1.0
 
+Current status: the earlier single-branch evidence below is historical. PR #34
+has been reconciled with PR #35/#36; current verification, additional findings
+and open acceptance are tracked in `behavioral-hardening-2026-09-22.md` and
+`../PROGRESS.md`. Full release readiness is not closed.
+
 Date: 2026-09-22
 Baseline: `ec557c2827b0d2b5329425016df3dfa8ddaf4f71`
 Branch: `hardening/release-readiness-1.0`

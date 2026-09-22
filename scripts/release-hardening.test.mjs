@@ -16,7 +16,7 @@ test("restore failure leaves application traffic stopped", () => {
   writeFileSync(join(backup, "manifest.txt"), "created_utc=test\\n");
   const sum = execFileSync(
     "sha256sum",
-    ["postgres.dump", "manifest.txt"],
+    ["./manifest.txt", "./postgres.dump"],
     { cwd: backup, encoding: "utf8" },
   );
   writeFileSync(join(backup, "SHA256SUMS"), sum);
@@ -45,7 +45,7 @@ exit 0
     },
   );
   assert.equal(result.status, 42);
-  assert.match(result.stderr, /remain stopped/);
+  assert.match(result.stderr, /left in maintenance/);
   const log = readFileSync(join(root, "docker.log"), "utf8");
   assert.match(log, /stop caddy web api worker beat/);
   assert.doesNotMatch(log, /up -d api worker beat web caddy/);
@@ -75,7 +75,7 @@ test("small messenger text keeps WCAG AA contrast tokens", () => {
   );
   const globals = readFileSync("apps/web/app/globals.css", "utf8");
   assert.doesNotMatch(redesign, /color:#94a3b8/);
-  assert.match(redesign, /\.own \.message-time\{\s*color:rgba\(255,255,255,\.92\)/);
+  assert.match(redesign, /\.own \.message-time\{\s*color:#fff/);
   assert.match(ux3, /message-date-separator[^}]*color:#5f6f84/);
   assert.match(globals, /placeholder\{color:#64748b\}/);
 });

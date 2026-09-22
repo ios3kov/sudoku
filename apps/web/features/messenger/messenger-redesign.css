@@ -250,13 +250,14 @@
 }
 .messenger-topbar span,
 .chat-header span{
-  color:#5f6f84;
+  color:#64748b;
   font-size:11px;
 }
 .back-button{
-  width:38px;
-  height:38px;
-  min-height:38px!important;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  min-height:44px!important;
   padding:0!important;
   display:grid;
   place-items:center;
@@ -274,7 +275,8 @@
 }
 .messenger-topbar>div:last-child button,
 .chat-header-actions button{
-  min-height:34px;
+  min-height:44px;
+  min-width:44px;
   padding:0 9px;
   border:0;
   border-radius:999px;
@@ -327,15 +329,16 @@
 }
 .message-time{
   margin-top:5px;
-  color:#5f6f84;
+  color:#475569;
   font-size:10px;
 }
 .own .message-time{
-  color:rgba(255,255,255,.92);
+  color:#fff;
 }
 .message-more-button{
-  width:34px;
-  min-height:34px;
+  width:44px;
+  min-width:44px;
+  min-height:44px;
   border:0;
   border-radius:50%;
   background:transparent;
@@ -381,7 +384,7 @@
   position:sticky;
   bottom:0;
   z-index:20;
-  grid-template-columns:40px minmax(0,1fr) 40px 40px;
+  grid-template-columns:44px minmax(0,1fr) 44px 44px;
   gap:6px;
   align-items:end;
   padding:9px 10px max(9px,env(safe-area-inset-bottom));
@@ -409,10 +412,10 @@
 .attach-button,
 .voice-button,
 .composer>button:last-child{
-  width:40px;
-  min-width:40px;
-  height:40px;
-  min-height:40px;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  min-height:44px;
   padding:0;
   display:grid;
   place-items:center;
@@ -583,7 +586,7 @@
     max-width:90%;
   }
   .composer{
-    grid-template-columns:40px minmax(0,1fr) 40px 40px;
+    grid-template-columns:44px minmax(0,1fr) 44px 44px;
     padding-inline:8px;
   }
   .messenger-lock{

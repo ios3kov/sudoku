@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
 async function start(page: Page) {
   await page.evaluate(() => window.__hardening.mount());
   await expect(page.locator("textarea")).toBeEnabled();
-  await page.getByRole("button", { name: "Mic", exact: true }).click();
+  await page.getByRole("button", { name: "Record voice message", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__hardening.controls.permissions.length)).toBe(1);
 }
 async function settle(page: Page) {
@@ -39,7 +39,7 @@ test("recorder constructor and start failure stop all acquired tracks", async ({
     window.__hardening.controls.failConstructor = false;
     window.__hardening.controls.failStart = true;
   });
-  await page.getByRole("button", { name: "Mic", exact: true }).click();
+  await page.getByRole("button", { name: "Record voice message", exact: true }).click();
   await page.evaluate(() => window.__hardening.controls.grant(1));
   await settle(page);
   expect(await page.evaluate(() => window.__hardening.controls.tracks.every((t) => t.stopped))).toBe(true);
@@ -58,7 +58,7 @@ test("permission granted after Hide cannot start recording", async ({ page }) =>
 
 test("double tap while permission is pending creates only one request", async ({ page }) => {
   await start(page);
-  await page.getByRole("button", { name: "Mic", exact: true }).dispatchEvent("click");
+  await page.getByRole("button", { name: "Requesting microphone", exact: true }).dispatchEvent("click");
   await settle(page);
   expect(await page.evaluate(() => window.__hardening.controls.permissions.length)).toBe(1);
 });
@@ -66,7 +66,7 @@ test("double tap while permission is pending creates only one request", async ({
 test("recorder error never uploads its queued final data", async ({ page }) => {
   await start(page);
   await page.evaluate(() => window.__hardening.controls.grant());
-  await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop recording", exact: true })).toBeVisible();
   await page.evaluate(() => window.__hardening.controls.recorders[0].fail());
   await settle(page);
   expect(await page.evaluate(() => window.__hardening.controls.uploads.length)).toBe(0);
@@ -76,7 +76,7 @@ test("recorder error never uploads its queued final data", async ({ page }) => {
 test("ordinary Stop uploads once, releases microphone and sends encrypted metadata", async ({ page }) => {
   await start(page);
   await page.evaluate(() => window.__hardening.controls.grant());
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByRole("button", { name: "Stop recording", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__hardening.controls.uploads.length)).toBe(1);
   expect(await page.evaluate(() => window.__hardening.controls.tracks.every((t) => t.stopped))).toBe(true);
   await page.evaluate(() => {
@@ -90,7 +90,7 @@ test("ordinary Stop uploads once, releases microphone and sends encrypted metada
 test("finishing an upload after Hide does not publish a voice message", async ({ page }) => {
   await start(page);
   await page.evaluate(() => window.__hardening.controls.grant());
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByRole("button", { name: "Stop recording", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__hardening.controls.uploads.length)).toBe(1);
   await page.getByRole("button", { name: "Hide", exact: true }).click();
   await page.evaluate(() => {

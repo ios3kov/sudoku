@@ -37,48 +37,62 @@ export function EncryptedAttachment({
   messageType: "image" | "file" | "voice";
 }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [decryptedFile, setDecryptedFile] = useState<File | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const objectUrlRef = useRef<string | null>(null);
+  const fileRef = useRef<File | null>(null);
   const imageButtonRef = useRef<HTMLButtonElement | null>(null);
-  const mountedRef = useRef(true);
-  const decryptGenerationRef = useRef(0);
+  const mountedRef = useRef(false);
+  const generationRef = useRef(0);
+  const requestRef = useRef<{controller: AbortController; promise: Promise<File>} | null>(null);
+  const releaseTimerRef = useRef<number | null>(null);
 
   const releaseDecrypted = useCallback(() => {
-    decryptGenerationRef.current += 1;
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-    setObjectUrl(null);
-    setDecryptedFile(null);
-    setState("idle");
+    generationRef.current += 1;
+    requestRef.current?.controller.abort();
+    requestRef.current = null;
+    if (releaseTimerRef.current !== null) window.clearTimeout(releaseTimerRef.current);
+    releaseTimerRef.current = null;
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = null;
+    fileRef.current = null;
+    if (mountedRef.current) { setObjectUrl(null); setState("idle"); }
   }, []);
 
-  const decrypt = useCallback(async (): Promise<File> => {
-    if (decryptedFile) return decryptedFile;
-    const generation = ++decryptGenerationRef.current;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; releaseDecrypted(); };
+  }, [releaseDecrypted]);
+
+  const decrypt = useCallback((): Promise<File> => {
+    if (!mountedRef.current) return Promise.reject(new DOMException("Attachment closed", "AbortError"));
+    if (fileRef.current) return Promise.resolve(fileRef.current);
+    if (requestRef.current) return requestRef.current.promise;
+    const controller = new AbortController();
+    const generation = ++generationRef.current;
+    const isCurrent = () => mountedRef.current && generationRef.current === generation && !controller.signal.aborted;
     setState("loading");
-    try {
-      const asset = await messengerApi.asset(metadata.assetId);
-      const file = await downloadEncryptedAsset(asset, metadata);
-      if (!mountedRef.current || generation !== decryptGenerationRef.current) {
-        throw new Error("Encrypted attachment view is no longer active");
-      }
+    const promise = Promise.resolve().then(async () => {
+      const asset = await messengerApi.asset(metadata.assetId, controller.signal);
+      controller.signal.throwIfAborted();
+      const file = await downloadEncryptedAsset(asset, metadata, controller.signal);
+      // Aborting fetch cannot cancel WebCrypto or an already-completed response.
+      if (!isCurrent()) throw new DOMException("Attachment closed", "AbortError");
       const url = URL.createObjectURL(file);
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = url;
+      fileRef.current = file;
       setObjectUrl(url);
-      setDecryptedFile(file);
       setState("ready");
       return file;
-    } catch (error) {
-      if (mountedRef.current && generation === decryptGenerationRef.current) {
-        setState("error");
-      }
+    }).catch((error: unknown) => {
+      if (isCurrent()) setState("error");
       throw error;
-    }
-  }, [decryptedFile, metadata]);
+    }).finally(() => {
+      if (requestRef.current?.controller === controller) requestRef.current = null;
+    });
+    requestRef.current = {controller, promise};
+    return promise;
+  }, [metadata]);
 
   useEffect(() => {
     if (messageType !== "image") return;
@@ -93,9 +107,7 @@ export function EncryptedAttachment({
         const nearViewport = entries.some((entry) => entry.isIntersecting);
         if (nearViewport && state === "idle") {
           void decrypt().catch(() => undefined);
-        } else if (!nearViewport && state !== "idle") {
-          // Invalidate in-flight decryption too; otherwise a slow download can
-          // finish after the item has left the memory window.
+        } else if (!nearViewport && (state === "ready" || state === "loading")) {
           releaseDecrypted();
         }
       },
@@ -105,19 +117,10 @@ export function EncryptedAttachment({
     return () => observer.disconnect();
   }, [decrypt, messageType, releaseDecrypted, state]);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      decryptGenerationRef.current += 1;
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    };
-  }, []);
-
   async function download() {
     try {
       const file = await decrypt();
+      if (!mountedRef.current || fileRef.current !== file) return;
       const url = objectUrlRef.current;
       if (!url) throw new Error("Decrypted attachment URL is unavailable");
       const anchor = document.createElement("a");
@@ -126,7 +129,10 @@ export function EncryptedAttachment({
       anchor.rel = "noopener";
       anchor.click();
       if (messageType === "file") {
-        window.setTimeout(releaseDecrypted, 0);
+        if (releaseTimerRef.current !== null) window.clearTimeout(releaseTimerRef.current);
+        releaseTimerRef.current = window.setTimeout(() => {
+          if (objectUrlRef.current === url) releaseDecrypted();
+        }, 0);
       }
     } catch {
       // Visible state remains generic by design.
@@ -134,7 +140,10 @@ export function EncryptedAttachment({
   }
 
   if (state === "error") {
-    return <div className="file-attachment"><strong>Encrypted attachment unavailable</strong></div>;
+    return <div className="file-attachment" role="alert">
+      <strong>Encrypted attachment unavailable</strong>
+      <button type="button" aria-label="Retry encrypted attachment" onClick={() => void decrypt().catch(() => undefined)}>Retry</button>
+    </div>;
   }
 
   if (messageType === "image") {

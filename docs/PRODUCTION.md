@@ -29,17 +29,20 @@ Docker and Compose versions were verified during provisioning and must continue 
 
 ## Release status
 
-Keep repository verification distinct from actual deployment evidence:
+Release documentation checkpoint: 2026-09-22. Keep repository verification distinct from actual deployment evidence:
 
 - **Last formally live-verified deployment:** `68211e02` (historical stack/edge smoke). Do not infer the current running SHA from that older record or from repository CI.
-- **Merged repository candidate:** PR #32 / `9b4cf2be5dff938f03df9811f95e1f7b168afd4b`, after full PR CI #282 passed. Post-merge CI #283 is a separate gate; consult the final evidence in PR #32 and `docs/PROGRESS.md`.
-- **Final 1.0 product follow-up:** UX 3.0 on `feat/messenger-ux3-final`. It is not a deployed release. Its complete integrated checks, reviewed merge, verified deployment and Step 70 acceptance remain required.
-- The invalid-cell CSS and 50% whole-screen Sudoku reveal fixes are already in the repository baseline. They are not still an unimplemented PR #26 follow-up.
+- **Merged application candidate:** PR #35 / `24f1152f24e5f9d661866ce30ffafe3ce550cd33`, including the previously merged UX 3.0 and pre-deployment audit corrections. Its tree `3b87cc0aeb7e7d8e43a2fc8900d143ecbaa8cf64` exactly matches the reviewed PR tree.
+- **Full PR gate:** [CI #311](https://github.com/ios3kov/sudoku/actions/runs/35702589645), completed / success on `4aea0f4888a4ed86028afacab0df4d973e1a6670`.
+- **Exact post-merge gate:** [CI #313](https://github.com/ios3kov/sudoku/actions/runs/35705703951). The observed result and gate decision are recorded in [Step 75](steps/75-audit-merge-verification.md); success is required before deployment. See [current progress](PROGRESS.md) for the project boundary.
+- **Production:** no deployment, restart, real restore or infrastructure/secret change was performed in Step 75. Deployment requires separate explicit authorization; live/physical Step 70 remains deferred and open.
+
+The immutable application candidate above, not an arbitrary moving main ref or a later documentation-only commit, is the candidate covered by that application CI. Documentation-only updates do not claim a new application build or deployment. Subsequent code/dependency/build/workflow/infrastructure changes require their own exact-SHA gate.
 
 Do not update the last live-verified deployment until the exact release SHA has
 been deployed and `scripts/smoke-production.sh` passes on the live host. Local
 component/browser checks and green CI never substitute for physical/mobile or
-backup/restore evidence. No deployment was performed by Steps 73/74 or UX3 work.
+backup/restore evidence.
 
 ## DNS
 

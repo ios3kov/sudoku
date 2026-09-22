@@ -1,0 +1,8 @@
+{
+  "jsChunkCount": 10,
+  "totalJsGzip": 215962,
+  "largestJsGzip": 71470,
+  "largestJsChunk": "apps/web/.next/static/chunks/3byuobrkyz9bj.js",
+  "wasmRaw": 2709987,
+  "serviceWorkerRaw": 2546
+}

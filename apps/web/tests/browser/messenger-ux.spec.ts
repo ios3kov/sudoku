@@ -145,3 +145,26 @@ test("repeated history jumps work within the same rendered window", async ({ pag
   await page.evaluate(() => window.__uxFixture.jump(110));
   await expect.poll(() => distanceFromCenter(110)).toBeCloseTo(0, 0);
 });
+
+test("a delayed programmatic scroll event cannot replace the pre-resize anchor", async ({ page }) => {
+  const history = page.locator(".message-list");
+  await history.evaluate((node) => { node.scrollTop = 500; node.dispatchEvent(new Event("scroll")); });
+  await expect(page.getByRole("button", { name: "Jump to latest", exact: true })).toBeVisible();
+  const previous = await anchor(page);
+  await page.evaluate(() => window.__uxFixture.prepend());
+  await expectAnchor(page, previous);
+  await page.evaluate(() => {
+    window.__uxFixture.resizeAbove();
+    // An earlier scrollTop correction has already positioned the reader. Its
+    // queued scroll event can arrive after media layout but before ResizeObserver.
+    // No additional user scroll has happened: the viewport scrollTop is unchanged.
+    document.querySelector(".message-list")!.dispatchEvent(new Event("scroll"));
+  });
+  await expectAnchor(page, previous);
+  // Genuine new user motion must still update the anchor and leave the tail.
+  await history.evaluate((node) => { node.scrollTop += 150; node.dispatchEvent(new Event("scroll")); });
+  const moved = await anchor(page);
+  expect(moved.id).not.toBe(previous.id);
+  await page.evaluate(() => window.__uxFixture.append());
+  await expectAnchor(page, moved);
+});

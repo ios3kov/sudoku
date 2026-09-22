@@ -18,6 +18,7 @@ import { uploadEncryptedAsset } from "./uploads";
 import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
+import { useVoiceRecorder } from "./use-voice-recorder";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
 import { createRefreshQueue } from "./refresh-queue";
 import { useConversationDraft } from "./conversation-drafts";
@@ -26,11 +27,8 @@ import { MessageInteraction } from "./message-interaction";
 import { MessageMeta } from "./message-meta";
 import { MessageTimeline, type MessageTimelineHandle } from "./message-timeline";
 import {
-  MAX_VOICE_SECONDS,
   conversationTitle,
-  findSupportedVoiceMime,
   formatDuration,
-  normalizeVoiceMime,
   voiceFileExtension,
 } from "./chat-utils";
 
@@ -74,22 +72,18 @@ export function EncryptedConversationView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionMessageId, setActionMessageId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const timelineRef = useRef<MessageTimelineHandle>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const viewMountedRef = useRef(false);
-  const voiceEpochRef = useRef(0);
-  const voiceStartingRef = useRef(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const recordChunksRef = useRef<Blob[]>([]);
-  const recordTimerRef = useRef<number | null>(null);
-  const recordStopTimerRef = useRef<number | null>(null);
+  const voiceViewMounted = useRef(false);
+  const voiceViewEpoch = useRef(0);
+  useEffect(() => {
+    voiceViewMounted.current = true;
+    return () => { voiceViewMounted.current = false; voiceViewEpoch.current += 1; };
+  }, []);
   const lastEventRef = useRef<RealtimeEvent | null>(null);
   const queueRefresh = useMemo(() => createRefreshQueue(), []);
 
@@ -164,39 +158,6 @@ export function EncryptedConversationView({
     return () => window.clearInterval(timer);
   }, [loading, refreshProjection, syncBlocked]);
 
-  const stopRecorderResources = useCallback(() => {
-    if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
-    if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
-    recordTimerRef.current = null;
-    recordStopTimerRef.current = null;
-    const recorder = mediaRecorderRef.current;
-    mediaRecorderRef.current = null;
-    // Even an inactive recorder may have queued final data/stop events.
-    // Detach before stopping so cancellation/error can never upload those bytes.
-    if (recorder) {
-      recorder.ondataavailable = null;
-      recorder.onstop = null;
-      recorder.onerror = null;
-      try {
-        if (recorder.state !== "inactive") recorder.stop();
-      } catch {
-        // A failed recorder must not prevent its microphone tracks being freed.
-      }
-    }
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
-    recordChunksRef.current = [];
-  }, []);
-
-  useEffect(() => {
-    viewMountedRef.current = true;
-    return () => {
-      viewMountedRef.current = false;
-      voiceEpochRef.current += 1;
-      voiceStartingRef.current = false;
-      stopRecorderResources();
-    };
-  }, [stopRecorderResources]);
 
   const replyingTo = useMemo(
     () => messageById.get(replyingToId ?? "") ?? null,
@@ -292,93 +253,11 @@ export function EncryptedConversationView({
     }
   }
 
-  async function toggleRecording() {
-    if (recording) {
-      const recorder = mediaRecorderRef.current;
-      if (recorder && recorder.state !== "inactive") recorder.stop();
-      return;
-    }
-    if (busy || syncBlocked || voiceStartingRef.current || !viewMountedRef.current) return;
-    setError(null);
-    if (!navigator.onLine) {
-      setError("Encrypted voice notes require a connection");
-      return;
-    }
-    if (!("MediaRecorder" in window) || !navigator.mediaDevices?.getUserMedia) {
-      setError("Voice recording is not supported on this device");
-      return;
-    }
-
-    const epoch = ++voiceEpochRef.current;
-    const isCurrent = () => viewMountedRef.current && voiceEpochRef.current === epoch;
-    voiceStartingRef.current = true;
-    setBusy(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Permission prompts outlive the view. Dispose a late grant instead of
-      // constructing a recorder after Back, Hide or session revocation.
-      if (!isCurrent()) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      mediaStreamRef.current = stream;
-      const supportedMime = findSupportedVoiceMime();
-      const recorder = supportedMime
-        ? new MediaRecorder(stream, { mimeType: supportedMime })
-        : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      const baseMime = normalizeVoiceMime(recorder.mimeType || supportedMime || "");
-      if (!baseMime || !["audio/mp4", "audio/webm"].includes(baseMime)) {
-        stopRecorderResources();
-        setError("This browser records an unsupported audio format");
-        return;
-      }
-
-      recordChunksRef.current = [];
-      setRecordSeconds(0);
-      const ownsRecorder = () => isCurrent() && mediaRecorderRef.current === recorder;
-      recorder.ondataavailable = (event) => {
-        if (ownsRecorder() && event.data.size > 0) recordChunksRef.current.push(event.data);
-      };
-      recorder.onerror = () => {
-        if (!ownsRecorder()) return;
-        stopRecorderResources();
-        setRecording(false);
-        setError("Voice recording failed");
-      };
-      recorder.onstop = () => {
-        if (!ownsRecorder()) return;
-        const chunks = [...recordChunksRef.current];
-        stopRecorderResources();
-        setRecording(false);
-        if (chunks.length > 0) void uploadVoice(chunks, baseMime, epoch);
-      };
-      recorder.start(250);
-      setRecording(true);
-      recordTimerRef.current = window.setInterval(
-        () => setRecordSeconds((seconds) => seconds + 1),
-        1000,
-      );
-      recordStopTimerRef.current = window.setTimeout(() => {
-        if (ownsRecorder() && recorder.state !== "inactive") recorder.stop();
-      }, MAX_VOICE_SECONDS * 1000);
-    } catch {
-      if (isCurrent()) {
-        stopRecorderResources();
-        setRecording(false);
-        setError("Unable to start voice recording");
-      }
-    } finally {
-      if (isCurrent()) {
-        voiceStartingRef.current = false;
-        setBusy(false);
-      }
-    }
-  }
-
-  async function uploadVoice(chunks: Blob[], mimeType: string, epoch: number) {
-    const isCurrent = () => viewMountedRef.current && voiceEpochRef.current === epoch;
+  async function uploadVoice(chunks: Blob[], mimeType: string) {
+    const epoch = voiceViewEpoch.current;
+    const isCurrent = () => voiceViewMounted.current && voiceViewEpoch.current === epoch;
     if (!isCurrent()) return;
+    if (syncBlocked) { setError("Voice note was not sent: Secure sync is blocked"); return; }
     setBusy(true);
     setUploadProgress(0);
     try {
@@ -389,8 +268,7 @@ export function EncryptedConversationView({
       const uploaded = await uploadEncryptedAsset(file, (progress) => {
         if (isCurrent()) setUploadProgress(progress);
       });
-      // An already-started ciphertext upload may finish after concealment, but
-      // it must not publish a message from a disposed view.
+      // A completed ciphertext upload must not publish from a disposed view.
       if (!isCurrent()) return;
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
@@ -417,6 +295,16 @@ export function EncryptedConversationView({
         setBusy(false);
       }
     }
+  }
+  const {recording, requesting: requestingMic, seconds: recordSeconds, toggle: toggleVoice} = useVoiceRecorder({onReady: uploadVoice, onError: setError});
+
+  async function toggleRecording() {
+    // Stop is always available, even when secure authoring becomes blocked.
+    if (recording) { await toggleVoice(); return; }
+    if (busy || syncBlocked || requestingMic) return;
+    setError(null);
+    if (!navigator.onLine) { setError("Encrypted voice notes require a connection"); return; }
+    await toggleVoice();
   }
 
 
@@ -655,9 +543,10 @@ export function EncryptedConversationView({
           type="button"
           className={`voice-button ${recording ? "recording" : ""}`}
           onClick={() => void toggleRecording()}
-          disabled={busy || syncBlocked || uploadProgress !== null}
+          aria-label={recording ? "Stop recording" : requestingMic ? "Requesting microphone" : "Record voice message"}
+          disabled={!recording && (busy || syncBlocked || requestingMic || uploadProgress !== null)}
         >
-          {recording ? "Stop" : "Mic"}
+          {recording ? "Stop" : requestingMic ? "…" : "Mic"}
         </button>
         <button
           type="submit"

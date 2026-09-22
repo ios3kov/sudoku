@@ -61,7 +61,7 @@ jobs:
         working-directory: apps/api
         run: python -m compileall -q app alembic
       - name: Python lint
-        run: ruff check apps/api/app apps/api/alembic tests/api tests/browser tests/performance
+        run: ruff check apps/api/app apps/api/alembic tests/api tests/browser tests/ops tests/performance
       - name: Python dependency audit
         run: pip-audit --local
       - name: Migrate database
@@ -108,6 +108,10 @@ jobs:
         run: node --experimental-strip-types --test scripts/refresh-queue.test.mjs
       - name: Release hardening regressions
         run: node --test scripts/release-hardening.test.mjs
+      - name: Pre-deployment lifecycle and storage regressions
+        run: |
+          node --experimental-strip-types --test scripts/realtime-client.test.mjs scripts/session-concealment.test.mjs scripts/browser-state-store.test.mjs
+          python -m unittest discover -s tests/ops
       - name: Web typecheck
         run: npm --workspace @sudoku/web run typecheck
       - name: Web production build

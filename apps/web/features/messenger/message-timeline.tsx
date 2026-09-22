@@ -20,6 +20,7 @@ export function MessageTimeline<T extends TimelineMessage>({ items, currentUserI
   const content = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const anchor = useRef<{ id: string; offset: number } | null>(null);
+  const anchoredScrollTop = useRef(0);
   const previousSequence = useRef<number | null>(null);
   const readSent = useRef(0);
   const readInFlight = useRef(false);
@@ -43,6 +44,7 @@ export function MessageTimeline<T extends TimelineMessage>({ items, currentUserI
   const rememberAnchor = useCallback(() => {
     const node = viewport.current;
     if (!node) return;
+    anchoredScrollTop.current = node.scrollTop;
     const top = node.getBoundingClientRect().top;
     for (const item of node.querySelectorAll<HTMLElement>("[data-message-id]")) {
       const bounds = item.getBoundingClientRect();
@@ -154,6 +156,10 @@ export function MessageTimeline<T extends TimelineMessage>({ items, currentUserI
     // next animation frame cannot snap an already-scrolled history to the end.
     const node = viewport.current;
     if (!node) return;
+    // scrollTop assignments also enqueue scroll events. A delayed event for
+    // the position we already restored is not new user intent; media layout
+    // may have changed meanwhile and ResizeObserver still needs the old anchor.
+    if (node.scrollTop === anchoredScrollTop.current) return;
     const wasPinned = pinned.current;
     pinned.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
     if (wasPinned && !pinned.current) setWindowEnd(newest);

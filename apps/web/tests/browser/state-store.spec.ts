@@ -93,16 +93,20 @@ test("delete does not report success when its transaction rolls back", async ({ 
 test("an aborted wrapping-key insertion cannot orphan encrypted state", async ({ page }) => {
   const result = await page.evaluate(async () => {
     const store = window.__stateStore;
-    const native = IDBObjectStore.prototype.add;
-    IDBObjectStore.prototype.add = function(value, key) {
-      const request = native.call(this, value, key);
-      if (this.name === "keys") request.addEventListener("success", () => request.transaction!.abort());
-      return request;
-    };
+    const put = IDBObjectStore.prototype.put;
+    const add = IDBObjectStore.prototype.add;
+    for (const operation of ["put", "add"] as const) {
+      const native = IDBObjectStore.prototype[operation];
+      IDBObjectStore.prototype[operation] = function(value, key) {
+        const request = native.call(this, value, key);
+        if (this.name === "keys") request.addEventListener("success", () => request.transaction!.abort());
+        return request;
+      };
+    }
     let accepted = false;
     try { await store.put("target", new Uint8Array([2])); accepted = true; }
     catch { /* Expected rollback before publishing any ciphertext. */ }
-    finally { IDBObjectStore.prototype.add = native; }
+    finally { IDBObjectStore.prototype.put = put; IDBObjectStore.prototype.add = add; }
     let orphan = false;
     try { orphan = (await store.get("target")) !== null; } catch { orphan = true; }
     await store.put("recovery", new Uint8Array([3]));
