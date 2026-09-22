@@ -82,3 +82,13 @@ test("decrypted attachment completion is invalidated on release and unmount", ()
   assert.match(source, /mountedRef\.current = false/);
   assert.match(source, /!nearViewport && state !== "idle"/);
 });
+
+test("service worker refreshes the offline root without caching private APIs", () => {
+  const source = readFileSync("apps/web/public/sw.js", "utf8");
+  assert.match(source, /cache\.put\("\/", copy\)/);
+  assert.match(source, /url\.pathname\.startsWith\("\/v1\/"\)/);
+  assert.ok(
+    source.indexOf('url.pathname.startsWith("/v1/")')
+      < source.indexOf('event.request.mode === "navigate"'),
+  );
+});
