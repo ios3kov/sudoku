@@ -75,4 +75,5 @@ test("decrypted attachment completion is invalidated on release and unmount", ()
   assert.match(source, /decryptGenerationRef\.current \+= 1/);
   assert.match(source, /!mountedRef\.current \|\| generation !== decryptGenerationRef\.current/);
   assert.match(source, /mountedRef\.current = false/);
+  assert.match(source, /!nearViewport && state !== "idle"/);
 });
