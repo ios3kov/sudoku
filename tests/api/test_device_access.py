@@ -173,7 +173,7 @@ async def test_download_link_requires_pin_and_existing_asset_authorization():
 
 
 @pytest.mark.parametrize("representation", ["uuid", "hyphenated", "hex"])
-async def test_session_list_canonicalizes_equivalent_uuid_representations(monkeypatch, representation):
+async def test_session_list_canonicalizes_equivalent_uuid_representations(representation):
     from app.routes import auth as routes
 
     sid = uuid.uuid4()
@@ -193,10 +193,6 @@ async def test_session_list_canonicalizes_equivalent_uuid_representations(monkey
         async def execute(self, _query):
             return Result()
 
-    async def no_rate_limit(*_args):
-        pass
-
-    monkeypatch.setattr(routes, "enforce_user_rate_limit", no_rate_limit)
     auth = SimpleNamespace(user=SimpleNamespace(id=uuid.uuid4()), session=SimpleNamespace(id=sid))
     response = await routes.list_sessions(auth=auth, db=Database())
     assert len(response) == 1
