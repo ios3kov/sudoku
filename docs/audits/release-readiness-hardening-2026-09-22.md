@@ -49,6 +49,7 @@ Manual/external gates are never inferred from CI: WCAG 2.2 AA manual review, phy
 | RR-002 | P1 | Async attachment decryption could finish after offscreen release/unmount, rematerializing decrypted bytes/object URLs after privacy cleanup. | Fixed with mount/generation invalidation; regression gate added. |
 | RR-003 | P1 | Concurrent first-use contexts could both generate the global IndexedDB wrapping key and `put` different keys; the later writer could make ciphertext written with the earlier key unreadable. | Fixed with insert-only winner + ConstraintError re-read; regression gate added. |
 | RR-004 | P1 | Restore script's EXIT trap restarted app traffic after a failed destructive restore, potentially serving partially restored DB/object state. | Fixed: restore failure remains in maintenance mode and requires explicit operator recovery; executable fake-Docker regression added. |
+| RR-010 | P1 | Conversation-list serialization issued one member query per conversation (N+1), making large account lists scale linearly in DB round trips. | Fixed with one batched member hydration query; 200-conversation load/soak gate added. |
 | RR-005 | P1 release gate | Physical iOS/Android and real two-device E2EE/PWA acceptance has not been executed in this environment. | Open external gate; must not be called passed. |
 | RR-006 | P1 release gate | Staging deployment/migration/rollback and destructive backup restore with measured RPO/RTO have not been executed on staging. | Open external gate; must not be called passed. |
 | RR-007 | P1 release gate | Metrics/traces exist, but no evidence yet proves production/staging alert routing and alert receipt. | Open external gate. |
@@ -60,7 +61,7 @@ No RR-005/006/007 workaround is accepted. They remain explicit blockers for the 
 ## Added hardening verification
 
 - `scripts/release-hardening.test.mjs`: restore fail-closed, wrapping-key race policy, microphone ownership ordering and decrypted-media invalidation.
-- `tests/performance/api_load.py`: authenticated DB-backed load + soak profile with release budgets.
+- `tests/performance/api_load.py`: authenticated DB-backed 200-conversation load + soak profile with release budgets.
 - `apps/web/playwright.cross-browser.config.ts`: Chromium/Firefox/WebKit public-surface acceptance.
 - `scripts/check-release-licenses.py`: npm lock, Cargo metadata and installed Python environment license inventory; forbidden release licenses fail CI.
 - CI retains load-profile evidence for seven days.
