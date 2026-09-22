@@ -174,7 +174,8 @@ async def test_download_link_requires_pin_and_existing_asset_authorization():
 
 @pytest.mark.parametrize("representation", ["uuid", "hyphenated", "hex"])
 async def test_session_list_canonicalizes_equivalent_uuid_representations(representation):
-    from app.routes import auth as routes
+    from app.db import get_db
+    from app.deps import get_auth_context
 
     sid = uuid.uuid4()
     observed = {"uuid": sid, "hyphenated": str(sid), "hex": sid.hex}[representation]
@@ -194,8 +195,25 @@ async def test_session_list_canonicalizes_equivalent_uuid_representations(repres
             return Result()
 
     auth = SimpleNamespace(user=SimpleNamespace(id=uuid.uuid4()), session=SimpleNamespace(id=sid))
-    response = await routes.list_sessions(auth=auth, db=Database())
-    assert len(response) == 1
-    assert str(response[0].id) == str(sid)
-    assert response[0].current is True
-    assert row.id == observed  # Never mutate database identity as a display fix.
+
+    async def override_auth():
+        return auth
+
+    async def override_db():
+        yield Database()
+
+    previous = app.dependency_overrides.copy()
+    try:
+        app.dependency_overrides[get_auth_context] = override_auth
+        app.dependency_overrides[get_db] = override_db
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=ORIGIN) as client:
+            response = await client.get("/v1/sessions")
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert len(result) == 1
+        assert result[0]["id"] == str(sid)
+        assert result[0]["current"] is True
+        assert row.id == observed  # Never mutate database identity as a display fix.
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
