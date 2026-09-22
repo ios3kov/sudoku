@@ -130,21 +130,22 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         const current = sessions.find((session) => session.current);
         if (!current) throw new Error("Current device session is unavailable");
 
-        adapter = new OpenMlsProtocolAdapter({
+        const currentAdapter = new OpenMlsProtocolAdapter({
           userId: user.id,
           deviceId: current.id,
         });
-        await adapter.initialize();
+        adapter = currentAdapter;
+        await currentAdapter.initialize();
 
-        if (cancelled) { adapter.retire(); return; }
-        e2eeRef.current = adapter;
-        setE2eeAdapter(adapter);
+        if (cancelled) { currentAdapter.retire(); return; }
+        e2eeRef.current = currentAdapter;
+        setE2eeAdapter(currentAdapter);
         setE2eeState("ready");
 
         const latestConversations = sortConversations(
           await messengerApi.conversations(),
         );
-        if (cancelled) { adapter.retire(); return; }
+        if (cancelled) { currentAdapter.retire(); return; }
         conversationsRef.current = latestConversations;
         setConversations(latestConversations);
 
@@ -157,10 +158,10 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           // MLS control events and application messages in one durable order,
           // so a Welcome must never be consumed first through the legacy
           // control-only feed and then replayed from transport sequence 0.
-          await adapter.syncTransport(conversation.id);
-          if (adapter.trackedConversationIds().includes(conversation.id)) {
-            await reconcileDeviceChange(adapter, conversation.id);
-            await adapter.syncTransport(conversation.id);
+          await currentAdapter.syncTransport(conversation.id);
+          if (currentAdapter.trackedConversationIds().includes(conversation.id)) {
+            await reconcileDeviceChange(currentAdapter, conversation.id);
+            await currentAdapter.syncTransport(conversation.id);
           }
         }
       } catch {
