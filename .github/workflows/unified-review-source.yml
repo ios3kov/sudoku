@@ -1,0 +1,31 @@
+name: unified-review-source
+on:
+  push:
+    branches: [ops/unified-review-source]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Snapshot immutable review inputs only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin 4aea0f4888a4ed86028afacab0df4d973e1a6670 792e3bf035d5b4bc4f7e70abfef63e5a989055bd ec557c2827b0d2b5329425016df3dfa8ddaf4f71
+          git update-ref refs/heads/review-pr35 4aea0f4888a4ed86028afacab0df4d973e1a6670
+          git update-ref refs/heads/review-pr34 792e3bf035d5b4bc4f7e70abfef63e5a989055bd
+          git update-ref refs/heads/review-baseline ec557c2827b0d2b5329425016df3dfa8ddaf4f71
+          git bundle create /tmp/unified-review.bundle review-pr35 review-pr34 review-baseline
+          git bundle verify /tmp/unified-review.bundle
+          sha256sum /tmp/unified-review.bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unified-review-source
+          path: /tmp/unified-review.bundle
+          retention-days: 1
