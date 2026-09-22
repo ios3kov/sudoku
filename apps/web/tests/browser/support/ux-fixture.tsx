@@ -21,6 +21,7 @@ declare global {
       resizeAbove: () => void;
       jump: (sequence: number) => void;
       reads: number[];
+      load: (count: number) => void;
     };
   }
 }
@@ -49,6 +50,10 @@ function Chat({ id }: { id: string }) {
       resizeAbove: () => { const node = document.querySelector<HTMLElement>(".timeline-item"); if (node) node.style.paddingTop = "80px"; },
       jump: (sequence) => timeline.current?.toSequence(sequence),
       reads: reads.current,
+      load: (count) => setMessages(Array.from({length: count}, (_, index) => ({
+        id: `m${index + 1}`, sequence: index + 1, senderId: index % 5 === 0 ? "me" : "peer",
+        body: `Message ${index + 1}`, createdAt: new Date(Date.UTC(2026,8,21,10,index)).toISOString(),
+      }))),
     };
   }, []);
   function replyTo(message: FixtureMessage) {

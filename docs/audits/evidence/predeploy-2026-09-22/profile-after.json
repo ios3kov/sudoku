@@ -1,0 +1,39 @@
+{
+  "engine": "144.0.7559.96",
+  "cpuThrottle": 4,
+  "viewport": [
+    390,
+    844
+  ],
+  "samples": [
+    {
+      "history": 140,
+      "renderedRows": 120,
+      "inputSamples": 30,
+      "mainThreadMsPerInput": 20.443066666666663,
+      "scriptMsPerInput": 7.801233333333333,
+      "inputToTwoFramesMedianMs": 30.600000000093132,
+      "inputToTwoFramesP95Ms": 32.39999999990687,
+      "layoutCount": 30,
+      "heapUsed": 6556100
+    },
+    {
+      "history": 5000,
+      "renderedRows": 120,
+      "inputSamples": 30,
+      "mainThreadMsPerInput": 19.47636666666667,
+      "scriptMsPerInput": 7.776433333333336,
+      "inputToTwoFramesMedianMs": 31.200000000186265,
+      "inputToTwoFramesP95Ms": 32.60000000009313,
+      "layoutCount": 30,
+      "heapUsed": 7386232
+    }
+  ],
+  "heap": {
+    "hiddenBeforeCycles": 4081012,
+    "hiddenAfterCycles": 3774044,
+    "cycles": 12,
+    "remainingHistoryRows": 0
+  },
+  "note": "Actual timeline/draft/action components with controlled history, not full MLS runtime or a physical mobile benchmark. Two-frame latency includes display scheduling. Heap numbers are diagnostic, not a proof of no leaks."
+}

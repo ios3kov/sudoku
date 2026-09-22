@@ -205,6 +205,7 @@ export async function uploadEncryptedAsset(
 export async function downloadEncryptedAsset(
   asset: AssetSummary,
   metadata: EncryptedAttachmentMetadata,
+  signal?: AbortSignal,
 ): Promise<File> {
   if (!asset.e2ee_ciphertext || asset.id !== metadata.assetId) {
     throw new Error("Encrypted attachment metadata does not match asset");
@@ -216,6 +217,7 @@ export async function downloadEncryptedAsset(
   const response = await fetch(asset.content_url, {
     credentials: "include",
     cache: "no-store",
+    signal,
   });
   if (!response.ok) throw new Error("Unable to download encrypted attachment");
 
@@ -256,6 +258,7 @@ export async function downloadEncryptedAsset(
     throw new Error("Encrypted attachment plaintext integrity check failed");
   }
 
+  signal?.throwIfAborted();
   const plaintextCopy = ownedBytes(plaintext);
   return new File(
     [plaintextCopy.buffer],

@@ -18,6 +18,7 @@ import { uploadEncryptedAsset } from "./uploads";
 import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
+import { useVoiceRecorder } from "./use-voice-recorder";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
 import { createRefreshQueue } from "./refresh-queue";
 import { useConversationDraft } from "./conversation-drafts";
@@ -26,11 +27,8 @@ import { MessageInteraction } from "./message-interaction";
 import { MessageMeta } from "./message-meta";
 import { MessageTimeline, type MessageTimelineHandle } from "./message-timeline";
 import {
-  MAX_VOICE_SECONDS,
   conversationTitle,
-  findSupportedVoiceMime,
   formatDuration,
-  normalizeVoiceMime,
   voiceFileExtension,
 } from "./chat-utils";
 
@@ -74,19 +72,12 @@ export function EncryptedConversationView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionMessageId, setActionMessageId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const timelineRef = useRef<MessageTimelineHandle>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const recordChunksRef = useRef<Blob[]>([]);
-  const recordTimerRef = useRef<number | null>(null);
-  const recordStopTimerRef = useRef<number | null>(null);
   const lastEventRef = useRef<RealtimeEvent | null>(null);
   const queueRefresh = useMemo(() => createRefreshQueue(), []);
 
@@ -161,18 +152,6 @@ export function EncryptedConversationView({
     return () => window.clearInterval(timer);
   }, [loading, refreshProjection, syncBlocked]);
 
-  useEffect(() => () => {
-    if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
-    if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.ondataavailable = null;
-      recorder.onstop = null;
-      recorder.onerror = null;
-      recorder.stop();
-    }
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-  }, []);
 
   const replyingTo = useMemo(
     () => messageById.get(replyingToId ?? "") ?? null,
@@ -268,72 +247,8 @@ export function EncryptedConversationView({
     }
   }
 
-  async function toggleRecording() {
-    if (recording) {
-      mediaRecorderRef.current?.stop();
-      return;
-    }
-    if (busy || syncBlocked) return;
-    setError(null);
-    if (!navigator.onLine) {
-      setError("Encrypted voice notes require a connection");
-      return;
-    }
-    if (!("MediaRecorder" in window) || !navigator.mediaDevices?.getUserMedia) {
-      setError("Voice recording is not supported on this device");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const supportedMime = findSupportedVoiceMime();
-      const recorder = supportedMime
-        ? new MediaRecorder(stream, { mimeType: supportedMime })
-        : new MediaRecorder(stream);
-      const baseMime = normalizeVoiceMime(recorder.mimeType || supportedMime || "");
-      if (!baseMime || !["audio/mp4", "audio/webm"].includes(baseMime)) {
-        stream.getTracks().forEach((track) => track.stop());
-        setError("This browser records an unsupported audio format");
-        return;
-      }
-
-      mediaStreamRef.current = stream;
-      mediaRecorderRef.current = recorder;
-      recordChunksRef.current = [];
-      setRecordSeconds(0);
-      setRecording(true);
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordChunksRef.current.push(event.data);
-      };
-      recorder.onerror = () => {
-        setError("Voice recording failed");
-        stopRecorderResources();
-        setRecording(false);
-      };
-      recorder.onstop = () => {
-        const chunks = [...recordChunksRef.current];
-        stopRecorderResources();
-        setRecording(false);
-        if (chunks.length > 0) void uploadVoice(chunks, baseMime);
-      };
-      recorder.start(250);
-      recordTimerRef.current = window.setInterval(
-        () => setRecordSeconds((seconds) => seconds + 1),
-        1000,
-      );
-      recordStopTimerRef.current = window.setTimeout(
-        () => recorder.stop(),
-        MAX_VOICE_SECONDS * 1000,
-      );
-    } catch {
-      stopRecorderResources();
-      setRecording(false);
-      setError("Microphone permission is required for voice notes");
-    }
-  }
-
   async function uploadVoice(chunks: Blob[], mimeType: string) {
+    if (syncBlocked) { setError("Voice note was not sent: Secure sync is blocked"); return; }
     setBusy(true);
     setUploadProgress(0);
     try {
@@ -364,15 +279,15 @@ export function EncryptedConversationView({
       setBusy(false);
     }
   }
+  const {recording, requesting: requestingMic, seconds: recordSeconds, toggle: toggleVoice} = useVoiceRecorder({onReady: uploadVoice, onError: setError});
 
-  function stopRecorderResources() {
-    if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
-    if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
-    recordTimerRef.current = null;
-    recordStopTimerRef.current = null;
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
-    mediaRecorderRef.current = null;
+  async function toggleRecording() {
+    // Stop is always available, even when secure authoring becomes blocked.
+    if (recording) { await toggleVoice(); return; }
+    if (busy || syncBlocked || requestingMic) return;
+    setError(null);
+    if (!navigator.onLine) { setError("Encrypted voice notes require a connection"); return; }
+    await toggleVoice();
   }
 
 
@@ -611,9 +526,10 @@ export function EncryptedConversationView({
           type="button"
           className={`voice-button ${recording ? "recording" : ""}`}
           onClick={() => void toggleRecording()}
-          disabled={busy || syncBlocked || uploadProgress !== null}
+          aria-label={recording ? "Stop recording" : requestingMic ? "Requesting microphone" : "Record voice message"}
+          disabled={!recording && (busy || syncBlocked || requestingMic || uploadProgress !== null)}
         >
-          {recording ? "Stop" : "Mic"}
+          {recording ? "Stop" : requestingMic ? "…" : "Mic"}
         </button>
         <button
           type="submit"

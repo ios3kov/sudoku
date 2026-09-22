@@ -192,7 +192,7 @@ code{overflow-wrap:anywhere}
 .privacy-grid{aspect-ratio:1;background:linear-gradient(90deg,transparent 32%,var(--text) 32%,var(--text) 34%,transparent 34%,transparent 66%,var(--text) 66%,var(--text) 68%,transparent 68%),linear-gradient(transparent 32%,var(--text) 32%,var(--text) 34%,transparent 34%,transparent 66%,var(--text) 66%,var(--text) 68%,transparent 68%),#fff;border:2px solid var(--text);border-radius:8px}
 
 /* Motion / responsive */
-@keyframes pulse{50%{opacity:.72;transform:scale(.96)}}
+@keyframes pulse{50%{opacity:.72}}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }

@@ -1,13 +1,11 @@
 # Progress
 
 ## Current milestone
-Step 73 is complete: PR #31 merged as `ea063f410778280c302291b67337ec8510d14819`, with full PR CI #279 and post-merge CI #280 successful.
+The user explicitly reopened a global pre-deployment audit on 2026-09-22. Baseline is main `ec557c2827b0d2b5329425016df3dfa8ddaf4f71` (PR #33 / completed CI #285 and #286). The agreed UX 3.0 implementation is merged; this audit does not add another product feature phase.
 
-Step 74 is merged: PR #32 / `9b4cf2be5dff938f03df9811f95e1f7b168afd4b` after full PR CI #282 (`35656570488`) passed. Its earlier CI #281 test-only Back-label mismatch was fixed without changing the interface. Post-merge CI #283 (`35658139543`) is a separate gate; its final result is recorded in PR #32 when complete.
+The new correction is isolated on `audit/predeploy-1.0`: media/voice teardown and retry, server/browser session revocation, atomic committed protocol storage and stale-writer protection, safe failed-restore handling, authorized bulk transport lookup and measured timestamp-rendering optimization. See `docs/audits/predeployment-2026-09-22.md` for reproduced findings, local tests, profiler JSON and limitations. Full integrated CI for the changed candidate is still required; the baseline's green CI does not pass this patch.
 
-The final agreed product block, **Messenger UX 3.0**, is implemented on `feat/messenger-ux3-final`: dated/grouped history, accessible actions, swipe-to-reply, anchored history/jump-to-latest, evidence-based send/read states and bounded RAM-only per-chat drafts. It retains the Step 73 queue and Step 74 composition fix. Local domain, Node, actual-component Chromium, types/lint/build/budget checks passed; **full integrated CI for this exact new code remains required**. See `docs/audits/messenger-ux3-2026-09-21.md` for scope, evidence, risks and stop criteria.
-
-No production deployment is made by this work. The last formally documented live smoke is still `68211e02`; that is historical evidence, not a claim about the currently running SHA. Physical/live Step 70 remains explicitly deferred. After UX3 verification the 1.0 plan is deployment and acceptance, not an automatically expanding feature/audit backlog.
+No production deployment or real data restore is performed. Physical/live Step 70 remains separately required and deferred. Follow the audit PR's exact verification evidence rather than historical pending-gate prose below.
 
 ## Verified E2EE baseline
 Through Steps 69-72 the repository has verified:

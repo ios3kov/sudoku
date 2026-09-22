@@ -10,6 +10,7 @@ import { GroupSettings } from "./group-settings";
 import { ConversationPreferences } from "./conversation-preferences";
 import { MessageSearch } from "./message-search";
 import { ConversationHeader } from "./conversation-header";
+import { useVoiceRecorder } from "./use-voice-recorder";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
 import { useConversationDraft } from "./conversation-drafts";
 import { MessageActionSheet } from "./message-action-sheet";
@@ -17,12 +18,9 @@ import { MessageInteraction } from "./message-interaction";
 import { MessageMeta } from "./message-meta";
 import { MessageTimeline, type MessageTimelineHandle } from "./message-timeline";
 import {
-  MAX_VOICE_SECONDS,
   conversationTitle,
-  findSupportedVoiceMime,
   formatBytes,
   formatDuration,
-  normalizeVoiceMime,
   voiceFileExtension,
 } from "./chat-utils";
 
@@ -64,8 +62,6 @@ export function ConversationView({
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [actionMessageId, setActionMessageId] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -76,11 +72,6 @@ export function ConversationView({
   const timelineRef = useRef<MessageTimelineHandle>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const recordChunksRef = useRef<Blob[]>([]);
-  const recordTimerRef = useRef<number | null>(null);
-  const recordStopTimerRef = useRef<number | null>(null);
   const lastProcessedEventRef = useRef<RealtimeEvent | null>(null);
   const scrollTargetSequenceRef = useRef<number | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
@@ -150,7 +141,6 @@ export function ConversationView({
       typingTimers.clear();
       if (typingTimer.current !== null) window.clearTimeout(typingTimer.current);
       if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
-      stopRecorderResources(true);
     };
   }, []);
 
@@ -420,64 +410,6 @@ export function ConversationView({
     }
   }
 
-  async function toggleRecording() {
-    if (recording) {
-      mediaRecorderRef.current?.stop();
-      return;
-    }
-    setError(null);
-    if (!navigator.onLine) {
-      setError("Voice notes require a connection");
-      return;
-    }
-    if (!("MediaRecorder" in window) || !navigator.mediaDevices?.getUserMedia) {
-      setError("Voice recording is not supported on this device");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const supportedMime = findSupportedVoiceMime();
-      const recorder = supportedMime ? new MediaRecorder(stream, { mimeType: supportedMime }) : new MediaRecorder(stream);
-      const baseMime = normalizeVoiceMime(recorder.mimeType || supportedMime || "");
-      if (!baseMime || !["audio/mp4", "audio/webm"].includes(baseMime)) {
-        stream.getTracks().forEach((track) => track.stop());
-        setError("This browser records an unsupported audio format");
-        return;
-      }
-
-      mediaStreamRef.current = stream;
-      mediaRecorderRef.current = recorder;
-      recordChunksRef.current = [];
-      setRecordSeconds(0);
-      setRecording(true);
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordChunksRef.current.push(event.data);
-      };
-      recorder.onerror = () => {
-        setError("Voice recording failed");
-        stopRecorderResources(true);
-        setRecording(false);
-      };
-      recorder.onstop = () => {
-        const chunks = [...recordChunksRef.current];
-        const mime = baseMime;
-        stopRecorderResources();
-        setRecording(false);
-        if (!chunks.length) return;
-        void uploadVoice(chunks, mime);
-      };
-      recorder.start(250);
-      recordTimerRef.current = window.setInterval(() => setRecordSeconds((seconds) => seconds + 1), 1000);
-      recordStopTimerRef.current = window.setTimeout(() => recorder.stop(), MAX_VOICE_SECONDS * 1000);
-    } catch {
-      setError("Microphone permission is required for voice notes");
-      stopRecorderResources();
-      setRecording(false);
-    }
-  }
-
   async function uploadVoice(chunks: Blob[], mimeType: string) {
     setUploadProgress(0);
     try {
@@ -499,22 +431,14 @@ export function ConversationView({
     }
   }
 
-  function stopRecorderResources(discard = false) {
-    const recorder = mediaRecorderRef.current;
-    if (discard && recorder && recorder.state !== "inactive") {
-      recorder.ondataavailable = null;
-      recorder.onstop = null;
-      recorder.onerror = null;
-      recorder.stop();
-    }
-    if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
-    if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
-    recordTimerRef.current = null;
-    recordStopTimerRef.current = null;
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
-    mediaRecorderRef.current = null;
-    recordChunksRef.current = [];
+  const {recording, requesting: requestingMic, seconds: recordSeconds, toggle: toggleVoice} = useVoiceRecorder({onReady: uploadVoice, onError: setError});
+
+  async function toggleRecording() {
+    if (recording) { await toggleVoice(); return; }
+    if (requestingMic || uploadProgress !== null) return;
+    setError(null);
+    if (!navigator.onLine) { setError("Voice notes require a connection"); return; }
+    await toggleVoice();
   }
 
   async function jumpToSearchResult(target: Message) {
@@ -680,8 +604,8 @@ export function ConversationView({
           placeholder={recording ? `Recording ${formatDuration(recordSeconds)}` : editingMessage ? "Edit message" : "Message"}
           disabled={recording}
         />
-        <button type="button" className={`voice-button ${recording ? "recording" : ""}`} onClick={() => void toggleRecording()} disabled={uploadProgress !== null}>
-          {recording ? "Stop" : "Mic"}
+        <button type="button" className={`voice-button ${recording ? "recording" : ""}`} onClick={() => void toggleRecording()} aria-label={recording ? "Stop recording" : requestingMic ? "Requesting microphone" : "Record voice message"} disabled={!recording && (requestingMic || uploadProgress !== null)}>
+          {recording ? "Stop" : requestingMic ? "…" : "Mic"}
         </button>
         <button type="submit" aria-label={editingMessage ? "Save" : "Send"} disabled={!body.trim() || recording}>{editingMessage ? "Save" : "Send"}</button>
       </form>

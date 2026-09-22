@@ -19,7 +19,7 @@ export const messengerApi = {
     body: JSON.stringify({ email, expires_hours: 168, max_uses: 1 }),
   }),
   conversations: () => request<Conversation[]>("/v1/conversations"),
-  asset: (assetId: string) => request<AssetSummary>(`/v1/assets/${assetId}`),
+  asset: (assetId: string, signal?: AbortSignal) => request<AssetSummary>(`/v1/assets/${assetId}`, {signal}),
   messages: (conversationId: string, options?: { before?: number; after?: number; limit?: number }) => {
     const params = new URLSearchParams();
     if (options?.before !== undefined) params.set("before", String(options.before));

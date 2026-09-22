@@ -11,11 +11,12 @@ export class RealtimeClient {
   private heartbeat: number | null = null;
   private reconnectTimer: number | null = null;
   private attempts = 0;
-  private stopped = false;
+  private stopped = true;
 
   constructor(private readonly handlers: RealtimeHandlers) {}
 
   start() {
+    if (!this.stopped) return;
     this.stopped = false;
     this.connect();
   }
@@ -24,8 +25,13 @@ export class RealtimeClient {
     this.stopped = true;
     if (this.reconnectTimer !== null) window.clearTimeout(this.reconnectTimer);
     if (this.heartbeat !== null) window.clearInterval(this.heartbeat);
-    this.socket?.close(1000, "client stop");
+    this.reconnectTimer = this.heartbeat = null;
+    const socket = this.socket;
     this.socket = null;
+    if (socket) {
+      socket.onopen = socket.onmessage = socket.onclose = null;
+      socket.close(1000, "client stop");
+    }
   }
 
   sendTyping(conversationId: string, active: boolean) {
@@ -40,6 +46,7 @@ export class RealtimeClient {
     this.socket = socket;
 
     socket.onopen = () => {
+      if (this.stopped || this.socket !== socket) return;
       this.attempts = 0;
       this.handlers.onOpen?.();
       if (this.heartbeat !== null) window.clearInterval(this.heartbeat);
@@ -49,6 +56,7 @@ export class RealtimeClient {
     };
 
     socket.onmessage = (message) => {
+      if (this.stopped || this.socket !== socket) return;
       try {
         this.handlers.onEvent(JSON.parse(String(message.data)) as RealtimeEvent);
       } catch {
@@ -57,13 +65,18 @@ export class RealtimeClient {
     };
 
     socket.onclose = (event) => {
+      if (this.stopped || this.socket !== socket) return;
+      this.socket = null;
       if (this.heartbeat !== null) window.clearInterval(this.heartbeat);
       this.heartbeat = null;
       this.handlers.onClose?.(event);
       if (this.stopped) return;
       const delay = Math.min(10_000, 500 * 2 ** Math.min(this.attempts, 5));
       this.attempts += 1;
-      this.reconnectTimer = window.setTimeout(() => this.connect(), delay);
+      this.reconnectTimer = window.setTimeout(() => {
+        this.reconnectTimer = null;
+        this.connect();
+      }, delay);
     };
   }
 }

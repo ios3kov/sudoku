@@ -22,6 +22,8 @@ settings = get_settings()
 redis = Redis.from_url(settings.redis_url, decode_responses=True)
 _parsed_origin = urlparse(settings.public_origin)
 EXPECTED_ORIGIN = f"{_parsed_origin.scheme}://{_parsed_origin.netloc}"
+SESSION_CHECK_SECONDS = 30
+MAX_CLIENT_FRAME_CHARS = 4096
 
 
 async def authenticate_websocket(websocket: WebSocket) -> tuple[User, uuid.UUID] | None:
@@ -116,18 +118,39 @@ async def websocket_endpoint(websocket: WebSocket):
         await redis.set(presence_key, "1", ex=70)
 
         async def forward_events() -> None:
-            async for event in pubsub.listen():
-                if event.get("type") == "message":
-                    await websocket.send_text(str(event["data"]))
+            try:
+                async for event in pubsub.listen():
+                    if event.get("type") == "message":
+                        # A client can withhold application pings. Never rely on
+                        # client cooperation to revoke server-to-client access.
+                        if not await session_still_valid(session_id, user.id):
+                            await websocket.close(code=4401)
+                            return
+                        await websocket.send_text(str(event["data"]))
+            except Exception:
+                # Authentication-store or forwarding failure is fail-closed.
+                await websocket.close(code=1011)
 
         forward_task = asyncio.create_task(forward_events())
         typing_events: deque[float] = deque()
 
         while True:
-            raw = await websocket.receive_text()
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=SESSION_CHECK_SECONDS)
+            except TimeoutError:
+                if not await session_still_valid(session_id, user.id):
+                    await websocket.close(code=4401)
+                    break
+                continue
+            if len(raw) > MAX_CLIENT_FRAME_CHARS:
+                await websocket.close(code=1009)
+                break
             try:
                 payload = json.loads(raw)
             except json.JSONDecodeError:
+                continue
+
+            if not isinstance(payload, dict) or not isinstance(payload.get("type"), str):
                 continue
 
             if payload.get("type") == "ping":
@@ -162,7 +185,7 @@ async def websocket_endpoint(websocket: WebSocket):
         websocket_connection_delta(-1)
         if forward_task is not None:
             forward_task.cancel()
-            with suppress(asyncio.CancelledError):
+            with suppress(asyncio.CancelledError, Exception):
                 await forward_task
         with suppress(Exception):
             await pubsub.unsubscribe(channel)

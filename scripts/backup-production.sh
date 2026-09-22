@@ -13,17 +13,35 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+# Never overlap backup/restore against the same working production stack.
+exec 9>"${MAINTENANCE_LOCK:-.sudoku-maintenance.lock}"
+if ! flock -n 9; then
+  echo "Another production maintenance operation is running" >&2
+  exit 1
+fi
+
 compose=(docker compose --env-file "$ENV_FILE" -f compose.yaml -f compose.production.yaml)
 
 mkdir -p "$BACKUP_ROOT"
-rm -rf "$TMP"
+if [[ -e "$TMP" || -e "$TARGET" ]]; then
+  echo "Backup target already exists; refusing to overwrite: $TARGET" >&2
+  exit 1
+fi
 mkdir -p "$TMP/objects"
 chmod 700 "$BACKUP_ROOT" "$TMP" "$TMP/objects"
 
 restart_apps() {
-  "${compose[@]}" up -d api worker beat web caddy >/dev/null 2>&1 || true
+  "${compose[@]}" up -d api worker beat web caddy >/dev/null
 }
-trap restart_apps EXIT
+recover_after_backup() {
+  local result=$?
+  if ! restart_apps; then
+    echo "[backup] application restart failed; operator recovery required" >&2
+    result=1
+  fi
+  exit "$result"
+}
+trap recover_after_backup EXIT
 
 echo "[backup] entering maintenance mode"
 "${compose[@]}" stop caddy web api worker beat >/dev/null
@@ -36,7 +54,12 @@ OBJECTS_ABS="$(cd "$TMP/objects" && pwd)"
 echo "[backup] encrypted object store"
 "${compose[@]}" run --rm --no-deps   -v "$OBJECTS_ABS:/backup"   --entrypoint /bin/sh minio-init -c '
     set -eu
-    until mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do sleep 1; done
+    attempt=0
+    until mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do
+      attempt=$((attempt + 1))
+      if [ "$attempt" -ge 60 ]; then echo "Object store did not become ready" >&2; exit 1; fi
+      sleep 1
+    done
     mc mirror --overwrite "local/$S3_BUCKET" /backup
   '
 
