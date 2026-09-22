@@ -65,17 +65,17 @@ class LegacySignal(unittest.TestCase):
         with patch.object(legacy, "inspect_target", side_effect=[legacy.Target(8, 500), legacy.Target(8, 600)]), \
              patch.object(legacy.os, "pidfd_open", return_value=99), \
              patch.object(legacy.signal, "pidfd_send_signal") as sent, \
-             patch.object(legacy.os, "close") as closed:
-            with self.assertRaises(RuntimeError):
-                legacy.terminate(self.proc)
+             patch.object(legacy.os, "close") as closed, \
+             self.assertRaises(RuntimeError):
+            legacy.terminate(self.proc)
         sent.assert_not_called()
         closed.assert_called_once_with(99)
 
     def test_missing_process_before_pidfd_is_not_ignored(self):
         with patch.object(legacy.os, "pidfd_open", side_effect=ProcessLookupError), \
-             patch.object(legacy.signal, "pidfd_send_signal") as sent:
-            with self.assertRaises(ProcessLookupError):
-                legacy.terminate(self.proc)
+             patch.object(legacy.signal, "pidfd_send_signal") as sent, \
+             self.assertRaises(ProcessLookupError):
+            legacy.terminate(self.proc)
         sent.assert_not_called()
 
 

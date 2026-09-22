@@ -4,12 +4,12 @@ Uses the production API image and exact Compose launch argv, but a synthetic ASG
 application and migration command. Not a live database or production test.
 """
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = '''
@@ -86,6 +86,7 @@ def main(image):
             try:
                 command = fixed if case == 'fixed-exec' else legacy
                 docker('run', '-d', '--name', name, '--network', 'none',
+                       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
                        '--mount', f'type=bind,src={fixture / "app"},dst=/srv/api/app,readonly',
                        '--mount', f'type=bind,src={fixture / "alembic"},dst=/usr/local/bin/alembic,readonly',
                        image, *command)
