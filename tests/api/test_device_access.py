@@ -77,7 +77,7 @@ async def test_exact_ascii_digits_preserve_leading_zero_and_do_not_accept_pin_as
 
 
 async def test_five_concurrent_wrong_attempts_persist_and_password_recovery_preserves_session():
-    async with account() as (client, _, sid):
+    async with account() as (client, uid, sid):
         await enroll(client)
         replies = await asyncio.gather(*(client.post(ROOT + "/unlock", json={"pin": "9876"}) for _ in range(7)))
         assert sorted(r.status_code for r in replies) == [403, 403, 403, 403, 429, 429, 429]
@@ -89,9 +89,16 @@ async def test_five_concurrent_wrong_attempts_persist_and_password_recovery_pres
         assert recovery.status_code == 200
         token = recovery.json()["unlock_token"]
         sessions = await client.get("/v1/sessions", headers={HEADER: token})
-        assert sessions.status_code == 200 and next(s for s in sessions.json() if s["current"])["id"] == str(sid)
+        assert sessions.status_code == 200, sessions.text
+        items = sessions.json()
+        assert isinstance(items, list), items
+        current = [item for item in items if item["current"]]
+        assert len(current) == 1, {"sessions": items, "expected_session": str(sid)}
+        assert current[0]["id"] == str(sid)
         async with SessionFactory() as db:
             assert (await db.get(SessionPin, sid)).failed_attempts == 0
+            live = await db.scalar(select(Session).where(Session.token_hash == hash_secret(client.cookies.get(COOKIE))))
+            assert live.id == sid and live.user_id == uid
 
 
 async def test_ticket_binding_rotation_stale_lock_and_expiry():
