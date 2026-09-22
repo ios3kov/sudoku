@@ -180,11 +180,11 @@ async def list_sessions(auth: AuthContext = Depends(get_auth_context), db: Async
     ).scalars().all()
     return [
         SessionResponse(
-            id=item.id,
+            id=uuid.UUID(str(item.id)),
             device_name=item.device_name,
             created_at=item.created_at,
             expires_at=item.expires_at,
-            current=item.id == auth.session.id,
+            current=uuid.UUID(str(item.id)) == uuid.UUID(str(auth.session.id)),
         )
         for item in rows
     ]

@@ -170,3 +170,36 @@ async def test_download_link_requires_pin_and_existing_asset_authorization():
         assert response.json()["expires_in"] == 300
         assert response.json()["url"].startswith(("https://", "http://"))
         assert token not in response.text
+
+
+@pytest.mark.parametrize("representation", ["uuid", "hyphenated", "hex"])
+async def test_session_list_canonicalizes_equivalent_uuid_representations(monkeypatch, representation):
+    from app.routes import auth as routes
+
+    sid = uuid.uuid4()
+    observed = {"uuid": sid, "hyphenated": str(sid), "hex": sid.hex}[representation]
+    now = datetime.now(UTC)
+    row = SimpleNamespace(id=observed, device_name="PIN test", created_at=now,
+                          expires_at=now + timedelta(days=1), revoked_at=None)
+
+    class Result:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [row]
+
+    class Database:
+        async def execute(self, _query):
+            return Result()
+
+    async def no_rate_limit(*_args):
+        pass
+
+    monkeypatch.setattr(routes, "enforce_user_rate_limit", no_rate_limit)
+    auth = SimpleNamespace(user=SimpleNamespace(id=uuid.uuid4()), session=SimpleNamespace(id=sid))
+    response = await routes.list_sessions(auth=auth, db=Database())
+    assert len(response) == 1
+    assert str(response[0].id) == str(sid)
+    assert response[0].current is True
+    assert row.id == observed  # Never mutate database identity as a display fix.
