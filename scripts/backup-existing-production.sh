@@ -5,8 +5,10 @@ umask 077
 
 BASE=1e404b2c25d4c2582b42ab8e774a60ddde5a2f4b
 ENV_FILE="$(pwd)/.env.production"
+SIGNAL_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/legacy-api-signal.py"
 stage=preflight
 maintenance=0
+policy_changed=0
 record=not-created
 declare -A ids images infra_state
 services=(postgres redis minio api worker beat web caddy)
@@ -25,10 +27,23 @@ unchanged() {
   done
 }
 
+restore_api_policy() {
+  (( policy_changed )) || return 0
+  [[ "$(docker inspect -f '{{.Id}} {{.Image}}' "sudoku-api-1")" == "${ids[api]} ${images[api]}" ]] || return 1
+  local current
+  current=$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}} {{.HostConfig.RestartPolicy.MaximumRetryCount}}' "${ids[api]}") || return 1
+  # Do not overwrite an unrelated concurrent operator policy change.
+  [[ "$current" == 'no 0' || "$current" == 'unless-stopped 0' ]] || return 1
+  docker update --restart=unless-stopped "${ids[api]}" >/dev/null || return 1
+  [[ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}} {{.HostConfig.RestartPolicy.MaximumRetryCount}}' "${ids[api]}")" == 'unless-stopped 0' ]] || return 1
+  policy_changed=0
+}
+
 resume_existing() {
   local service attempt healthy=0
   unchanged || { echo 'STOP: container identity/infrastructure changed; manual recovery required' >&2; return 1; }
   docker start "${ids[api]}" >/dev/null || return 1
+  restore_api_policy || return 1
   for ((attempt=0; attempt<90; attempt++)); do
     if [[ "$(docker inspect -f '{{.State.Status}} {{.State.Health.Status}}' "${ids[api]}")" == 'running healthy' ]]; then
       healthy=1
@@ -55,6 +70,7 @@ finish() {
   if (( maintenance )); then
     echo '[recovery] resuming the original application containers'
     if ! resume_existing; then
+      restore_api_policy || echo "RECOVERY_REQUIRED: restore API restart policy using record=$record" >&2
       docker stop --time 30 "${ids[caddy]}" >/dev/null 2>&1 || echo 'WARNING: could not close original public proxy' >&2
       echo 'RECOVERY_REQUIRED: public proxy left stopped where possible; do not deploy' >&2
       rc=1
@@ -71,6 +87,7 @@ trap 'exit 130' HUP INT TERM
 for command in docker git flock python3 sha256sum find sort xargs; do
   command -v "$command" >/dev/null || die "missing command: $command"
 done
+[[ -s "$SIGNAL_HELPER" ]] || die 'missing legacy API signal helper'
 [[ "$(git rev-parse HEAD)" == "$BASE" ]] || die 'unexpected checkout; do not automatically change it'
 [[ -z "$(git status --porcelain)" ]] || die 'local changes found'
 exec 8>.sudoku-maintenance.lock
@@ -92,6 +109,8 @@ for service in postgres redis minio; do
   infra_state[$service]=$(docker inspect -f '{{.State.Status}} {{.State.StartedAt}} {{.RestartCount}}' "${ids[$service]}")
 done
 [[ "$(docker exec "${ids[postgres]}" psql -X -U sudoku -d sudoku -Atqc 'SELECT version_num FROM alembic_version')" == 0014_mls_device_rekey ]] || die 'unexpected database revision'
+[[ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}} {{.HostConfig.RestartPolicy.MaximumRetryCount}}' "${ids[api]}")" == 'unless-stopped 0' ]] || die 'unexpected API restart policy'
+docker exec -i "${ids[api]}" python - --check < "$SIGNAL_HELPER"
 
 # Only the separate mc helper image must be locally available. The running
 # MinIO server image is deliberately never resolved, retagged, or replaced.
@@ -107,6 +126,7 @@ mkdir -p "$partial/objects"
 for service in "${services[@]}"; do
   printf '%s\t%s\t%s\n' "$service" "${ids[$service]}" "${images[$service]}" >> "$record/containers.tsv"
 done
+printf 'unless-stopped\n' > "$record/api-restart-policy.txt"
 printf 'services:\n  minio-init:\n    image: "%s"\n    build: !reset null\n    pull_policy: never\n' "$mc_image" > "$record/mc.yaml"
 helper=("${dc[@]}" -f "$record/mc.yaml")
 "${helper[@]}" config --format json | python3 -c '
@@ -126,13 +146,31 @@ unchanged || die 'infrastructure changed during preflight'
 stage=quiesce
 maintenance=1
 echo '[1/4] Temporary maintenance: stopping application writers only'
-for service in caddy beat worker web api; do
+for service in caddy beat worker web; do
   docker stop --time 60 "${ids[$service]}" >/dev/null
+done
+# The legacy shell cannot forward Docker's SIGTERM. Disable automatic restart
+# briefly, then signal the revalidated Uvicorn child through a pidfd, not PID 1.
+policy_changed=1
+docker update --restart=no "${ids[api]}" >/dev/null
+[[ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}} {{.HostConfig.RestartPolicy.MaximumRetryCount}}' "${ids[api]}")" == 'no 0' ]] || die 'API automatic restart was not disabled'
+signal_time=$(date -u +%FT%TZ)
+docker exec -i "${ids[api]}" python - --terminate < "$SIGNAL_HELPER"
+for ((attempt=0; attempt<60; attempt++)); do
+  [[ "$(docker inspect -f '{{.State.Status}}' "${ids[api]}")" == exited ]] && break
+  sleep 1
 done
 for service in "${apps[@]}"; do
   [[ "$(docker inspect -f '{{.State.Status}}' "${ids[$service]}")" == exited ]] || die "writer did not stop: $service"
   [[ "$(docker inspect -f '{{.State.ExitCode}}' "${ids[$service]}")" != 137 ]] || die "forced shutdown: $service"
+  [[ "$(docker inspect -f '{{.State.OOMKilled}}' "${ids[$service]}")" == false ]] || die "OOM shutdown: $service"
 done
+api_exit=$(docker inspect -f '{{.State.ExitCode}}' "${ids[api]}")
+[[ "$api_exit" == 0 || "$api_exit" == 143 ]] || die "unexpected API exit: $api_exit"
+docker logs --since "$signal_time" "${ids[api]}" > "$record/api-shutdown.log" 2>&1
+grep -q 'Application shutdown complete' "$record/api-shutdown.log" || die 'API lifespan shutdown not confirmed'
+grep -q 'Finished server process' "$record/api-shutdown.log" || die 'API server completion not confirmed'
+echo 'API_GRACEFUL_STOP_OK'
 unchanged || die 'infrastructure changed before backup'
 
 stage=database
