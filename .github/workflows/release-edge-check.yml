@@ -1,0 +1,81 @@
+name: release-edge-check
+on:
+  push:
+    branches: [ops/release-1.0-verification]
+    paths: [.github/workflows/release-edge-check.yml]
+permissions:
+  contents: read
+jobs:
+  public-edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ec557c2827b0d2b5329425016df3dfa8ddaf4f71
+          persist-credentials: false
+      - name: Public TLS, headers and API smoke (no deployment)
+        shell: bash
+        env:
+          APP_DOMAIN: sudoku.moscow
+        run: |
+          set -euo pipefail
+          {
+            date -u +%FT%TZ
+            printf 'Checker source: '
+            git rev-parse HEAD
+            echo 'The checker SHA does not identify the running production version.'
+            timeout 150 bash scripts/smoke-production.sh
+          } 2>&1 | tee /tmp/sudoku-public-edge.txt
+      - name: Probe only the documented public port boundary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' | tee /tmp/sudoku-public-ports.json
+          import concurrent.futures
+          import datetime
+          import json
+          import socket
+          import sys
+
+          host = "185.31.167.36"
+          ports = [22, 80, 443, 3000, 5432, 6379, 8000, 9000, 9001]
+
+          def probe(port):
+              try:
+                  with socket.create_connection((host, port), timeout=4):
+                      return port, "reachable"
+              except ConnectionRefusedError:
+                  return port, "refused"
+              except TimeoutError:
+                  return port, "timeout"
+              except OSError:
+                  return port, "network_error"
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+              results = dict(pool.map(probe, ports))
+          unexpected = [port for port in ports if port not in (80, 443)
+                        and results[port] == "reachable"]
+          missing = [port for port in (80, 443) if results[port] != "reachable"]
+          print(json.dumps({
+              "checked_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "source": "GitHub hosted runner, not the administrator SSH source",
+              "host": host,
+              "ports": results,
+              "unexpected_reachable": unexpected,
+              "required_unreachable": missing,
+              "note": "Timeouts indicate non-reachability from this runner, not proof of firewall configuration."
+          }, indent=2))
+          sys.exit(1 if unexpected or missing else 0)
+          PY
+      - name: Retain non-secret edge evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sudoku-public-edge-${{ github.run_id }}
+          path: |
+            /tmp/sudoku-public-edge.txt
+            /tmp/sudoku-public-ports.json
+          if-no-files-found: error
+          retention-days: 7
