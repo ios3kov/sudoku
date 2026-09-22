@@ -1,0 +1,24 @@
+name: api-shutdown
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  graceful-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - name: Verify legacy signal guards and backup recovery control flow
+        run: |
+          bash -n scripts/backup-existing-production.sh
+          python -m unittest discover -s tests/ops -p 'test_legacy_api_signal.py' -v
+          python -m unittest discover -s tests/ops -p 'test_backup_existing.py' -v
+      - name: Build production non-root API image
+        run: docker build --file apps/api/Dockerfile --tag sudoku-api-shutdown-ci .
+      - name: Reproduce shell SIGKILL and verify targeted and permanent graceful shutdown
+        run: python tests/ops/api_shutdown_runtime.py sudoku-api-shutdown-ci
