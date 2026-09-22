@@ -93,6 +93,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
     document.addEventListener("visibilitychange", background);
     void checkSession();
     return () => {
+      loginPasswordRef.current = null;
       alive.current = false; requestId.current += 1; lockDevice();
       window.removeEventListener(DEVICE_LOCK_EVENT, locked);
       window.removeEventListener("pagehide", hide);
