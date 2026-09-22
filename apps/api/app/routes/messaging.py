@@ -39,6 +39,7 @@ from ..schemas import (
 )
 
 from .messaging_support import (
+    conversation_members_responses,
     conversation_response,
     emit,
     require_group_owner,
@@ -376,10 +377,19 @@ async def list_conversations(auth: AuthContext = Depends(get_auth_context), db: 
             .order_by(ConversationMember.is_pinned.desc(), Conversation.created_at.desc())
         )
     ).all()
-    responses: list[ConversationResponse] = []
-    for conversation, member in rows:
-        responses.append(await conversation_response(db, conversation, member))
-    return responses
+    member_groups = await conversation_members_responses(
+        db,
+        [conversation.id for conversation, _ in rows],
+    )
+    return [
+        await conversation_response(
+            db,
+            conversation,
+            member,
+            member_groups.get(conversation.id, []),
+        )
+        for conversation, member in rows
+    ]
 
 
 @router.get("/conversations/{conversation_id}/search", response_model=list[MessageResponse])
