@@ -42,9 +42,23 @@ async function getWrappingKey(db: IDBDatabase): Promise<CryptoKey> {
     false,
     ["encrypt", "decrypt"],
   );
+  // Use add, not put. Concurrent first-use tabs may both generate a key;
+  // only one may become authoritative. The loser re-reads the winner instead
+  // of overwriting it and making already-encrypted protocol state unreadable.
   const writeTx = db.transaction(KEY_STORE, "readwrite");
-  await transactionRequest(writeTx.objectStore(KEY_STORE).put(key, WRAPPING_KEY_ID));
-  return key;
+  try {
+    await transactionRequest(writeTx.objectStore(KEY_STORE).add(key, WRAPPING_KEY_ID));
+    return key;
+  } catch (error) {
+    if (!(error instanceof DOMException) || error.name !== "ConstraintError") throw error;
+    const winner = await transactionRequest(
+      db.transaction(KEY_STORE, "readonly").objectStore(KEY_STORE).get(WRAPPING_KEY_ID),
+    );
+    if (!(winner instanceof CryptoKey)) {
+      throw new Error("Protocol-state wrapping key race did not produce a valid key");
+    }
+    return winner;
+  }
 }
 
 export class BrowserProtocolStateStore {
