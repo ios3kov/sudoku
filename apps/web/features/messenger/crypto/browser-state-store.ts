@@ -120,6 +120,7 @@ export class BrowserProtocolStateStore {
   }
 
   async get(id: string): Promise<Uint8Array | null> {
+    if (this.closed.has(id)) throw new Error("Crypto state is closed; reload secure messaging");
     const db = await openDatabase();
     try {
       const stored = await requestInTransaction(db, STATE_STORE, "readonly", (store) => store.get(id)) as StoredCiphertext | undefined;
@@ -130,6 +131,7 @@ export class BrowserProtocolStateStore {
         key,
         stored.ciphertext,
       );
+      if (this.closed.has(id)) throw new Error("Crypto state is closed; reload secure messaging");
       this.observed.set(id, stored);
       return new Uint8Array(plaintext);
     } finally {
@@ -137,9 +139,15 @@ export class BrowserProtocolStateStore {
     }
   }
 
-  async delete(id: string): Promise<void> {
+  close(id: string): void {
+    // Synchronously retire one adapter's view of this state. This blocks stale
+    // async writes during pagehide/unmount without deleting durable MLS state.
     this.closed.add(id);
     this.observed.delete(id);
+  }
+
+  async delete(id: string): Promise<void> {
+    this.close(id);
     const db = await openDatabase();
     try {
       await requestInTransaction(db, STATE_STORE, "readwrite", (store) => store.delete(id));
