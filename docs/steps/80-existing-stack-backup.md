@@ -2,6 +2,20 @@
 
 Date: 2026-09-22. Scope: correct the operator backup path after the PIN rollout stopped during preflight. This helper does **not** deploy PIN or change the application candidate.
 
+## Latest operator checkpoint — API shutdown blocks backup
+
+The operator executed helper commit `3182e4c865ea8fc9cbae8fa7a2943116b04db3b8` and supplied `STOP: forced shutdown: api`, followed by recovery and `BACKUP_STOP stage=quiesce record=/home/deploy/sudoku-release-records/pin-backup-s2kys3rJ; PIN not deployed`. In this exact helper, the forced-shutdown message is emitted when the stopped container's exit code is 137. It does not by itself distinguish a stop-timeout SIGKILL from an OOM kill or another external kill.
+
+The recovery path resumed the original application containers. The first HTTPS probe failed during startup, but retries continued and the final output was `[smoke] live edge checks passed for sudoku.moscow`. This is operator-supplied successful recovery evidence, not a fresh independent inspection or proof of complete application acceptance. The run did stop/start application containers; do not describe it as having made no production changes.
+
+The script never reached its PostgreSQL dump or S3 copy stage. No new completed backup, database migration, PIN rollout or recovery-point validation is claimed for this run. Existing historical backups and volumes were not intentionally removed. The unavailable historical MinIO image was not recreated by this helper.
+
+The baseline Compose API command invokes `/bin/sh -c` with `alembic upgrade head && uvicorn ...`, without `exec` before Uvicorn. Docker documents that a shell wrapper can prevent its child server from receiving the stop signal. This is a source-supported hypothesis, not yet a confirmed observation of the running process tree. A long-running graceful shutdown or OOM must not be silently assumed away. Before another maintenance attempt, read only selected API state/launch fields, the process tree without command arguments, and bounded lifecycle log lines. Do not print environment variables, credential headers, request bodies or private messages.
+
+Keep the exit-137 guard. Do not rerun the old rollout, whitelist forced termination, indiscriminately signal process groups, or increase the stop timeout without diagnosis. Any correction must verify the actual target process, retain quiescent cross-store backup ordering and exact-container recovery, and document any temporary restart-policy change plus its restoration. A permanent launch-command change needs its own tested candidate; earlier PIN CI does not certify it. This checkpoint changes documentation only; it does not claim a tested shutdown fix.
+
+Primary references: [Docker signal handling](https://docs.docker.com/reference/dockerfile/#shell-form-entrypoint-example), [Uvicorn graceful shutdown](https://www.uvicorn.org/server-behavior/#graceful-process-shutdown).
+
 ## Observed failure
 
 The operator supplied `STOP: image unavailable or changed: minio`, `DEPLOY_STOP stage=preflight record=/home/deploy/sudoku-release-records/pin-bMN2EkHq`, and `No such image: sha256:d247575e9ce5fe6bdb01e357468c22859fa747160ccedf873d882c66c8886b9e`. The previously provided deployment block stopped before backup, migration, checkout or service switching. Its earlier preflight can create a record directory and recovery tags for preceding services; do not claim there were no filesystem or Docker-tag changes whatsoever.
