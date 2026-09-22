@@ -1,0 +1,28 @@
+name: hardening-source-export
+on:
+  push:
+    branches: [ops/hardening-source-export]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7b4a0fadcef60750d503db2a79d90c5b5b29f766
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export immutable source for isolated behavior verification
+        run: |
+          git bundle create /tmp/sudoku-hardening.bundle HEAD
+          git bundle verify /tmp/sudoku-hardening.bundle
+          sha256sum /tmp/sudoku-hardening.bundle > /tmp/sudoku-hardening.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sudoku-hardening-source
+          path: |
+            /tmp/sudoku-hardening.bundle
+            /tmp/sudoku-hardening.sha256
+          retention-days: 2
