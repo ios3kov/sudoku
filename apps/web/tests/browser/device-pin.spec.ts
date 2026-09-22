@@ -45,7 +45,9 @@ for (const role of ["member", "admin"]) {
     expect((await context.request.get("/v1/conversations")).status()).toBe(423);
     await page.getByLabel("Device PIN", { exact: true }).fill("9876");
     await page.getByRole("button", { name: "Unlock", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Incorrect PIN");
+    // Next.js also renders a route-announcer alert outside this landmark.
+    await expect(page.getByRole("main", { name: "Private area locked", exact: true }).getByRole("alert"))
+      .toContainText("Incorrect PIN");
     if (role === "member") {
       for (let i = 0; i < 4; i++) {
         await page.getByLabel("Device PIN", { exact: true }).fill("9876");
