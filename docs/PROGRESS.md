@@ -1,6 +1,20 @@
 # Progress
 
-## Current milestone
+## Active release-hardening evidence (2026-09-22)
+
+PR #34 remains open; no production deployment. The former CI #310 baseline
+(`7b4a0fad`) passed, but newly added behavior tests reproduced nine failed
+media/IndexedDB lifecycle assertions. Corrections and a paired PostgreSQL
+before/after profile are tracked in `docs/audits/behavioral-hardening-2026-09-22.md`.
+Do not infer final readiness from a historical green run. Both current-head CI
+workflows and the remaining real-device/staging/manual release gates are required.
+
+Main baseline is the already-merged UX3 commit `ec557c28` (PR #33). The historical
+sections below predate that merge and are retained as a milestone log, not as
+current release status. The current hardening branch also restores user-controlled
+zoom; its older fixed-viewport description below is superseded.
+
+## Historical milestone log (through UX3 preparation)
 Step 73 is complete: PR #31 merged as `ea063f410778280c302291b67337ec8510d14819`, with full PR CI #279 and post-merge CI #280 successful.
 
 Step 74 is merged: PR #32 / `9b4cf2be5dff938f03df9811f95e1f7b168afd4b` after full PR CI #282 (`35656570488`) passed. Its earlier CI #281 test-only Back-label mismatch was fixed without changing the interface. Post-merge CI #283 (`35658139543`) is a separate gate; its final result is recorded in PR #32 when complete.
@@ -86,7 +100,7 @@ Current live findings:
 
 Targeted unlock UX/performance work is documented in `docs/audits/sudoku-unlock-ux-2026-09-20.md`.
 
-## Automated verification
+## Historical automated verification
 Latest completed post-merge baseline: Step 73 / PR #31, CI #280. PR #32 passed full PR CI #282 and merged; post-merge #283 must be checked separately. UX3's local checks pass, but only its exact published full-CI result can close the new gate. Historical results do not certify new code.
 
 ### Historical pre-production baseline

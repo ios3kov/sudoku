@@ -31,3 +31,45 @@ jobs:
           path: apps/web/test-results/
           retention-days: 3
           if-no-files-found: ignore
+  paired-db-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: sudoku
+          POSTGRES_USER: sudoku
+          POSTGRES_PASSWORD: profile-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U sudoku -d sudoku"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://sudoku:profile-only@127.0.0.1:5432/sudoku
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PUBLIC_ORIGIN: https://sudoku.test
+      S3_BUCKET: sudoku-profile
+      SUDOKU_DISPOSABLE_PROFILE: 'YES'
+      PYTHONPATH: apps/api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -e './apps/api[test]'
+      - run: ruff check tests/performance/conversation_hydration.py
+      - run: cd apps/api && alembic upgrade head
+      - name: Compare identical data and count actual SQL round trips
+        run: python tests/performance/conversation_hydration.py | tee /tmp/conversation-hydration.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paired-db-profile-${{ github.run_id }}
+          path: /tmp/conversation-hydration.json
+          retention-days: 7
+          if-no-files-found: ignore

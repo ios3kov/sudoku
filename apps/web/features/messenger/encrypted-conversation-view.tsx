@@ -82,6 +82,9 @@ export function EncryptedConversationView({
   const timelineRef = useRef<MessageTimelineHandle>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const viewMountedRef = useRef(false);
+  const voiceEpochRef = useRef(0);
+  const voiceStartingRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
@@ -161,18 +164,39 @@ export function EncryptedConversationView({
     return () => window.clearInterval(timer);
   }, [loading, refreshProjection, syncBlocked]);
 
-  useEffect(() => () => {
+  const stopRecorderResources = useCallback(() => {
     if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
     if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
+    recordTimerRef.current = null;
+    recordStopTimerRef.current = null;
     const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
+    mediaRecorderRef.current = null;
+    // Even an inactive recorder may have queued final data/stop events.
+    // Detach before stopping so cancellation/error can never upload those bytes.
+    if (recorder) {
       recorder.ondataavailable = null;
       recorder.onstop = null;
       recorder.onerror = null;
-      recorder.stop();
+      try {
+        if (recorder.state !== "inactive") recorder.stop();
+      } catch {
+        // A failed recorder must not prevent its microphone tracks being freed.
+      }
     }
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    recordChunksRef.current = [];
   }, []);
+
+  useEffect(() => {
+    viewMountedRef.current = true;
+    return () => {
+      viewMountedRef.current = false;
+      voiceEpochRef.current += 1;
+      voiceStartingRef.current = false;
+      stopRecorderResources();
+    };
+  }, [stopRecorderResources]);
 
   const replyingTo = useMemo(
     () => messageById.get(replyingToId ?? "") ?? null,
@@ -270,10 +294,11 @@ export function EncryptedConversationView({
 
   async function toggleRecording() {
     if (recording) {
-      mediaRecorderRef.current?.stop();
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") recorder.stop();
       return;
     }
-    if (busy || syncBlocked) return;
+    if (busy || syncBlocked || voiceStartingRef.current || !viewMountedRef.current) return;
     setError(null);
     if (!navigator.onLine) {
       setError("Encrypted voice notes require a connection");
@@ -284,61 +309,76 @@ export function EncryptedConversationView({
       return;
     }
 
-    let acquiredStream: MediaStream | null = null;
+    const epoch = ++voiceEpochRef.current;
+    const isCurrent = () => viewMountedRef.current && voiceEpochRef.current === epoch;
+    voiceStartingRef.current = true;
+    setBusy(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      acquiredStream = stream;
-      // Own the stream immediately. MediaRecorder construction can throw on
-      // partially-supported mobile browsers; cleanup must still stop the mic.
+      // Permission prompts outlive the view. Dispose a late grant instead of
+      // constructing a recorder after Back, Hide or session revocation.
+      if (!isCurrent()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       mediaStreamRef.current = stream;
       const supportedMime = findSupportedVoiceMime();
       const recorder = supportedMime
         ? new MediaRecorder(stream, { mimeType: supportedMime })
         : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
       const baseMime = normalizeVoiceMime(recorder.mimeType || supportedMime || "");
       if (!baseMime || !["audio/mp4", "audio/webm"].includes(baseMime)) {
-        stream.getTracks().forEach((track) => track.stop());
+        stopRecorderResources();
         setError("This browser records an unsupported audio format");
         return;
       }
 
-      mediaRecorderRef.current = recorder;
       recordChunksRef.current = [];
       setRecordSeconds(0);
-      setRecording(true);
-
+      const ownsRecorder = () => isCurrent() && mediaRecorderRef.current === recorder;
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordChunksRef.current.push(event.data);
+        if (ownsRecorder() && event.data.size > 0) recordChunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
-        setError("Voice recording failed");
+        if (!ownsRecorder()) return;
         stopRecorderResources();
         setRecording(false);
+        setError("Voice recording failed");
       };
       recorder.onstop = () => {
+        if (!ownsRecorder()) return;
         const chunks = [...recordChunksRef.current];
         stopRecorderResources();
         setRecording(false);
-        if (chunks.length > 0) void uploadVoice(chunks, baseMime);
+        if (chunks.length > 0) void uploadVoice(chunks, baseMime, epoch);
       };
       recorder.start(250);
+      setRecording(true);
       recordTimerRef.current = window.setInterval(
         () => setRecordSeconds((seconds) => seconds + 1),
         1000,
       );
-      recordStopTimerRef.current = window.setTimeout(
-        () => recorder.stop(),
-        MAX_VOICE_SECONDS * 1000,
-      );
+      recordStopTimerRef.current = window.setTimeout(() => {
+        if (ownsRecorder() && recorder.state !== "inactive") recorder.stop();
+      }, MAX_VOICE_SECONDS * 1000);
     } catch {
-      acquiredStream?.getTracks().forEach((track) => track.stop());
-      stopRecorderResources();
-      setRecording(false);
-      setError("Unable to start voice recording");
+      if (isCurrent()) {
+        stopRecorderResources();
+        setRecording(false);
+        setError("Unable to start voice recording");
+      }
+    } finally {
+      if (isCurrent()) {
+        voiceStartingRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
-  async function uploadVoice(chunks: Blob[], mimeType: string) {
+  async function uploadVoice(chunks: Blob[], mimeType: string, epoch: number) {
+    const isCurrent = () => viewMountedRef.current && voiceEpochRef.current === epoch;
+    if (!isCurrent()) return;
     setBusy(true);
     setUploadProgress(0);
     try {
@@ -346,7 +386,12 @@ export function EncryptedConversationView({
       const file = new File(chunks, `voice-${Date.now()}.${extension}`, {
         type: mimeType,
       });
-      const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
+      const uploaded = await uploadEncryptedAsset(file, (progress) => {
+        if (isCurrent()) setUploadProgress(progress);
+      });
+      // An already-started ciphertext upload may finish after concealment, but
+      // it must not publish a message from a disposed view.
+      if (!isCurrent()) return;
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
         messageType: "voice",
@@ -355,9 +400,11 @@ export function EncryptedConversationView({
         assetIds: [uploaded.asset.id],
         attachments: [uploaded.metadata],
       });
+      if (!isCurrent()) return;
       setReplyingToId(null);
       await refreshProjection();
     } catch (voiceError) {
+      if (!isCurrent()) return;
       setError(
         voiceError instanceof Error
           ? voiceError.message
@@ -365,19 +412,11 @@ export function EncryptedConversationView({
       );
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
     } finally {
-      setUploadProgress(null);
-      setBusy(false);
+      if (isCurrent()) {
+        setUploadProgress(null);
+        setBusy(false);
+      }
     }
-  }
-
-  function stopRecorderResources() {
-    if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
-    if (recordStopTimerRef.current !== null) window.clearTimeout(recordStopTimerRef.current);
-    recordTimerRef.current = null;
-    recordStopTimerRef.current = null;
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
-    mediaRecorderRef.current = null;
   }
 
 

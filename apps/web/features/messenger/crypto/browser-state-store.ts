@@ -25,10 +25,19 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
+/** A request can succeed before its transaction rolls back. Only acknowledge
+ * committed state; MLS must never send/ACK based on an uncommitted write. */
 function transactionRequest<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
+    const transaction = request.transaction;
+    if (!transaction) {
+      reject(new Error("Protocol storage request has no transaction"));
+      return;
+    }
+    transaction.oncomplete = () => resolve(request.result);
+    transaction.onabort = () => reject(
+      request.error ?? transaction.error ?? new DOMException("Protocol storage transaction aborted", "AbortError"),
+    );
   });
 }
 
@@ -45,7 +54,7 @@ async function getWrappingKey(db: IDBDatabase): Promise<CryptoKey> {
   // Use add, not put. Concurrent first-use tabs may both generate a key;
   // only one may become authoritative. The loser re-reads the winner instead
   // of overwriting it and making already-encrypted protocol state unreadable.
-  const writeTx = db.transaction(KEY_STORE, "readwrite");
+  const writeTx = db.transaction(KEY_STORE, "readwrite", { durability: "strict" });
   try {
     await transactionRequest(writeTx.objectStore(KEY_STORE).add(key, WRAPPING_KEY_ID));
     return key;
@@ -70,7 +79,7 @@ export class BrowserProtocolStateStore {
       const plaintext = new Uint8Array(value.byteLength);
       plaintext.set(value);
       const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
-      const tx = db.transaction(STATE_STORE, "readwrite");
+      const tx = db.transaction(STATE_STORE, "readwrite", { durability: "strict" });
       await transactionRequest(tx.objectStore(STATE_STORE).put(
         { iv: iv.buffer.slice(0), ciphertext } satisfies StoredCiphertext,
         id,
@@ -100,7 +109,7 @@ export class BrowserProtocolStateStore {
   async delete(id: string): Promise<void> {
     const db = await openDatabase();
     try {
-      await transactionRequest(db.transaction(STATE_STORE, "readwrite").objectStore(STATE_STORE).delete(id));
+      await transactionRequest(db.transaction(STATE_STORE, "readwrite", { durability: "strict" }).objectStore(STATE_STORE).delete(id));
     } finally {
       db.close();
     }

@@ -51,37 +51,8 @@ exit 0
   assert.doesNotMatch(log, /up -d api worker beat web caddy/);
 });
 
-test("wrapping key creation cannot overwrite a concurrent winner", () => {
-  const source = readFileSync(
-    "apps/web/features/messenger/crypto/browser-state-store.ts",
-    "utf8",
-  );
-  assert.match(source, /\.add\(key, WRAPPING_KEY_ID\)/);
-  assert.match(source, /ConstraintError/);
-  assert.doesNotMatch(source, /\.put\(key, WRAPPING_KEY_ID\)/);
-});
-
-test("voice recorder owns the acquired stream before MediaRecorder construction", () => {
-  const source = readFileSync(
-    "apps/web/features/messenger/encrypted-conversation-view.tsx",
-    "utf8",
-  );
-  const acquired = source.indexOf("mediaStreamRef.current = stream;");
-  const constructed = source.indexOf("new MediaRecorder(stream");
-  assert.ok(acquired >= 0 && constructed >= 0 && acquired < constructed);
-  assert.match(source, /acquiredStream\?\.getTracks\(\)\.forEach/);
-});
-
-test("decrypted attachment completion is invalidated on release and unmount", () => {
-  const source = readFileSync(
-    "apps/web/features/messenger/encrypted-attachment.tsx",
-    "utf8",
-  );
-  assert.match(source, /decryptGenerationRef\.current \+= 1/);
-  assert.match(source, /!mountedRef\.current \|\| generation !== decryptGenerationRef\.current/);
-  assert.match(source, /mountedRef\.current = false/);
-  assert.match(source, /!nearViewport && state !== "idle"/);
-});
+// Media lifetime and storage commit behavior are exercised by the real-browser
+// suites media-hardening.spec.ts and state-store.spec.ts, not source regexes.
 
 test("service worker refreshes the offline root without caching private APIs", () => {
   const source = readFileSync("apps/web/public/sw.js", "utf8");

@@ -118,23 +118,23 @@ test("put and delete promises settle only after transaction complete", async ({ 
     const store = window.__stateStore;
     const put = IDBObjectStore.prototype.put;
     const remove = IDBObjectStore.prototype.delete;
-    let complete = false;
+    let putComplete = false;
+    let deleteComplete = false;
     IDBObjectStore.prototype.put = function(value, key) {
       const request = put.call(this, value, key);
-      if (this.name === "state") this.transaction.addEventListener("complete", () => { complete = true; });
+      if (this.name === "state") this.transaction.addEventListener("complete", () => { putComplete = true; });
       return request;
     };
     IDBObjectStore.prototype.delete = function(key) {
       const request = remove.call(this, key);
-      this.transaction.addEventListener("complete", () => { complete = true; });
+      this.transaction.addEventListener("complete", () => { deleteComplete = true; });
       return request;
     };
     try {
       await store.put("target", new Uint8Array([5]));
-      const putCommitted = complete;
-      complete = false;
+      const putCommitted = putComplete;
       await store.delete("target");
-      return { putCommitted, deleteCommitted: complete, remaining: await store.get("target") };
+      return { putCommitted, deleteCommitted: deleteComplete, remaining: await store.get("target") };
     } finally {
       IDBObjectStore.prototype.put = put;
       IDBObjectStore.prototype.delete = remove;

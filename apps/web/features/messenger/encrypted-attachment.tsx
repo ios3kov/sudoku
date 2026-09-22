@@ -162,7 +162,7 @@ export function EncryptedAttachment({
         {objectUrl ? (
           <audio controls preload="metadata" src={objectUrl} />
         ) : (
-          <button type="button" onClick={() => void decrypt()} disabled={state === "loading"}>
+          <button type="button" onClick={() => void decrypt().catch(() => undefined)} disabled={state === "loading"}>
             {state === "loading" ? "Decrypting voice…" : "Load encrypted voice"}
           </button>
         )}
