@@ -1,5 +1,13 @@
 # Progress
 
+## Current work — PIN onboarding + secure reload recovery
+
+Date: 2026-09-23. Draft PR #45 (`fix/reload-pin-onboarding`) moves optional PIN enrollment into the first successful password-login flow for members and administrators and fixes the OpenMLS stale-writer race observed across reload/pagehide. The existing server PIN schema, session UUID device identity and MLS wire format are unchanged.
+
+The reload fix retires the old browser adapter synchronously before page destruction/background concealment so its unfinished async work cannot overwrite or conflict with a freshly rehydrated IndexedDB snapshot. The optimistic concurrency guard remains fail-closed. Browser acceptance now requires a literal reload followed by PIN unlock and a fully ready secure-messaging runtime with no restart banner.
+
+This work is not merged or deployed. Exact branch-head CI and browser acceptance remain the release gate. See [Step84](steps/84-pin-onboarding-reload-recovery.md).
+
 ## Current milestone — device PIN merged; release verification
 
 Date: 2026-09-22. [PR #40](https://github.com/ios3kov/sudoku/pull/40) is merged as application candidate `5205a4add164fdf84702afea870040413e5acfb9`. The PIN feature has not been deployed by this step.
