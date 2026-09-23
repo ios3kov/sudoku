@@ -197,18 +197,27 @@ async def test_phone_update_disables_legacy_email_login_for_migrated_account() -
 @pytest.mark.asyncio(loop_scope="session")
 async def test_phone_bound_invite_creates_phone_identity() -> None:
     seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 400000
-    admin = User(
-        email=f"admin-{uuid.uuid4().hex[:8]}@example.test",
-        phone_e164=synthetic_phone(seed),
-        phone_verified_at=datetime.now(UTC),
-        display_name="Admin",
-        password_hash=hash_password(PASSWORD),
-        status="active",
-        is_admin=True,
-    )
     async with SessionFactory() as db:
-        db.add(admin)
+        admin = (
+            await db.execute(select(User).where(User.is_admin.is_(True)))
+        ).scalar_one_or_none()
+        if admin is None:
+            admin = User(
+                email=f"admin-{uuid.uuid4().hex[:8]}@example.test",
+                phone_e164=synthetic_phone(seed),
+                phone_verified_at=datetime.now(UTC),
+                display_name="Admin",
+                password_hash=hash_password(PASSWORD),
+                status="active",
+                is_admin=True,
+            )
+            db.add(admin)
+        else:
+            admin.phone_verified_at = datetime.now(UTC)
+            admin.password_hash = hash_password(PASSWORD)
+            admin.status = "active"
         await db.commit()
+        await db.refresh(admin)
 
     invited_phone = synthetic_phone(seed + 1)
     transport = httpx.ASGITransport(app=app)
