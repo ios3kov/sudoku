@@ -119,6 +119,10 @@ jobs:
         env:
           PYTHONPATH: apps/api
         run: python tests/browser/seed_users.py
+      - name: Reset browser-test rate limits
+        env:
+          PYTHONPATH: apps/api
+        run: python tests/browser/reset_rate_limits.py
       - name: Browser E2E acceptance
         env:
           API_PROXY_TARGET: http://127.0.0.1:8000
