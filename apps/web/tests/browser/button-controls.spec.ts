@@ -253,3 +253,80 @@ test("PIN-protected attachment Open control resolves a safe blob link", async ({
   );
   expect(paths).toContain("https://assets.example.test/signed");
 });
+
+
+test("PIN onboarding Hide, Set PIN, Save PIN and Not now controls work", async ({ page }) => {
+  await mount(page, "onboarding");
+  await page.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(page.getByText("onboarding closed", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__buttonAudit.calls.onboarding.at(-1))).toBe("hide");
+
+  await mount(page, "onboarding");
+  await page.getByRole("button", { name: "Set PIN", exact: true }).click();
+  await page.getByLabel("Four-digit PIN", { exact: true }).fill("2468");
+  await page.getByLabel("Confirm PIN", { exact: true }).fill("2468");
+  await page.getByRole("button", { name: "Save PIN", exact: true }).click();
+  await expect.poll(() =>
+    page.evaluate(() => window.__buttonAudit.calls.onboarding.includes("set:2468")),
+  ).toBe(true);
+
+  await page.getByRole("button", { name: "Not now", exact: true }).click();
+  await expect(page.getByText("onboarding closed", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__buttonAudit.calls.onboarding.at(-1))).toBe("skip");
+});
+
+test("locked-screen Hide, password fallback and Sign out controls work", async ({ page }) => {
+  await mount(page, "unlock");
+  await expect(page.getByLabel("Device PIN", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(page.getByText("unlock closed", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__buttonAudit.calls.unlock.at(-1))).toBe("hide");
+
+  await mount(page, "unlock");
+  await page.getByRole("button", { name: "Use account password", exact: true }).click();
+  await expect(page.getByLabel("Account password", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByText("unlock closed", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__buttonAudit.calls.unlock.at(-1))).toBe("signed-out");
+});
+
+test("legacy chat Find, Group, settings, Back and Hide controls open the right surfaces", async ({ page }) => {
+  await mount(page, "legacy-chat");
+  await expect(page.getByRole("button", { name: "Back to conversations", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Find", exact: true }).click();
+  const search = page.getByRole("dialog", { name: "Search messages", exact: true });
+  await expect(search).toBeVisible();
+  await search.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(search).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Conversation settings", exact: true }).click();
+  const preferences = page.getByRole("dialog", { name: "Conversation settings", exact: true });
+  await expect(preferences).toBeVisible();
+  await preferences.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(preferences).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Group", exact: true }).click();
+  const group = page.getByRole("dialog", { name: "Group settings", exact: true });
+  await expect(group).toBeVisible();
+  await group.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(group).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Back to conversations", exact: true }).click();
+  await expect(page.getByText("legacy chat closed", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__buttonAudit.calls.legacy.at(-1))).toBe("back");
+
+  await mount(page, "legacy-chat");
+  await page.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(page.getByText("legacy chat closed", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__buttonAudit.calls.legacy.at(-1))).toBe("hide");
+});
+
+test("PIN-protected attachment Retry recovers after a failed Open", async ({ page }) => {
+  await mount(page, "protected-retry");
+  await page.getByRole("button", { name: /Open legacy\.txt/ }).click();
+  const retry = page.getByRole("button", { name: "Retry attachment", exact: true });
+  await expect(retry).toBeVisible();
+  await retry.click();
+  await expect(page.getByRole("link", { name: /legacy\.txt/ })).toBeVisible();
+});
