@@ -31,6 +31,7 @@ export function NewChat({
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contactsRevision, setContactsRevision] = useState(0);
 
   useEffect(() => {
     const term = query.trim();
@@ -54,7 +55,7 @@ export function NewChat({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [contactsRevision, query]);
 
 
   async function createDirect(user: DirectoryUser) {
@@ -137,7 +138,7 @@ export function NewChat({
       {mode === "group" ? (
         <input className="group-title-input" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} placeholder="Group name" maxLength={160} />
       ) : null}
-      <ContactAccess onSynced={() => setQuery((current) => current + " ")} />
+      <ContactAccess onSynced={() => setContactsRevision((value) => value + 1)} />
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
