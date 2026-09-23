@@ -11,10 +11,11 @@ The native binary is intentionally small:
 - app-bound domains for `sudoku.moscow` and `assets.sudoku.moscow`;
 - synchronous native privacy cover for app-switcher/background snapshots;
 - explicit system contact selection through `CNContactPickerViewController`;
+- Face ID / Touch ID unlock through a Secure Enclave P-256 key and LocalAuthentication;
 - no broad Contacts permission and no full address-book import;
 - no native plaintext messaging or attachment path.
 
-The existing web client remains responsible for auth, PIN, MLS state, E2EE, contacts sync, conversations and encrypted attachments.
+The existing web client remains responsible for auth, PIN, MLS state, E2EE, contacts sync, conversations and encrypted attachments. Native biometrics never store the four-digit PIN: the Secure Enclave signs a one-time server challenge, and the server returns the same bounded unlock capability used by PIN unlock.
 
 ## Generate the Xcode project
 
