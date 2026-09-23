@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
+import type {} from "./support/button-controls-fixture";
 
 const webRoot = path.resolve(__dirname, "../..");
 const importFixture = new Function("url", "return import(url)") as (url: string) => Promise<{ default: (entry: string) => Promise<string> }>;
