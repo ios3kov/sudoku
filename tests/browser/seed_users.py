@@ -1,5 +1,5 @@
-from datetime import UTC, datetime
 import asyncio
+from datetime import UTC, datetime
 
 from app.db import SessionFactory
 from app.models import User, UserContact
