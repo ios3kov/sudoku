@@ -13,10 +13,16 @@ export default async function buildFixture(entry = "ux-fixture.tsx") {
   const compiler = nextWebpack.webpack({
     mode: "production", devtool: false, target: "web",
     entry: path.join(directory, entry),
-    plugins: entry === "audit-fixture.tsx" ? [new nextWebpack.webpack.NormalModuleReplacementPlugin(
-      /^\.\/uploads$/,
-      path.join(directory, "audit-media-services.ts"),
-    )] : [],
+    plugins: [
+      ...(entry === "audit-fixture.tsx" ? [new nextWebpack.webpack.NormalModuleReplacementPlugin(
+        /^\.\/uploads$/,
+        path.join(directory, "audit-media-services.ts"),
+      )] : []),
+      ...(entry === "button-controls-fixture.tsx" ? [new nextWebpack.webpack.NormalModuleReplacementPlugin(
+        /device-access\.css$/,
+        path.join(directory, "empty-style.ts"),
+      )] : []),
+    ],
     output: { path: outputPath, filename: "fixture.js" },
     optimization: { minimize: false },
     resolve: { extensions: [".tsx", ".ts", ".js"] },
