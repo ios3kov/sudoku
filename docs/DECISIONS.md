@@ -38,3 +38,16 @@ Content search for E2EE conversations is local-device search over decrypted loca
 
 ## ADR-013 — Production starts E2EE-only
 Existing plaintext development history is not migrated as trusted production history.
+
+
+## ADR-014 — Native iOS augments the web client instead of replacing the messaging stack
+Keep the Next.js UI, FastAPI backend and MLS protocol. The iOS app is a narrow native capability host for platform features Safari/PWA cannot provide reliably. Native code must not fork authorization, message formats or E2EE behavior.
+
+## ADR-015 — Exactly one global administrator
+Production may contain at most one global `is_admin = true` user. Only that singleton administrator may create or revoke account invitations. Conversation-local owner roles remain independent and never grant global invite authority. The invariant is enforced at the database boundary, not only in UI code.
+
+## ADR-016 — Native contacts are explicit selection, not address-book ingestion
+The preferred iOS integration is a system contact picker that returns only contacts the user explicitly selected. Only selected phone numbers cross the native bridge and flow through the existing contact-matching API. Silent full-address-book upload is out of scope.
+
+## ADR-017 — Mature messengers are design references, not source donors
+Signal iOS, Element X and similar AGPL/GPL projects may inform UX/security patterns, but their source is not copied into this project. Permissively licensed code still requires review before reuse. Product behavior is implemented against Sudoku Messenger's own architecture and acceptance tests.

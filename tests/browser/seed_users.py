@@ -19,12 +19,24 @@ PASSWORD = "browser acceptance password"
 async def main() -> None:
     async with SessionFactory() as db:
         by_email = {}
+        singleton_admin = (
+            await db.execute(select(User).where(User.is_admin.is_(True)))
+        ).scalar_one_or_none()
+
         for index, (email, display_name) in enumerate(USERS, start=1):
             phone = "+" + str(70000000000 + index)
+            wants_admin = email == "browser-pin-admin@example.com"
             user = (
                 await db.execute(select(User).where(User.email == email))
             ).scalar_one_or_none()
-            if user is None:
+
+            if wants_admin and user is None and singleton_admin is not None:
+                # API integration tests intentionally leave their singleton admin
+                # in the shared CI database. Reuse that row for browser fixtures
+                # instead of creating a second global administrator.
+                user = singleton_admin
+                user.email = email
+            elif user is None:
                 user = User(
                     email=email,
                     phone_e164=phone,
@@ -32,17 +44,20 @@ async def main() -> None:
                     display_name=display_name,
                     password_hash=hash_password(PASSWORD),
                     status="active",
-                    is_admin=email == "browser-pin-admin@example.com",
+                    is_admin=wants_admin,
                 )
                 db.add(user)
-            else:
-                user.phone_e164 = phone
-                user.phone_verified_at = datetime.now(UTC)
-                user.display_name = display_name
-                user.password_hash = hash_password(PASSWORD)
-                user.status = "active"
-                user.is_admin = email == "browser-pin-admin@example.com"
+
+            user.phone_e164 = phone
+            user.phone_verified_at = datetime.now(UTC)
+            user.display_name = display_name
+            user.password_hash = hash_password(PASSWORD)
+            user.status = "active"
+            user.is_admin = wants_admin
             await db.flush()
+
+            if wants_admin:
+                singleton_admin = user
             by_email[email] = user
 
         owner = by_email["browser-owner@example.com"]

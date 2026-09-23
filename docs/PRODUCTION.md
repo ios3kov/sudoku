@@ -29,19 +29,26 @@ Docker and Compose versions were verified during provisioning and must continue 
 
 ## Release status
 
-### Current checkpoint — 2026-09-23 phone/contact rollout
+### Current checkpoint — 2026-09-23 phone/contact rollout deployed
 
-Repository verification and production evidence remain separate.
+Repository verification and production evidence remain separate, but the coordinated phone/contact release is now live.
 
-- PR #59 added and passed an explicit legacy `0015_session_pins → 0016_phone_contacts` upgrade regression with existing user/session/PIN/invite/login-attempt rows; reviewed head `1e3d4dcfc4bdb579664cf09721ad5cc021bcd577` passed the full workflow set and was squash-merged as `0394298d122876edfa8ddf9a9443ffc6db24a407`.
-- The public app readiness endpoint currently reports PostgreSQL, Redis and object storage ready.
-- The hidden live Messenger still shows **Email** login and “Remember email on this device”, so the phone/contact application release is not yet deployed.
-- `assets.sudoku.moscow` resolves to the expected Selectel IPv4 `185.31.167.36` with no observed AAAA/CNAME, but independent HTTPS navigation times out before an HTTP response. Treat the asset-host edge as **failed** until host-side diagnosis and `scripts/smoke-production.sh` pass.
-- No new production backup, migration, restart or deployment has been executed for the phone/contact release. Authenticated Selectel/SSH access is required before those operations can proceed.
+- Deployed source: `c0f71313b92aaa8206eda036ecb819f796854f30`.
+- Database: `0016_phone_contacts (head)`.
+- Pre-deploy consistent backup: `./backups/20260923T160722Z`.
+- Backup verification: checksum manifest passed; PostgreSQL custom dump was readable by `pg_restore -l`; live MinIO object count and backup object count were both zero; an off-host copy was transferred to the operator workstation and its checksums passed again.
+- Production preflight passed before deployment.
+- All production application images built successfully and the stack restarted healthy.
+- Initial smoke observed two transient HTTP 502 responses while the new Web container had not yet started listening; the same smoke then completed successfully.
+- Follow-up readiness returned PostgreSQL, Redis and object storage healthy and five consecutive application requests returned HTTP 200.
+- The existing global administrator was migrated to a verified phone identity without replacing the account.
+- Administrator phone login works.
+- Four-digit PIN unlock and literal page reload return to a ready secure-messaging runtime without the former `Secure messaging needs a restart` failure.
+- `assets.sudoku.moscow` has valid TLS and reaches the MinIO edge through Caddy; a root HEAD request may return an S3-style 400 while still proving the TLS/proxy path is alive.
 
-**Stop rule:** do not start the `0016_phone_contacts` production rollout until authenticated host access is available, the asset-host HTTPS failure is resolved, a fresh consistent backup is verified, production preflight passes, and an exact fully-green release SHA is selected.
+Do not mark Step70 complete yet. The remaining live gates are the second-account/contact authorization flow, contact-removal send denial, two-device MLS direct/group/media/revocation, host-reboot persistence, destructive restore drill, and physical native-client acceptance.
 
-See [Step70](steps/70-live-verification.md) for the live evidence checklist and remaining physical-device/recovery gates.
+The next release program is the native iOS track in [Step88](steps/88-native-ios-production-plan.md). It must not weaken the current server authorization, MLS, backup or exact-SHA deployment rules.
 
 ### Historical checkpoint — 2026-09-22
 
@@ -73,6 +80,24 @@ docker compose --env-file .env.production -f compose.yaml -f compose.production.
 ```
 
 Changing a phone clears verification and inbound contact edges. Contact discovery therefore resumes only after verification and resync. Prefer a forward fix after `0016`; never automatically downgrade the database.
+
+### Native iOS release boundary
+
+The native iOS client is an additional release artifact, not a replacement for the production backend.
+
+Rules:
+
+- keep the server/web release independently deployable and tied to an exact green SHA;
+- keep web/PWA support while the iOS client matures;
+- use a narrow native bridge for contacts, local authentication, privacy shielding and native media/file pickers;
+- do not give native code a plaintext-upload bypass around the existing encrypted attachment pipeline;
+- do not expose arbitrary filesystem or arbitrary native execution to WebView JavaScript;
+- only approved production origins may load in the native web view;
+- record the exact source SHA, iOS version/build number and archive/TestFlight evidence for each mobile release;
+- TestFlight is a validation stage, not the final production distribution target;
+- App Store submission requires Step88 and Step70 acceptance plus an explicit release decision.
+
+The iOS product remains named **Sudoku** and must preserve the normal playable Sudoku launch surface and privacy concealment behavior.
 
 ## DNS
 

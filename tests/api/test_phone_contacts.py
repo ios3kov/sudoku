@@ -8,6 +8,7 @@ from app.main import app
 from app.models import User, UserContact
 from app.security import hash_password
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 ORIGIN = "https://sudoku.test"
 HEADERS = {"origin": ORIGIN}
@@ -197,18 +198,27 @@ async def test_phone_update_disables_legacy_email_login_for_migrated_account() -
 @pytest.mark.asyncio(loop_scope="session")
 async def test_phone_bound_invite_creates_phone_identity() -> None:
     seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 400000
-    admin = User(
-        email=f"admin-{uuid.uuid4().hex[:8]}@example.test",
-        phone_e164=synthetic_phone(seed),
-        phone_verified_at=datetime.now(UTC),
-        display_name="Admin",
-        password_hash=hash_password(PASSWORD),
-        status="active",
-        is_admin=True,
-    )
     async with SessionFactory() as db:
-        db.add(admin)
+        admin = (
+            await db.execute(select(User).where(User.is_admin.is_(True)))
+        ).scalar_one_or_none()
+        if admin is None:
+            admin = User(
+                email=f"admin-{uuid.uuid4().hex[:8]}@example.test",
+                phone_e164=synthetic_phone(seed),
+                phone_verified_at=datetime.now(UTC),
+                display_name="Admin",
+                password_hash=hash_password(PASSWORD),
+                status="active",
+                is_admin=True,
+            )
+            db.add(admin)
+        else:
+            admin.phone_verified_at = datetime.now(UTC)
+            admin.password_hash = hash_password(PASSWORD)
+            admin.status = "active"
         await db.commit()
+        await db.refresh(admin)
 
     invited_phone = synthetic_phone(seed + 1)
     transport = httpx.ASGITransport(app=app)
@@ -288,3 +298,82 @@ async def test_phone_change_invalidates_inbound_contact_edges() -> None:
     async with SessionFactory() as db:
         edge = await db.get(UserContact, (watcher.id, target.id))
         assert edge is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_database_rejects_second_global_admin_and_member_invites() -> None:
+    seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 800000
+
+    async with SessionFactory() as db:
+        admin = (
+            await db.execute(select(User).where(User.is_admin.is_(True)))
+        ).scalar_one_or_none()
+        if admin is None:
+            admin = User(
+                email=f"singleton-admin-{uuid.uuid4().hex[:8]}@example.test",
+                phone_e164=synthetic_phone(seed),
+                phone_verified_at=datetime.now(UTC),
+                display_name="Singleton Admin",
+                password_hash=hash_password(PASSWORD),
+                status="active",
+                is_admin=True,
+            )
+            db.add(admin)
+            await db.commit()
+
+    second_admin = User(
+        email=f"second-admin-{uuid.uuid4().hex[:8]}@example.test",
+        phone_e164=synthetic_phone(seed + 1),
+        phone_verified_at=datetime.now(UTC),
+        display_name="Second Admin",
+        password_hash=hash_password(PASSWORD),
+        status="active",
+        is_admin=True,
+    )
+    async with SessionFactory() as db:
+        db.add(second_admin)
+        with pytest.raises(IntegrityError):
+            await db.commit()
+        await db.rollback()
+
+    member = await create_user(seed + 2, "Invite-less Member")
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=HEADERS,
+    ) as admin_client:
+        await phone_login(admin_client, admin)
+        created = await admin_client.post(
+            "/v1/invites",
+            json={
+                "phone": synthetic_phone(seed + 4),
+                "expires_hours": 1,
+                "max_uses": 1,
+            },
+        )
+        assert created.status_code == 201, created.text
+        invite_id = created.json()["id"]
+
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url=ORIGIN,
+            headers=HEADERS,
+        ) as member_client:
+            await phone_login(member_client, member)
+            denied = await member_client.post(
+                "/v1/invites",
+                json={
+                    "phone": synthetic_phone(seed + 3),
+                    "expires_hours": 1,
+                    "max_uses": 1,
+                },
+            )
+            assert denied.status_code == 403
+
+            revoke_denied = await member_client.delete(f"/v1/invites/{invite_id}")
+            assert revoke_denied.status_code == 403
+
+        revoked = await admin_client.delete(f"/v1/invites/{invite_id}")
+        assert revoked.status_code == 204

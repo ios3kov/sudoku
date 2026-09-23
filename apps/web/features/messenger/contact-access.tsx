@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
+import { NATIVE_CONTACTS_READY_EVENT, nativeContactsAvailable, selectNativeContacts } from "./native-contact-access";
 
 type PickerContact = { name?: string[]; tel?: string[] };
 type ContactsManagerLike = {
@@ -21,8 +22,16 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
 
   const contactsRef = useRef<ContactsManagerLike | null>(null);
   const [pickerAvailable, setPickerAvailable] = useState(false);
+  const [nativePickerAvailable, setNativePickerAvailable] = useState(false);
 
   useEffect(() => {
+    function refreshNativeAvailability() {
+      setNativePickerAvailable(nativeContactsAvailable());
+    }
+
+    refreshNativeAvailability();
+    window.addEventListener(NATIVE_CONTACTS_READY_EVENT, refreshNativeAvailability);
+
     let cancelled = false;
     const manager = (navigator as Navigator & { contacts?: ContactsManagerLike }).contacts ?? null;
     contactsRef.current = manager;
@@ -38,6 +47,7 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
     return () => {
       cancelled = true;
       contactsRef.current = null;
+      window.removeEventListener(NATIVE_CONTACTS_READY_EVENT, refreshNativeAvailability);
     };
   }, []);
 
@@ -57,13 +67,17 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   }
 
   async function chooseContacts() {
+    if (busy) return;
     const contacts = contactsRef.current;
-    if (!contacts || busy) return;
+    if (!nativePickerAvailable && !contacts) return;
     setBusy(true); setError(null); setNotice(null);
     try {
-      // Call select() directly from the click handler: Contact Picker requires
-      // transient user activation and must not be delayed behind another await.
-      const selected = await contacts.select(["tel"], { multiple: true });
+      // Keep the picker call directly in the user click handler. Browser Contact
+      // Picker requires transient activation; the native bridge also presents
+      // its system picker immediately rather than silently reading contacts.
+      const selected = nativePickerAvailable
+        ? await selectNativeContacts()
+        : await contacts!.select(["tel"], { multiple: true });
       const phones = selected.flatMap((item) => item.tel ?? []);
       const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
       if (normalized.length === 0) {
@@ -91,7 +105,7 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   return (
     <section className="contact-access" aria-label="Phone contacts">
       <div className="contact-access-actions">
-        {pickerAvailable ? (
+        {nativePickerAvailable || pickerAvailable ? (
           <button type="button" disabled={busy} onClick={() => void chooseContacts()}>
             {busy ? "Syncing…" : "Choose phone contacts"}
           </button>
@@ -111,9 +125,11 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
         </form>
       </div>
       <p className="muted contact-access-help">
-        {pickerAvailable
-          ? "Only phone numbers you explicitly choose are shared with the app."
-          : "This browser cannot open the system phone book. Add a contact number manually."}
+        {nativePickerAvailable
+          ? "Choose contacts with the iPhone system picker. Only selected phone numbers are shared with the app."
+          : pickerAvailable
+            ? "Only phone numbers you explicitly choose are shared with the app."
+            : "This browser cannot open the system phone book. Add a contact number manually."}
       </p>
       {notice ? <p role="status">{notice}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}

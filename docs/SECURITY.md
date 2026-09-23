@@ -13,7 +13,9 @@ Protect against unauthorized access after discovery of the hidden gesture, sessi
 - Secure, HttpOnly, SameSite=Lax cookie.
 - Rotatable/revocable per-device sessions.
 - Invite-only account creation. Invite secrets are submitted in JSON request bodies and never placed in request URLs.
-- Only `is_admin` users can issue/revoke invites.
+- Production permits at most one global administrator; the database enforces the singleton-admin invariant.
+- Only that singleton administrator may issue/revoke account invites.
+- Conversation-local owner roles never grant global invite privileges.
 - First administrator is created by an explicit bootstrap CLI; the password is read from a hidden prompt, not argv.
 - Every conversation/message/asset path performs server-side membership/ownership checks.
 - Group administration uses conversation-local owner roles; a global app admin does not bypass group membership authorization.
@@ -62,6 +64,23 @@ Redis fixed-window limits exist for login IP/account buckets (account identifier
 - Normal launch: real playable Sudoku.
 - Hidden gesture: press and hold keypad digit `5`, then drag upward without releasing. The entire Sudoku surface follows the finger and reveals the private surface underneath; an incomplete drag returns the Sudoku surface to its original position.
 - Backgrounding for more than 30 seconds restores Sudoku before private content is shown again.
+
+
+## Native iOS security boundary
+
+The native iOS client is a capability host around the existing authenticated/E2EE application, not a second authorization system.
+
+- Native contacts use explicit user selection; do not silently enumerate/upload the entire address book.
+- Only selected phone numbers cross the native bridge and then flow through the existing contact-sync API.
+- Face ID / Touch ID is a local quick-unlock/privacy control only. It must not mint sessions, bypass expired/revoked sessions or replace password recovery.
+- Native media/file pickers may supply local bytes to the existing client-side encryption pipeline, but native code must not upload plaintext directly to object storage.
+- The app must synchronously hide private UI before iOS can snapshot it for the app switcher.
+- The WebView may load only approved application origins and must not expose arbitrary navigation or arbitrary native execution.
+- Native bridge payloads must be narrow, typed and validated on both sides.
+- Crash reports/native logs must not contain message plaintext, attachment plaintext, phone-book dumps, session tokens or MLS secrets.
+- APNs, when added, must use the same generic Sudoku-only notification policy as Web Push.
+
+The native shell does not change the core threat model: endpoint compromise, malicious injected JavaScript or a compromised unlocked device can still observe plaintext after local decryption.
 
 ## Production runtime hardening
 

@@ -33,3 +33,18 @@ Define exactly what is being built before implementation.
 ## Result
 
 Specification accepted as the implementation baseline.
+
+
+## Product evolution — 2026-09-23
+
+The original PWA specification remains the historical baseline, but iPhone-specific platform limits now require a native iOS release track.
+
+The product is therefore no longer PWA-only:
+
+- Web/PWA remains supported.
+- Native iOS adds contacts, biometrics, app-switcher privacy and native media/file capabilities.
+- The same backend, phone identity, contact authorization and MLS protocol are shared by both clients.
+- The native program does not change the core rule that Sudoku concealment is presentation only.
+- Exactly one global administrator may exist, and only that administrator may create/revoke account invitations.
+
+The active production/product specification for this extension is [Step88](88-native-ios-production-plan.md).

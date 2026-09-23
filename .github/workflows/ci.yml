@@ -58,7 +58,7 @@ jobs:
         run: ruff check apps/api/app apps/api/alembic tests/api tests/browser tests/ops
       - name: Python dependency audit
         run: pip-audit --local
-      - name: Legacy phone migration upgrade regression
+      - name: Legacy phone + singleton-admin migration upgrade regression
         env: { PYTHONPATH: apps/api }
         run: python tests/ops/phone_migration_upgrade.py
       - name: Migrate database
@@ -119,6 +119,10 @@ jobs:
         env:
           PYTHONPATH: apps/api
         run: python tests/browser/seed_users.py
+      - name: Reset browser-test rate limits
+        env:
+          PYTHONPATH: apps/api
+        run: python tests/browser/reset_rate_limits.py
       - name: Browser E2E acceptance
         env:
           API_PROXY_TARGET: http://127.0.0.1:8000

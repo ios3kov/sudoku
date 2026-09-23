@@ -96,7 +96,7 @@ def main() -> None:
         )
         connection.commit()
 
-    alembic("upgrade", "0016_phone_contacts")
+    alembic("upgrade", "head")
 
     with psycopg.connect(database_url()) as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -163,7 +163,21 @@ def main() -> None:
             FROM alembic_version
             """
         )
-        assert cursor.fetchone() == ("0016_phone_contacts",)
+        assert cursor.fetchone() == ("0017_single_admin",)
+
+        cursor.execute(
+            """
+            SELECT indexdef
+            FROM pg_indexes
+            WHERE schemaname = current_schema()
+              AND tablename = 'users'
+              AND indexname = 'uq_users_single_admin'
+            """
+        )
+        admin_index = cursor.fetchone()
+        assert admin_index is not None
+        assert "UNIQUE INDEX" in admin_index[0]
+        assert "WHERE (is_admin IS TRUE)" in admin_index[0]
 
     alembic("downgrade", "base")
     print("PHONE_MIGRATION_UPGRADE_OK")
