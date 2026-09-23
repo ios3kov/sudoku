@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import uuid
 
 import httpx
@@ -21,6 +22,7 @@ async def create_user(seed: int, name: str, *, phone: bool = True) -> User:
     user = User(
         email=f"phone-{seed}-{uuid.uuid4().hex[:8]}@example.com",
         phone_e164=synthetic_phone(seed) if phone else None,
+        phone_verified_at=datetime.now(UTC) if phone else None,
         display_name=name,
         password_hash=hash_password(PASSWORD),
         status="active",
@@ -198,6 +200,7 @@ async def test_phone_bound_invite_creates_phone_identity() -> None:
     admin = User(
         email=f"admin-{uuid.uuid4().hex[:8]}@example.test",
         phone_e164=synthetic_phone(seed),
+        phone_verified_at=datetime.now(UTC),
         display_name="Admin",
         password_hash=hash_password(PASSWORD),
         status="active",
