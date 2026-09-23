@@ -109,14 +109,21 @@ async def test_native_biometric_challenge_is_session_bound_one_time_and_pin_gate
         assert (
             await client.put(
                 ROOT + "/biometric",
-                json={"public_key_x963_b64": public_key_b64},
+                json={"password": PASSWORD, "public_key_x963_b64": public_key_b64},
             )
         ).status_code == 423
+
+        wrong_password = await client.put(
+            ROOT + "/biometric",
+            headers={HEADER: token},
+            json={"password": "wrong", "public_key_x963_b64": public_key_b64},
+        )
+        assert wrong_password.status_code == 403
 
         enrolled = await client.put(
             ROOT + "/biometric",
             headers={HEADER: token},
-            json={"public_key_x963_b64": public_key_b64},
+            json={"password": PASSWORD, "public_key_x963_b64": public_key_b64},
         )
         assert enrolled.status_code == 200, enrolled.text
         assert enrolled.json() == {"biometric_enabled": True}
@@ -186,6 +193,59 @@ async def test_native_biometric_challenge_is_session_bound_one_time_and_pin_gate
             assert await db.get(SessionBiometricCredential, sid) is None
 
 
+async def test_biometric_disable_requires_password_and_current_unlock():
+    async with account() as (client, _, sid):
+        token = await enroll(client)
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        public_key = private_key.public_key().public_bytes(
+            Encoding.X962,
+            PublicFormat.UncompressedPoint,
+        )
+        payload = {
+            "password": PASSWORD,
+            "public_key_x963_b64": base64.b64encode(public_key).decode("ascii"),
+        }
+        assert (
+            await client.put(
+                ROOT + "/biometric",
+                headers={HEADER: token},
+                json=payload,
+            )
+        ).status_code == 200
+
+        assert (
+            await client.request(
+                "DELETE",
+                ROOT + "/biometric",
+                headers={HEADER: token},
+                json={"password": "wrong"},
+            )
+        ).status_code == 403
+
+        assert (await client.post(ROOT + "/lock", headers={HEADER: token})).status_code == 204
+        assert (
+            await client.request(
+                "DELETE",
+                ROOT + "/biometric",
+                json={"password": PASSWORD},
+            )
+        ).status_code == 423
+
+        unlocked = await client.post(ROOT + "/unlock", json={"pin": "0123"})
+        assert unlocked.status_code == 200
+        next_token = unlocked.json()["unlock_token"]
+        disabled = await client.request(
+            "DELETE",
+            ROOT + "/biometric",
+            headers={HEADER: next_token},
+            json={"password": PASSWORD},
+        )
+        assert disabled.status_code == 204
+
+        async with SessionFactory() as db:
+            assert await db.get(SessionBiometricCredential, sid) is None
+
+
 async def test_pin_lockout_blocks_biometric_until_password_recovery():
     async with account() as (client, _, _):
         token = await enroll(client)
@@ -197,7 +257,10 @@ async def test_pin_lockout_blocks_biometric_until_password_recovery():
         enrolled = await client.put(
             ROOT + "/biometric",
             headers={HEADER: token},
-            json={"public_key_x963_b64": base64.b64encode(public_key).decode("ascii")},
+            json={
+                "password": PASSWORD,
+                "public_key_x963_b64": base64.b64encode(public_key).decode("ascii"),
+            },
         )
         assert enrolled.status_code == 200
 
