@@ -67,16 +67,19 @@ test("system contact picker sync exposes only selected registered contacts", asy
 
 test("native iOS contact bridge syncs only explicitly selected phones", async ({ page }) => {
   test.setTimeout(180_000);
-  await page.addInitScript(({ selectedPhone }) => {
+
+  await login(page, testPhone(5));
+
+  await page.evaluate(({ selectedPhone }) => {
     Object.defineProperty(window, "SudokuNativeContacts", {
       configurable: true,
       value: {
         select: async () => [{ name: ["PIN Member"], tel: [selectedPhone] }],
       },
     });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
   }, { selectedPhone: testPhone(2) });
 
-  await login(page, testPhone(5));
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
 
