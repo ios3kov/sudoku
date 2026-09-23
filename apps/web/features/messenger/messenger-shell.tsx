@@ -327,6 +327,12 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   }
 
   function openNewChat() {
+    if (!user.phone_e164) {
+      setCreating(false);
+      setShowInvite(false);
+      setShowDevices(true);
+      return;
+    }
     setShowInvite(false);
     setShowDevices(false);
     setCreating(true);
@@ -506,7 +512,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <strong>Messages</strong>
             <span>{user.display_name} · {connectionState === "online" ? "online" : "reconnecting"}</span>
           </div>
-          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={openNewChat} aria-label={e2eeState === "ready" ? "New secure chat" : "Preparing secure messaging"}>＋</button>
+          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={openNewChat} aria-label={e2eeState !== "ready" ? "Preparing secure messaging" : user.phone_e164 ? "New secure chat" : "Set phone number to start chats"}>＋</button>
         </header>
 
         {creating ? (
@@ -527,6 +533,12 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
                 aria-label="Search conversations"
               />
             </div>
+            {!user.phone_e164 ? (
+              <div className="messenger-inline-status is-warning" role="status">
+                <span>Add a phone number before starting new conversations.</span>
+                <button type="button" onClick={toggleDevices}>Set phone</button>
+              </div>
+            ) : null}
             {conversationLoadError ? (
               <div className="messenger-inline-status is-error" role="alert">
                 <span>{conversationLoadError}</span>
@@ -543,10 +555,10 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <button
               className="new-chat-button minimal-new-chat-button"
               type="button"
-              disabled={e2eeState !== "ready"}
+              disabled={e2eeState !== "ready" || !user.phone_e164}
               onClick={openNewChat}
             >
-              {e2eeState === "initializing" ? "Preparing secure messaging…" : "New secure chat"}
+              {e2eeState === "initializing" ? "Preparing secure messaging…" : !user.phone_e164 ? "Set phone to start a chat" : "New secure chat"}
             </button>
             {loading ? (
               Array.from({ length: 5 }, (_, index) => (
