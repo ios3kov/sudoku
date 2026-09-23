@@ -71,10 +71,16 @@ test("native iOS contact bridge syncs only explicitly selected phones", async ({
   await login(page, testPhone(5));
 
   await page.evaluate(({ selectedPhone }) => {
-    Object.defineProperty(window, "SudokuNativeContacts", {
+    Object.defineProperty(window, "Capacitor", {
       configurable: true,
       value: {
-        select: async () => [{ name: ["PIN Member"], tel: [selectedPhone] }],
+        Plugins: {
+          SudokuNative: {
+            selectContacts: async () => ({
+              contacts: [{ name: ["PIN Member"], tel: [selectedPhone] }],
+            }),
+          },
+        },
       },
     });
     window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
