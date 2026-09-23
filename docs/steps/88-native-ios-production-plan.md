@@ -263,6 +263,16 @@ Submit only after:
 
 The native product must be materially more than a repackaged website. Apple App Review guideline 4.2 requires useful, app-like functionality beyond a thin web wrapper. The native release therefore does not ship until Contacts, biometrics, privacy shielding and native media/file interaction are real, tested capabilities.
 
+Apple App Review guideline 2.3.1 is also a hard product constraint: the Messenger must not be shipped as a hidden, dormant or undocumented capability. The Sudoku concealment gesture may remain a privacy/presentation interaction for authenticated users, but App Review and end users must be told that the app includes the private Messenger.
+
+Before TestFlight/App Store review:
+
+- App Store metadata must accurately describe the secure-messaging capability; do not market the binary as merely a Sudoku game;
+- Notes for Review must document the exact reveal gesture, provide a working review account/invite path and explain phone/PIN/biometric access;
+- every native capability and significant product change must be accessible to App Review;
+- screenshots/description/privacy answers must not materially conceal the Messenger's core functionality;
+- the hidden gesture is a concealment UX, never an undocumented feature or review bypass.
+
 Apple-specific requirements to verify before TestFlight/App Store:
 
 - add `NSFaceIDUsageDescription` before using Face ID through LocalAuthentication;
