@@ -6,6 +6,7 @@ import {
   NATIVE_BIOMETRICS_READY_EVENT,
   clearNativeBiometric,
   isNativeBiometricCancellation,
+  nativeBiometricErrorCode,
   nativeBiometricAvailability,
   nativeBiometricsAvailable,
   signNativeBiometric,
@@ -140,7 +141,14 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
     } catch (reason) {
       if (!alive.current || started !== accessEpoch()) return;
       if (isNativeBiometricCancellation(reason)) return;
-      setError("Biometric unlock is unavailable. Use your PIN.");
+      const code = nativeBiometricErrorCode(reason);
+      if (code === "invalidated") {
+        setBiometricEnabled(false);
+        await clearNativeBiometric().catch(() => undefined);
+        setError("Biometric enrollment changed. Unlock with PIN, then re-enable biometrics in Devices.");
+      } else {
+        setError("Biometric unlock is unavailable. Use your PIN.");
+      }
     } finally {
       if (alive.current) setBiometricBusy(false);
     }
