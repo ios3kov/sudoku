@@ -108,12 +108,7 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
         if payload.phone is not None:
             identifier = normalize_phone_e164(payload.phone)
             user = (
-                await db.execute(
-                    select(User).where(
-                        User.phone_e164 == identifier,
-                        User.phone_verified_at.is_not(None),
-                    )
-                )
+                await db.execute(select(User).where(User.phone_e164 == identifier))
             ).scalar_one_or_none()
         else:
             # Temporary migration-only compatibility: once an account has a
@@ -123,7 +118,7 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
                 await db.execute(
                     select(User).where(
                         User.email == identifier,
-                        User.phone_verified_at.is_(None),
+                        User.phone_e164.is_(None),
                     )
                 )
             ).scalar_one_or_none()
