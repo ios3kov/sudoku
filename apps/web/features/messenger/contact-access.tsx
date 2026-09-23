@@ -28,7 +28,7 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
     setBusy(true); setError(null); setNotice(null);
     try {
       const matched = await messengerApi.syncContacts(normalized);
-      setNotice(\`\${matched.length} registered contact\${matched.length === 1 ? "" : "s"} available.\`);
+      setNotice(`${matched.length} registered contact${matched.length === 1 ? "" : "s"} available.`);
       onSynced();
     } catch {
       setError("Unable to sync contacts.");
@@ -54,7 +54,7 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
         return;
       }
       const matched = await messengerApi.syncContacts(normalized);
-      setNotice(\`\${matched.length} registered contact\${matched.length === 1 ? "" : "s"} available.\`);
+      setNotice(`${matched.length} registered contact${matched.length === 1 ? "" : "s"} available.`);
       onSynced();
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
