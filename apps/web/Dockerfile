@@ -25,7 +25,7 @@ RUN apt-get update \
       --out-dir /out \
       --out-name sudoku_mls_wasm
 
-FROM node:22-alpine
+FROM node:25-alpine
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
