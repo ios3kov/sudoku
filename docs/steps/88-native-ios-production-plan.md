@@ -121,6 +121,7 @@ Implementation track: Secure Enclave P-256 challenge-response, not a stored PIN 
 
 - Face ID / Touch ID uses LocalAuthentication plus a Secure Enclave private key protected by the current biometric enrollment;
 - server stores only the per-session X9.63 public key;
+- enrollment/replacement/removal requires both the current PIN-unlock capability and account-password confirmation;
 - unlock uses a 90-second one-time session-bound challenge and ECDSA/SHA-256 signature;
 - successful verification issues the existing RAM-only device unlock capability; it does not mint/refresh the account session;
 - native signing is restricted to the `sudoku-biometric-unlock:v1:` payload family;
