@@ -15,6 +15,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("users", sa.Column("phone_e164", sa.String(16), nullable=True))
+    op.add_column("users", sa.Column("phone_verified_at", sa.DateTime(timezone=True), nullable=True))
     op.alter_column("users", "email", existing_type=sa.String(320), nullable=True)
     op.create_unique_constraint("uq_users_phone_e164", "users", ["phone_e164"])
 
@@ -72,4 +73,5 @@ def downgrade() -> None:
     op.drop_column("invites", "phone_e164")
     op.drop_constraint("uq_users_phone_e164", "users", type_="unique")
     op.alter_column("users", "email", existing_type=sa.String(320), nullable=False)
+    op.drop_column("users", "phone_verified_at")
     op.drop_column("users", "phone_e164")
