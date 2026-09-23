@@ -50,7 +50,9 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       setPhoneDraft(next);
       if (next) onPhoneUpdated?.(next);
       if (remember && next) rememberPhone(next, true);
-      setNotice("Phone number updated.");
+      setNotice(user.phone_verified
+        ? "Phone number updated and verified."
+        : "Phone number updated. Contact discovery will activate after admin verification.");
     } catch (reason) {
       if (!alive.current) return;
       const status = (reason as Error & { status?: number }).status;
