@@ -1,5 +1,7 @@
 "use client";
 
+export const NATIVE_CONTACTS_READY_EVENT = "sudoku:native-contacts-ready";
+
 export type NativePickerContact = {
   name?: string[];
   tel?: string[];
