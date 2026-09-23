@@ -20,8 +20,8 @@ jobs:
       VAPID_PRIVATE_KEY: ci-private
       VAPID_SUBJECT: mailto:ci@sudoku.test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with: { python-version: "3.13" }
       - name: Build the real non-root API and beat image
         run: docker build --file apps/api/Dockerfile --tag sudoku-beat-runtime-ci .
