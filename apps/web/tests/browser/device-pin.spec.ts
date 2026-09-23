@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = "browser acceptance password";
+const testPhone = (index: number) => "+" + String(70000000000 + index);
 
 async function revealCurrentPage(page: Page) {
   const five = page.getByRole("button", { name: "5", exact: true });
@@ -18,11 +19,11 @@ async function reveal(page: Page) {
   await revealCurrentPage(page);
 }
 
-async function passwordLogin(page: Page, email: string) {
+async function passwordLogin(page: Page, phone: string) {
   await reveal(page);
-  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Phone number", { exact: true }).fill(phone);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByLabel("Remember email on this device").check();
+  await page.getByLabel("Remember phone on this device").check();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toBeVisible();
   await expect(page.getByText("Messages", { exact: true })).toHaveCount(0);
@@ -32,9 +33,9 @@ for (const role of ["member", "admin"]) {
   test(`first password login offers device PIN and reload unlock recovers E2EE for ${role}`, async ({ page, context }) => {
     test.setTimeout(240_000);
     await page.setViewportSize({ width: 390, height: 844 });
-    const email = `browser-pin-${role}@example.com`;
+    const phone = testPhone(role === "admin" ? 4 : 3);
 
-    await passwordLogin(page, email);
+    await passwordLogin(page, phone);
     await page.getByRole("button", { name: "Set PIN", exact: true }).click();
     await page.getByLabel("Four-digit PIN", { exact: true }).fill("0123");
     await page.getByLabel("Confirm PIN", { exact: true }).fill("0123");
@@ -90,17 +91,17 @@ for (const role of ["member", "admin"]) {
 
     expect((await context.request.post("/v1/auth/logout", { headers: { origin: "http://127.0.0.1:3000" } })).status()).toBe(204);
     await reveal(page);
-    await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
-    await page.getByLabel("Remember email on this device").uncheck();
+    await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue(phone);
+    await page.getByLabel("Remember phone on this device").uncheck();
     await reveal(page);
-    await expect(page.getByLabel("Email", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("");
   });
 }
 
 test("Not now enters the app without enabling a device PIN", async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 390, height: 844 });
-  await passwordLogin(page, "browser-pin-skip@example.com");
+  await passwordLogin(page, testPhone(5));
   await page.getByRole("button", { name: "Not now", exact: true }).click();
   await expect(page.getByText("Messages", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Device PIN", { exact: true })).toHaveCount(0);

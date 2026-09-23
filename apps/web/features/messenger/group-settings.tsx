@@ -2,10 +2,11 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { messengerApi } from "./api";
+import { ContactAccess } from "./contact-access";
 import type { Conversation, CurrentUser } from "./types";
 import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 
-interface DirectoryUser { id: string; display_name: string; email: string; }
+interface DirectoryUser { id: string; display_name: string; phone_e164: string; }
 
 export function GroupSettings({
   conversation,
@@ -28,6 +29,7 @@ export function GroupSettings({
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contactsRevision, setContactsRevision] = useState(0);
   const me = conversation.members.find((member) => member.id === user.id);
   const isOwner = me?.role === "owner";
   const ownerCount = useMemo(() => conversation.members.filter((member) => member.role === "owner").length, [conversation.members]);
@@ -38,7 +40,7 @@ export function GroupSettings({
 
   useEffect(() => {
     const term = query.trim();
-    if (!isOwner || term.length < 2) {
+    if (!isOwner) {
       setDirectory([]);
       setSearching(false);
       return;
@@ -59,9 +61,9 @@ export function GroupSettings({
       } finally {
         if (!cancelled) setSearching(false);
       }
-    }, 220);
+    }, term ? 220 : 0);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [conversation.members, isOwner, query]);
+  }, [contactsRevision, conversation.members, isOwner, query]);
 
   async function rename(event: FormEvent) {
     event.preventDefault();
@@ -160,6 +162,7 @@ export function GroupSettings({
       </div>
       {isOwner ? (
         <div className="member-search" aria-busy={searching}>
+          <ContactAccess onSynced={() => setContactsRevision((value) => value + 1)} />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -171,10 +174,9 @@ export function GroupSettings({
             autoComplete="off"
             spellCheck={false}
           />
-          {query.trim().length < 2 ? <p className="muted member-search-hint">Type at least 2 characters.</p> : null}
-          {query.trim().length >= 2 && searching ? <p className="muted member-search-hint">Searching…</p> : null}
-          {query.trim().length >= 2 && !searching && directory.length === 0 && !error ? <p className="muted member-search-hint">No new members found.</p> : null}
-          {directory.map((item) => <button type="button" key={item.id} disabled={busy} onClick={() => void add(item.id)}><span>{item.display_name}</span><small>{item.email}</small></button>)}
+          {searching ? <p className="muted member-search-hint">Loading contacts…</p> : null}
+          {!searching && directory.length === 0 && !error ? <p className="muted member-search-hint">No new registered contacts found.</p> : null}
+          {directory.map((item) => <button type="button" key={item.id} disabled={busy} onClick={() => void add(item.id)}><span>{item.display_name}</span><small>{item.phone_e164}</small></button>)}
         </div>
       ) : null}
     </section>

@@ -7,6 +7,7 @@ from sqlalchemy import and_, delete, exists, func, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .contacts import require_contacts
 from .db import get_db
 from .deps import AuthContext, get_auth_context
 from .models import (
@@ -97,6 +98,7 @@ async def prepare_membership_add(
     ).scalar_one_or_none()
     if valid_user is None:
         raise HTTPException(422, "User is unavailable")
+    await require_contacts(db, auth.user.id, {user_id})
 
     member_count = await db.scalar(
         select(func.count())

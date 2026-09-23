@@ -45,6 +45,19 @@ Before the PIN rollout, establish a fresh consistent database/object backup and 
 
 Update live-release evidence only after the exact candidate is deployed and live smoke passes. Physical iOS/Android, two-device encrypted flows and controlled restore acceptance remain separate in [Step70](steps/70-live-verification.md).
 
+### Phone identity migration boundary
+
+PR #47 introduces migration `0016_phone_contacts`. Treat it as a coordinated API/web/database release; do not expose phone-contact UI against an API that does not enforce the contact graph.
+
+For an existing legacy account, the user may assign a phone from Devices after password confirmation. That phone can authenticate immediately but remains undiscoverable until an operator verifies it out-of-band:
+
+```bash
+docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml \\
+  exec api python -m app.cli verify-phone --phone '<e164-phone>'
+```
+
+Changing a phone clears verification and inbound contact edges. Contact discovery therefore resumes only after verification and resync. Prefer a forward fix after `0016`; never automatically downgrade the database.
+
 ## DNS
 
 Production DNS is managed outside the repository.
@@ -325,7 +338,7 @@ Bootstrap only on an empty users table:
 
 ```bash
 docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml \
-  exec api python -m app.cli bootstrap-admin --email '<admin-email>' --display-name '<display-name>'
+  exec api python -m app.cli bootstrap-admin --phone '<e164-phone>' --display-name '<display-name>'
 ```
 
 The password is entered through the hidden prompt. Never pass it in argv or paste it into documentation.

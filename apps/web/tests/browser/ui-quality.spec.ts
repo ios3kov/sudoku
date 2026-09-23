@@ -164,9 +164,9 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   ).toBe(0);
 
   await unlockPrivate(page);
-  const email = page.getByLabel("Email", { exact: true });
-  await expect(email).toBeVisible({ timeout: 30_000 });
-  await expect(email).toHaveCSS("font-size", "16px");
+  const phone = page.getByLabel("Phone number", { exact: true });
+  await expect(phone).toBeVisible({ timeout: 30_000 });
+  await expect(phone).toHaveCSS("font-size", "16px");
   const viewportMeta = await page.locator('meta[name="viewport"]').getAttribute("content");
   expect(viewportMeta).toContain("maximum-scale=1");
   expect(viewportMeta).toContain("user-scalable=no");
@@ -177,12 +177,12 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   expect(privateOverflow).toBeLessThanOrEqual(1);
 
   await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "", { timeout: 5_000 });
-  await email.focus();
-  await expect(email).toBeFocused();
+  await phone.focus();
+  await expect(phone).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("Password", { exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("checkbox", { name: "Remember email on this device", exact: true })).toBeFocused();
+  await expect(page.getByRole("checkbox", { name: "Remember phone on this device", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeFocused();
 

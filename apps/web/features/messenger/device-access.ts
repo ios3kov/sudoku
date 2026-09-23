@@ -3,6 +3,7 @@ export const DEVICE_LOCK_EVENT = "sudoku:device-locked";
 export const DEVICE_UNLOCK_EVENT = "sudoku:device-unlocked";
 export const UNLOCK_HEADER = "X-Sudoku-Unlock";
 const EMAIL_KEY = "sudoku.remembered-email.v1";
+const PHONE_KEY = "sudoku.remembered-phone.v1";
 let unlockToken: string | null = null;
 let epoch = 0;
 
@@ -62,6 +63,26 @@ export async function privateFetch(input: RequestInfo | URL, init?: RequestInit)
     throw new DOMException("Device locked", "AbortError");
   }
   return response;
+}
+
+
+export function savedPhone(): string {
+  try {
+    const value = localStorage.getItem(PHONE_KEY) ?? "";
+    return /^\+[1-9][0-9]{7,14}$/.test(value) ? value : "";
+  } catch { return ""; }
+}
+
+export function rememberPhone(phone: string, remember: boolean): boolean {
+  try {
+    if (!remember) localStorage.removeItem(PHONE_KEY);
+    else {
+      const value = phone.replace(/[\s().-]+/g, "");
+      if (!/^\+[1-9][0-9]{7,14}$/.test(value)) return false;
+      localStorage.setItem(PHONE_KEY, value);
+    }
+    return true;
+  } catch { return false; }
 }
 
 export function savedEmail(): string {

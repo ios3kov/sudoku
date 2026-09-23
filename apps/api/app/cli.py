@@ -2,38 +2,48 @@ import argparse
 import asyncio
 import getpass
 
+from datetime import UTC, datetime
+
 from sqlalchemy import func, select
 
 from .db import SessionFactory
 from .models import AuditEvent, User
-from .security import hash_password, normalize_email
+from .security import hash_password, normalize_email, normalize_phone_e164
 
 
-async def bootstrap_admin(email: str, password: str, display_name: str) -> None:
-    normalized = normalize_email(email)
+async def bootstrap_admin(phone: str, password: str, display_name: str, email: str | None = None) -> None:
+    normalized_phone = normalize_phone_e164(phone)
+    normalized_email = normalize_email(email) if email else None
     async with SessionFactory() as db:
         user_count = int((await db.execute(select(func.count()).select_from(User))).scalar_one())
-        existing = (await db.execute(select(User).where(User.email == normalized))).scalar_one_or_none()
+        existing = (
+            await db.execute(select(User).where(User.phone_e164 == normalized_phone))
+        ).scalar_one_or_none()
 
         if existing is not None:
             if existing.is_admin:
-                print(f"Admin already exists: {normalized}")
+                print(f"Admin already exists: {normalized_phone}")
                 return
             if user_count != 1:
                 raise RuntimeError("Refusing to promote an existing user after bootstrap. Use an audited admin migration instead.")
             existing.is_admin = True
             existing.status = "active"
+            existing.phone_verified_at = datetime.now(UTC)
             existing.password_hash = hash_password(password)
+            if normalized_email is not None:
+                existing.email = normalized_email
             db.add(AuditEvent(actor_user_id=existing.id, event_type="admin.bootstrap", target_type="user", target_id=existing.id))
             await db.commit()
-            print(f"Promoted bootstrap admin: {normalized}")
+            print(f"Promoted bootstrap admin: {normalized_phone}")
             return
 
         if user_count != 0:
             raise RuntimeError("Bootstrap is allowed only when the users table is empty.")
 
         user = User(
-            email=normalized,
+            email=normalized_email,
+            phone_e164=normalized_phone,
+            phone_verified_at=datetime.now(UTC),
             display_name=display_name.strip(),
             password_hash=hash_password(password),
             status="active",
@@ -43,20 +53,48 @@ async def bootstrap_admin(email: str, password: str, display_name: str) -> None:
         await db.flush()
         db.add(AuditEvent(actor_user_id=user.id, event_type="admin.bootstrap", target_type="user", target_id=user.id))
         await db.commit()
-        print(f"Created bootstrap admin: {normalized}")
+        print(f"Created bootstrap admin: {normalized_phone}")
+
+
+
+async def verify_phone(phone: str) -> None:
+    normalized_phone = normalize_phone_e164(phone)
+    async with SessionFactory() as db:
+        user = (
+            await db.execute(select(User).where(User.phone_e164 == normalized_phone))
+        ).scalar_one_or_none()
+        if user is None:
+            raise RuntimeError("No account has this phone number.")
+        if user.phone_verified_at is None:
+            user.phone_verified_at = datetime.now(UTC)
+            db.add(
+                AuditEvent(
+                    actor_user_id=user.id,
+                    event_type="admin.phone_verified",
+                    target_type="user",
+                    target_id=user.id,
+                )
+            )
+            await db.commit()
+        print(f"Verified phone identity: {normalized_phone}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
     bootstrap = sub.add_parser("bootstrap-admin", help="Create the first invite administrator")
-    bootstrap.add_argument("--email", required=True)
+    bootstrap.add_argument("--phone", required=True)
+    bootstrap.add_argument("--email")
     bootstrap.add_argument("--display-name", required=True)
+    verify = sub.add_parser("verify-phone", help="Verify an existing account phone after out-of-band confirmation")
+    verify.add_argument("--phone", required=True)
     args = parser.parse_args()
 
     if args.command == "bootstrap-admin":
         password = getpass.getpass("Bootstrap admin password (min 12 chars): ")
-        asyncio.run(bootstrap_admin(args.email, password, args.display_name))
+        asyncio.run(bootstrap_admin(args.phone, password, args.display_name, args.email))
+    elif args.command == "verify-phone":
+        asyncio.run(verify_phone(args.phone))
 
 
 if __name__ == "__main__":

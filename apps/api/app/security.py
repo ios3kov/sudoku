@@ -21,6 +21,13 @@ def normalize_email(email: str) -> str:
     return email.strip().casefold()
 
 
+def normalize_phone_e164(phone: str) -> str:
+    value = re.sub(r"[\s().-]+", "", phone.strip())
+    if re.fullmatch(r"\+[1-9][0-9]{7,14}", value) is None:
+        raise ValueError("Phone number must use international E.164 format")
+    return value
+
+
 def hash_password(password: str) -> str:
     if len(password) < 12:
         raise ValueError("Password must be at least 12 characters")
@@ -64,8 +71,13 @@ def hash_secret(raw: str) -> bytes:
     return hashlib.sha256(raw.encode("utf-8")).digest()
 
 
+def identifier_audit_hash(identifier: str) -> bytes:
+    return hashlib.sha256(identifier.strip().casefold().encode("utf-8")).digest()
+
+
 def email_audit_hash(email: str) -> bytes:
-    return hashlib.sha256(normalize_email(email).encode("utf-8")).digest()
+    # Backward-compatible helper for older call sites during the phone migration.
+    return identifier_audit_hash(normalize_email(email))
 
 
 def session_expiry(ttl_days: int) -> datetime:

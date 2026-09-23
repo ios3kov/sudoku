@@ -5,7 +5,7 @@ import { messengerApi } from "./api";
 import { DeviceAccessSettings } from "./device-access-settings";
 import type { DeviceSession } from "./types";
 
-export function DeviceSessions({ onClose, onCurrentRevoked }: { onClose: () => void; onCurrentRevoked: () => void }) {
+export function DeviceSessions({ onClose, onCurrentRevoked, onPhoneUpdated }: { onClose: () => void; onCurrentRevoked: () => void; onPhoneUpdated?: (phone: string) => void }) {
   const [sessions, setSessions] = useState<DeviceSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export function DeviceSessions({ onClose, onCurrentRevoked }: { onClose: () => v
   return (
     <section className="settings-panel" role="dialog" aria-label="Devices and sessions">
       <div className="settings-header"><div><strong>Devices</strong><span>Signed-in sessions</span></div><button type="button" onClick={onClose}>Close</button></div>
-      <DeviceAccessSettings />
+      <DeviceAccessSettings onPhoneUpdated={onPhoneUpdated} />
       {error ? <p className="form-error">{error}</p> : null}
       {loading ? <p className="muted">Loading…</p> : (
         <div className="settings-list">

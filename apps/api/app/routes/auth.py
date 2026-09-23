@@ -8,17 +8,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..db import get_db
 from ..deps import AuthContext, get_auth_context
-from ..models import AuditEvent, Invite, LoginAttempt, MlsDevice, MlsKeyPackage, Session, User
+from ..models import AuditEvent, Invite, LoginAttempt, MlsDevice, MlsKeyPackage, Session, User, UserContact
 from ..rate_limit import enforce_ip_rate_limit, enforce_login_rate_limit, enforce_user_rate_limit
 from ..mls_lifecycle import schedule_mls_device_change
-from ..schemas import InviteAcceptRequest, InviteCreateRequest, InviteCreateResponse, LoginRequest, SessionResponse, UserResponse
+from ..schemas import InviteAcceptRequest, InviteCreateRequest, InviteCreateResponse, LoginRequest, SessionResponse, UpdatePhoneRequest, UserResponse
 from ..security import (
-    email_audit_hash,
     generate_invite_secret,
     generate_session_secret,
     hash_password,
     hash_secret,
+    identifier_audit_hash,
     normalize_email,
+    normalize_phone_e164,
     session_expiry,
     verify_password,
 )
@@ -77,6 +78,17 @@ async def _revoke_session_mls_device(
     )
 
 
+def _user_response(user: User) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        phone_e164=user.phone_e164,
+        phone_verified=user.phone_verified_at is not None,
+        email=user.email,
+        display_name=user.display_name,
+        is_admin=user.is_admin,
+    )
+
+
 async def _new_session(db: AsyncSession, user: User, device_name: str) -> tuple[Session, str]:
     secret = generate_session_secret()
     session = Session(
@@ -92,13 +104,37 @@ async def _new_session(db: AsyncSession, user: User, device_name: str) -> tuple[
 
 @router.post("/auth/login", response_model=UserResponse)
 async def login(payload: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
-    email = normalize_email(str(payload.email))
-    client_ip = request.client.host if request.client else "unknown"
-    await enforce_login_rate_limit(client_ip, email)
+    try:
+        if payload.phone is not None:
+            identifier = normalize_phone_e164(payload.phone)
+            user = (
+                await db.execute(select(User).where(User.phone_e164 == identifier))
+            ).scalar_one_or_none()
+        else:
+            # Temporary migration-only compatibility: once an account has a
+            # phone identity, email can no longer authenticate it.
+            identifier = normalize_email(str(payload.email))
+            user = (
+                await db.execute(
+                    select(User).where(
+                        User.email == identifier,
+                        User.phone_e164.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    client_ip = request.client.host if request.client else "unknown"
+    await enforce_login_rate_limit(client_ip, identifier)
+
     succeeded = bool(user and user.status == "active" and verify_password(user.password_hash, payload.password))
-    db.add(LoginAttempt(email_hash=email_audit_hash(email), succeeded=1 if succeeded else 0))
+    db.add(
+        LoginAttempt(
+            identifier_hash=identifier_audit_hash(identifier),
+            succeeded=1 if succeeded else 0,
+        )
+    )
 
     if not succeeded or user is None:
         await db.commit()
@@ -109,7 +145,7 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
     db.add(AuditEvent(actor_user_id=user.id, event_type="auth.login", target_type="session", target_id=session.id))
     await db.commit()
     _set_session_cookie(response, raw_token)
-    return UserResponse(id=user.id, email=user.email, display_name=user.display_name, is_admin=user.is_admin)
+    return _user_response(user)
 
 
 @router.post("/auth/refresh", status_code=204)
@@ -164,7 +200,52 @@ async def logout(response: Response, auth: AuthContext = Depends(get_auth_contex
 
 @router.get("/me", response_model=UserResponse)
 async def me(auth: AuthContext = Depends(get_auth_context)):
-    return UserResponse(id=auth.user.id, email=auth.user.email, display_name=auth.user.display_name, is_admin=auth.user.is_admin)
+    return _user_response(auth.user)
+
+
+@router.put("/me/phone", response_model=UserResponse)
+async def update_phone(
+    payload: UpdatePhoneRequest,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "phone-update", 6, 3600)
+    if not verify_password(auth.user.password_hash, payload.password):
+        raise HTTPException(status_code=403, detail="Invalid account password")
+    try:
+        phone = normalize_phone_e164(payload.phone)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    existing = (
+        await db.execute(
+            select(User.id).where(
+                User.phone_e164 == phone,
+                User.id != auth.user.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Phone number is already in use")
+    phone_changed = auth.user.phone_e164 != phone
+    auth.user.phone_e164 = phone
+    if phone_changed:
+        auth.user.phone_verified_at = None
+        # A saved phone-book edge proves knowledge of the old number only.
+        # Other users must resync before they can address this new identity.
+        await db.execute(
+            delete(UserContact).where(UserContact.contact_user_id == auth.user.id)
+        )
+    db.add(
+        AuditEvent(
+            actor_user_id=auth.user.id,
+            event_type="auth.phone_updated",
+            target_type="user",
+            target_id=auth.user.id,
+        )
+    )
+    await db.commit()
+    await db.refresh(auth.user)
+    return _user_response(auth.user)
 
 
 @router.get("/sessions", response_model=list[SessionResponse])
@@ -227,9 +308,14 @@ async def create_invite(
     await enforce_user_rate_limit(auth.user.id, "invite-create", 20, 3600)
     secret = generate_invite_secret()
     email = normalize_email(str(payload.email)) if payload.email is not None else None
+    try:
+        phone = normalize_phone_e164(payload.phone)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     invite = Invite(
         token_hash=secret.digest,
         email=email,
+        phone_e164=phone,
         created_by=auth.user.id,
         expires_at=datetime.now(UTC) + timedelta(hours=payload.expires_hours),
         max_uses=payload.max_uses,
@@ -242,6 +328,7 @@ async def create_invite(
     return InviteCreateResponse(
         id=invite.id,
         token=secret.raw,
+        phone_e164=invite.phone_e164,
         email=invite.email,
         expires_at=invite.expires_at,
         max_uses=invite.max_uses,
@@ -270,20 +357,28 @@ async def accept_invite(payload: InviteAcceptRequest, request: Request, response
     client_ip = request.client.host if request.client else "unknown"
     await enforce_ip_rate_limit(client_ip, "invite-accept", 20, 900)
     now = datetime.now(UTC)
-    email = normalize_email(str(payload.email))
+    email = normalize_email(str(payload.email)) if payload.email is not None else None
+    try:
+        phone = normalize_phone_e164(payload.phone)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     invite = (
         await db.execute(select(Invite).where(Invite.token_hash == hash_secret(payload.token)).with_for_update())
     ).scalar_one_or_none()
     if invite is None or invite.revoked_at is not None or invite.expires_at <= now or invite.uses >= invite.max_uses:
         raise HTTPException(status_code=404, detail="Invite is invalid or expired")
-    if invite.email is not None and normalize_email(invite.email) != email:
+    if invite.phone_e164 != phone:
+        raise HTTPException(status_code=403, detail="Invite is not valid for this phone number")
+    if invite.email is not None and invite.email != email:
         raise HTTPException(status_code=403, detail="Invite is not valid for this email")
-    existing = (await db.execute(select(User.id).where(User.email == email))).scalar_one_or_none()
+    existing = (await db.execute(select(User.id).where(User.phone_e164 == phone))).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(status_code=409, detail="Account already exists")
 
     user = User(
         email=email,
+        phone_e164=phone,
+        phone_verified_at=datetime.now(UTC),
         display_name=payload.display_name.strip(),
         password_hash=hash_password(payload.password),
         status="active",
@@ -296,4 +391,4 @@ async def accept_invite(payload: InviteAcceptRequest, request: Request, response
     db.add(AuditEvent(actor_user_id=user.id, event_type="auth.login", target_type="session", target_id=session.id))
     await db.commit()
     _set_session_cookie(response, raw_token)
-    return UserResponse(id=user.id, email=user.email, display_name=user.display_name, is_admin=user.is_admin)
+    return _user_response(user)

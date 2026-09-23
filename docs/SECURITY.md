@@ -7,6 +7,8 @@ Protect against unauthorized access after discovery of the hidden gesture, sessi
 ## Authentication and authorization
 
 - Argon2id passwords.
+- Phone-first account identity for new accounts. New invites are phone-bound; legacy email login remains migration-only until a phone is assigned.
+- Contact discovery is server-authorized through matched phone-book edges. Only active, verified phone identities are discoverable; direct chat creation, group additions and direct sends are enforced server-side.
 - Opaque random sessions; only SHA-256 session-token digests are persisted.
 - Secure, HttpOnly, SameSite=Lax cookie.
 - Rotatable/revocable per-device sessions.
@@ -26,7 +28,7 @@ Protect against unauthorized access after discovery of the hidden gesture, sessi
 
 ## Abuse prevention
 
-Redis fixed-window limits exist for login IP/account buckets and authenticated action classes including user search, chat creation, sends/edits/deletes, reactions, uploads, push changes and invite administration. Invite acceptance has an IP bucket. Typing is separately throttled per live socket.
+Redis fixed-window limits exist for login IP/account buckets (account identifiers are SHA-256 hashed before being placed in Redis keys) and authenticated action classes including user search, chat creation, sends/edits/deletes, reactions, uploads, push changes and invite administration. Invite acceptance has an IP bucket. Typing is separately throttled per live socket.
 
 ## Asset security
 
@@ -79,3 +81,12 @@ CI audits Python, npm production dependencies and the Rust `Cargo.lock`. The cur
 The hidden UI is privacy-of-presentation, not a security boundary or anti-forensics mechanism. A determined person with developer tooling can discover bundled messenger code. Network/DNS/device-management history can also expose the service.
 
 Private conversation content now uses MLS/RFC 9420 through the pinned OpenMLS browser package. Message bodies, encrypted mutations and attachment keys/metadata are carried inside MLS application traffic; attachment bytes are AES-256-GCM ciphertext before upload. Production configuration rejects creation of new plaintext conversations. Remaining risk is endpoint/origin compromise: active browser XSS or a compromised device can still read plaintext after local decryption.
+
+
+## Phone contacts privacy
+
+- The server persists only matched registered-user contact edges, not the full device address book or unmatched numbers.
+- Contact Picker access is explicit and user-initiated; the web client has no background phone-book access.
+- Browsers without Contact Picker use manual E.164 contact entry.
+- Changing a phone identity clears verification and inbound contact edges; other users must resync the new verified number.
+- Self-migrated phone identities can authenticate but are excluded from contact discovery until explicit out-of-band verification.

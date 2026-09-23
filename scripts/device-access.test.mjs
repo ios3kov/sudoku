@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { acceptUnlock, accessEpoch, currentUnlockToken, forgetUnlock, lockDevice, privateFetch, rememberEmail, savedEmail, requireDevicePin, DEVICE_LOCK_EVENT, UNLOCK_HEADER } from '../apps/web/features/messenger/device-access.ts';
+import { acceptUnlock, accessEpoch, currentUnlockToken, forgetUnlock, lockDevice, privateFetch, rememberEmail, rememberPhone, savedEmail, savedPhone, requireDevicePin, DEVICE_LOCK_EVENT, UNLOCK_HEADER } from '../apps/web/features/messenger/device-access.ts';
 
 const originalFetch = globalThis.fetch;
 const ticket = 'a'.repeat(43);
@@ -29,6 +29,16 @@ test('remember and forget email; blocked storage does not throw or save credenti
   assert.equal(savedEmail(), '');
   globalThis.localStorage = { getItem(){ throw Error('blocked'); }, setItem(){ throw Error('blocked'); }, removeItem(){ throw Error('blocked'); } };
   assert.equal(savedEmail(), ''); assert.equal(rememberEmail('user@example.com', true), false);
+});
+test('remember and forget phone; invalid values and blocked storage fail closed', () => {
+  const phone = '+' + String(72000000001);
+  assert.equal(rememberPhone(phone, true), true);
+  assert.equal(savedPhone(), phone);
+  assert.equal(rememberPhone('1234', true), false);
+  assert.equal(rememberPhone('', false), true);
+  assert.equal(savedPhone(), '');
+  globalThis.localStorage = { getItem(){ throw Error('blocked'); }, setItem(){ throw Error('blocked'); }, removeItem(){ throw Error('blocked'); } };
+  assert.equal(savedPhone(), ''); assert.equal(rememberPhone(phone, true), false);
 });
 test('cookie requests carry the ticket only for same-origin private paths', async () => {
   acceptUnlock(ticket, accessEpoch());

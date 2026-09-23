@@ -2,8 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { acceptedMessage } from "./support/accepted-message";
 import { observeRealtimeSocket, verifyActiveComposition } from "./support/active-composition";
 
-const OWNER_EMAIL = "browser-owner@example.com";
-const PEER_EMAIL = "browser-peer@example.com";
+const testPhone = (index: number) => "+" + String(70000000000 + index);
+const OWNER_PHONE = testPhone(1);
+const PEER_PHONE = testPhone(2);
 const PASSWORD = "browser acceptance password";
 
 async function unlockPrivate(page: Page) {
@@ -42,12 +43,12 @@ async function unlockPrivate(page: Page) {
   });
 }
 
-async function login(page: Page, email: string) {
+async function login(page: Page, phone: string) {
   await unlockPrivate(page);
-  const emailInput = page.getByLabel("Email", { exact: true });
+  const phoneInput = page.getByLabel("Phone number", { exact: true });
 
-  await expect(emailInput).toBeVisible({ timeout: 30_000 });
-  await emailInput.fill(email);
+  await expect(phoneInput).toBeVisible({ timeout: 30_000 });
+  await phoneInput.fill(phone);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
 
   const signIn = page.getByRole("button", { name: "Sign in", exact: true });
@@ -129,8 +130,8 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await observeRealtimeSocket(peer);
     await observeRealtimeSocket(owner);
     // Peer must publish a KeyPackage before the owner bootstraps the direct chat.
-    await login(peer, PEER_EMAIL);
-    await login(owner, OWNER_EMAIL);
+    await login(peer, PEER_PHONE);
+    await login(owner, OWNER_PHONE);
 
     let directoryRequests = 0;
     owner.on("request", (request) => {
@@ -139,16 +140,13 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
 
     await owner.getByRole("button", { name: "New secure chat" }).click();
     await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
-    await expect(owner.getByText("Type at least 2 characters to search.", { exact: true })).toBeVisible();
     await expect(owner.getByRole("button", { name: "Direct", exact: true })).toHaveAttribute("aria-pressed", "true");
 
-    const peopleSearch = owner.getByPlaceholder("Search people");
-    await peopleSearch.fill("B");
-    await owner.waitForTimeout(300);
-    expect(directoryRequests).toBe(0);
+    await expect.poll(() => directoryRequests).toBeGreaterThan(0);
 
+    const peopleSearch = owner.getByPlaceholder("Search people");
     await peopleSearch.fill("Browser Peer");
-    const peerResult = owner.locator(".directory-item").filter({ hasText: PEER_EMAIL });
+    const peerResult = owner.locator(".directory-item").filter({ hasText: PEER_PHONE });
     await expect(peerResult).toBeVisible();
     expect(directoryRequests).toBeGreaterThan(0);
     await peerResult.click();

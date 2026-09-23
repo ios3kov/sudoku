@@ -1,6 +1,6 @@
 import { privateFetch as fetch } from "./device-access";
 
-import type { AssetSummary, ClaimedMlsKeyPackage, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsMembershipChange, MlsTransportEvent, PendingMlsMembershipChange } from "./types";
+import type { AssetSummary, ClaimedMlsKeyPackage, ContactDirectoryItem, Conversation, CreatedInvite, CurrentUser, DeviceSession, E2eeEnvelope, Message, MlsControlBatchItem, MlsControlBatchResponse, MlsControlEvent, MlsControlRecipient, MlsDeviceAvailability, MlsMembershipChange, MlsTransportEvent, PendingMlsMembershipChange } from "./types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
@@ -15,11 +15,23 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
 
 export const messengerApi = {
   me: () => request<CurrentUser>("/v1/me"),
-  createInvite: (email: string | null) => request<CreatedInvite>("/v1/invites", {
+  createInvite: (phone: string) => request<CreatedInvite>("/v1/invites", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, expires_hours: 168, max_uses: 1 }),
+    body: JSON.stringify({ phone, expires_hours: 168, max_uses: 1 }),
   }),
+  updatePhone: (phone: string, password: string) => request<CurrentUser>("/v1/me/phone", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ phone, password }),
+  }),
+  contacts: (query = "") => request<ContactDirectoryItem[]>(`/v1/contacts?q=${encodeURIComponent(query)}`),
+  syncContacts: (phones: string[], replace = false) => request<ContactDirectoryItem[]>("/v1/contacts/sync", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ phones, replace }),
+  }),
+  removeContact: (userId: string) => request<void>(`/v1/contacts/${userId}`, { method: "DELETE" }),
   conversations: () => request<Conversation[]>("/v1/conversations"),
   asset: (assetId: string, signal?: AbortSignal) => request<AssetSummary>(`/v1/assets/${assetId}`, {signal}),
   messages: (conversationId: string, options?: { before?: number; after?: number; limit?: number }) => {
@@ -157,7 +169,7 @@ export const messengerApi = {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ sequence }),
   }),
-  searchUsers: (query: string) => request<Array<{ id: string; display_name: string; email: string }>>(`/v1/users?q=${encodeURIComponent(query)}`),
+  searchUsers: (query: string) => request<ContactDirectoryItem[]>(`/v1/users?q=${encodeURIComponent(query)}`),
   createDirect: (userId: string, encryptionRequired = false) => request<Conversation>("/v1/conversations", {
     method: "POST",
     headers: { "content-type": "application/json" },

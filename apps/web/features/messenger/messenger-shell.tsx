@@ -13,6 +13,7 @@ import { concealRevokedSession } from "./conceal-revoked-session";
 import { RealtimeClient } from "./realtime";
 import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
+import { ContactsPanel } from "./contacts-panel";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 
@@ -23,7 +24,7 @@ function sortConversations(items: Conversation[]): Conversation[] {
   });
 }
 
-export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUser; onHide: () => void; onLoggedOut: () => void }) {
+export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { user: CurrentUser; onHide: () => void; onLoggedOut: () => void; onUserUpdated: (user: CurrentUser) => void }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationQuery, setConversationQuery] = useState("");
@@ -37,6 +38,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const [pushState, setPushState] = useState<"idle" | "enabling" | "enabled" | "error">("idle");
   const [showInvite, setShowInvite] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
   const [secureSetupBusy, setSecureSetupBusy] = useState(false);
   const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
   const [deviceRekeyError, setDeviceRekeyError] = useState<string | null>(null);
@@ -327,21 +329,38 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   }
 
   function openNewChat() {
+    if (!user.phone_e164) {
+      setCreating(false);
+      setShowInvite(false);
+      setShowContacts(false);
+      setShowDevices(true);
+      return;
+    }
     setShowInvite(false);
     setShowDevices(false);
+    setShowContacts(false);
     setCreating(true);
   }
 
   function toggleInvite() {
     setCreating(false);
     setShowDevices(false);
+    setShowContacts(false);
     setShowInvite((value) => !value);
   }
 
   function toggleDevices() {
     setCreating(false);
     setShowInvite(false);
+    setShowContacts(false);
     setShowDevices((value) => !value);
+  }
+
+  function toggleContacts() {
+    setCreating(false);
+    setShowInvite(false);
+    setShowDevices(false);
+    setShowContacts((value) => !value);
   }
 
   function addConversation(conversation: Conversation) {
@@ -506,7 +525,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <strong>Messages</strong>
             <span>{user.display_name} · {connectionState === "online" ? "online" : "reconnecting"}</span>
           </div>
-          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={openNewChat} aria-label={e2eeState === "ready" ? "New secure chat" : "Preparing secure messaging"}>＋</button>
+          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={openNewChat} aria-label={e2eeState !== "ready" ? "Preparing secure messaging" : user.phone_e164 ? "New secure chat" : "Set phone number to start chats"}>＋</button>
         </header>
 
         {creating ? (
@@ -527,6 +546,12 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
                 aria-label="Search conversations"
               />
             </div>
+            {!user.phone_e164 ? (
+              <div className="messenger-inline-status is-warning" role="status">
+                <span>Add a phone number before starting new conversations.</span>
+                <button type="button" onClick={toggleDevices}>Set phone</button>
+              </div>
+            ) : null}
             {conversationLoadError ? (
               <div className="messenger-inline-status is-error" role="alert">
                 <span>{conversationLoadError}</span>
@@ -543,10 +568,10 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
             <button
               className="new-chat-button minimal-new-chat-button"
               type="button"
-              disabled={e2eeState !== "ready"}
+              disabled={e2eeState !== "ready" || !user.phone_e164}
               onClick={openNewChat}
             >
-              {e2eeState === "initializing" ? "Preparing secure messaging…" : "New secure chat"}
+              {e2eeState === "initializing" ? "Preparing secure messaging…" : !user.phone_e164 ? "Set phone to start a chat" : "New secure chat"}
             </button>
             {loading ? (
               Array.from({ length: 5 }, (_, index) => (
@@ -592,10 +617,13 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         {showDevices ? <DeviceSessions
           onClose={() => setShowDevices(false)}
           onCurrentRevoked={revokeLocalSession}
+          onPhoneUpdated={(phone) => onUserUpdated({ ...user, phone_e164: phone })}
         /> : null}
+        {showContacts ? <ContactsPanel onClose={() => setShowContacts(false)} /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
           {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}
+          <button type="button" onClick={toggleContacts}>Contacts</button>
           <button type="button" onClick={toggleDevices}>Devices</button>
           <button type="button" onClick={() => void enablePush()} disabled={pushState === "enabling" || pushState === "enabled"}>
             {pushState === "enabled" ? "Notifications on" : pushState === "enabling" ? "Enabling…" : pushState === "error" ? "Retry notifications" : "Enable notifications"}

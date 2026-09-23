@@ -16,7 +16,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320), unique=True)
+    phone_e164: Mapped[str | None] = mapped_column(String(16), unique=True)
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
@@ -25,6 +27,24 @@ class User(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     sessions: Mapped[list[Session]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class UserContact(Base):
+    __tablename__ = "user_contacts"
+    __table_args__ = (
+        CheckConstraint("owner_user_id <> contact_user_id", name="ck_user_contact_not_self"),
+        Index("ix_user_contacts_contact", "contact_user_id", "owner_user_id"),
+    )
+
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    contact_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Session(Base):
@@ -50,6 +70,7 @@ class Invite(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True, nullable=False)
     email: Mapped[str | None] = mapped_column(String(320))
+    phone_e164: Mapped[str | None] = mapped_column(String(16))
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     max_uses: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -75,7 +96,7 @@ class LoginAttempt(Base):
     __table_args__ = (Index("ix_login_attempt_created", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    identifier_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
     succeeded: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

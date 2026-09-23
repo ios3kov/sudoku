@@ -16,9 +16,14 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
     setError(null);
     setToken(null);
     const data = new FormData(event.currentTarget);
-    const email = String(data.get("email") ?? "").trim();
+    const phone = String(data.get("phone") ?? "").trim();
+    if (!phone) {
+      setSubmitting(false);
+      setError("Phone number is required");
+      return;
+    }
     try {
-      const invite = await messengerApi.createInvite(email || null);
+      const invite = await messengerApi.createInvite(phone);
       setToken(invite.token);
       setExpiresAt(invite.expires_at);
     } catch (requestError) {
@@ -48,7 +53,7 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
       </div>
       {!token ? (
         <form className="auth-form" onSubmit={submit}>
-          <label>Email (optional)<input name="email" type="email" autoComplete="off" /></label>
+          <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required /></label>
           <p className="muted">One use · expires in 7 days.</p>
           <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create invite"}</button>
         </form>

@@ -1,5 +1,13 @@
 # Progress
 
+## Current milestone — phone identity + contact graph candidate
+
+Date: 2026-09-23. Draft PR #47 moves the messenger to phone-first login and adds a server-enforced phone-book contact graph. New invite accounts are phone-bound; existing email accounts retain migration-only login until they assign a phone. Contact discovery exposes only active verified phone identities, and server authorization covers new direct/group chats, group additions and direct sends.
+
+Reviewed code head `fdd5658473438a8a6617672cbb01389c6015c775` passed exact-head CI `35844463475`, device-access `35844463463`, beat-runtime `35844463482` and api-shutdown `35844463467`. Browser acceptance includes Contact Picker, manual fallback, Contacts removal, phone/PIN login and the existing E2EE recovery path. See [Step85](steps/85-phone-contacts.md).
+
+Production has not been deployed. Migration `0016_phone_contacts`, legacy-phone verification and live mobile/PWA acceptance remain release steps.
+
 ## Current milestone — PIN onboarding + secure reload recovery merged
 
 Date: 2026-09-23. PR #45 is merged to `main` as `9169a1a5456423515b288c5dfff7b72b7e5e9de1`. It moves optional PIN enrollment into the first successful password-login flow for members and administrators and fixes the OpenMLS stale-writer race observed across reload/pagehide. The existing server PIN schema, session UUID device identity and MLS wire format are unchanged.

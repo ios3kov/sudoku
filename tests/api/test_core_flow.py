@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import uuid
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -26,11 +27,16 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
     suffix = uuid.uuid4().hex[:10]
     admin_email = f"admin-{suffix}@example.com"
     member_email = f"member-{suffix}@example.com"
+    phone_seed = int(suffix[:4], 16)
+    admin_phone = "+" + str(73000000000 + phone_seed * 2)
+    member_phone = "+" + str(73000000000 + phone_seed * 2 + 1)
     password = "correct horse battery staple"
 
     async with SessionFactory() as db:
         admin = User(
             email=admin_email,
+            phone_e164=admin_phone,
+            phone_verified_at=datetime.now(UTC),
             display_name="Admin",
             password_hash=hash_password(password),
             status="active",
@@ -45,7 +51,7 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
     async with httpx.AsyncClient(transport=transport, base_url=ORIGIN, headers=MUTATION_HEADERS) as admin_client:
         login = await admin_client.post(
             "/v1/auth/login",
-            json={"email": admin_email, "password": password, "device_name": "integration-test"},
+            json={"phone": admin_phone, "password": password, "device_name": "integration-test"},
         )
         assert login.status_code == 200, login.text
         assert login.headers.get("cache-control") == "no-store"
@@ -53,7 +59,7 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
 
         invite_response = await admin_client.post(
             "/v1/invites",
-            json={"email": member_email, "expires_hours": 1, "max_uses": 1},
+            json={"phone": member_phone, "email": member_email, "expires_hours": 1, "max_uses": 1},
         )
         assert invite_response.status_code == 201, invite_response.text
         invite_json = invite_response.json()
@@ -68,6 +74,7 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
                 "/v1/invites/accept",
                 json={
                     "token": raw_invite,
+                    "phone": member_phone,
                     "email": member_email,
                     "display_name": "Member",
                     "password": password,
@@ -77,6 +84,12 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
             assert accepted.status_code == 201, accepted.text
             member_id = accepted.json()["id"]
             assert accepted.json()["is_admin"] is False
+
+            synced = await admin_client.post(
+                "/v1/contacts/sync",
+                json={"phones": [member_phone], "replace": False},
+            )
+            assert synced.status_code == 200, synced.text
 
             conversation_response = await admin_client.post(
                 "/v1/conversations",
