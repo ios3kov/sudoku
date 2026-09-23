@@ -1,5 +1,13 @@
 # Progress
 
+## Current work — phone identity + contact-only Messenger
+
+Date: 2026-09-23. Draft PR #47 (`feat/phone-contacts`) moves Messenger login/discovery to phone identity and adds a server-enforced phone-contact graph. New accounts are phone-bound; existing email accounts have an explicit migration path. Contact discovery persists only matched registered contacts, and verified phone identity is required before an account can appear in another user's phone-book results.
+
+The API enforces the graph for user discovery, new direct/group conversations, normal and MLS group additions, and future direct sends. Web/PWA uses Contact Picker when supported and a manual international-number fallback otherwise. The existing password, device PIN and E2EE session model remains in place.
+
+Exact runtime feature head `fdd5658473438a8a6617672cbb01389c6015c775` passed CI `35844463475`, device-access `35844463463`, beat-runtime `35844463482`, and api-shutdown `35844463467`. The following commit is documentation-only. This work is not merged or deployed. See [Step85](steps/85-phone-identity-contacts.md).
+
 ## Current milestone — phone identity + contact graph candidate
 
 Date: 2026-09-23. Draft PR #47 moves the messenger to phone-first login and adds a server-enforced phone-book contact graph. New invite accounts are phone-bound; existing email accounts retain migration-only login until they assign a phone. Contact discovery exposes only active verified phone identities, and server authorization covers new direct/group chats, group additions and direct sends.
