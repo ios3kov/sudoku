@@ -7,12 +7,13 @@ Date: 2026-09-23.
 Evolve Sudoku Messenger from a PWA-only product into a dual-client product:
 
 - the existing web/PWA remains supported;
+- Android stays on the current Web/PWA client for this production cycle;
 - iPhone gets a real native container with native contacts, biometric unlock, privacy shielding, media/file pickers and later native push;
 - the existing FastAPI/PostgreSQL/Redis/MinIO backend and MLS E2EE protocol remain the source of truth;
 - the Sudoku disguise/hidden-entry UX remains intact;
 - production stays invite-only and has exactly one global administrator.
 
-This is a product hardening program, not a rewrite.
+This is a product hardening program, not a rewrite. Native Android is explicitly out of scope unless later Android/PWA QA exposes a platform limitation that materially requires it.
 
 ## Product rules
 
@@ -195,6 +196,13 @@ Add native push only after the iOS shell is stable:
 - no stale MLS writer after background/reload;
 - network loss and reconnect must preserve explicit message states;
 - app upgrade must preserve local MLS state or fail closed with a recoverable re-bootstrap path.
+
+## Platform scope
+
+- **iOS:** native Capacitor/Swift host.
+- **Android:** existing installable PWA in Chrome/Android; retain browser Contact Picker and manual E.164 fallback.
+- **Desktop/browser:** existing web client.
+- Native Android work requires a separate decision; do not add Android platform code merely for symmetry.
 
 ## Release stages
 
