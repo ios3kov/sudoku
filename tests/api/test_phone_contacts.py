@@ -4,7 +4,7 @@ import httpx
 import pytest
 from app.db import SessionFactory
 from app.main import app
-from app.models import User
+from app.models import User, UserContact
 from app.security import hash_password
 from sqlalchemy import select
 
@@ -257,3 +257,31 @@ async def test_phone_bound_invite_creates_phone_identity() -> None:
         created_user = await db.scalar(select(User).where(User.id == user_id))
         assert created_user is not None
         assert created_user.phone_e164 == invited_phone
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_phone_change_invalidates_inbound_contact_edges() -> None:
+    seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 600000
+    watcher = await create_user(seed, "Watcher")
+    target = await create_user(seed + 1, "Target")
+
+    async with SessionFactory() as db:
+        db.add(UserContact(owner_user_id=watcher.id, contact_user_id=target.id))
+        await db.commit()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=HEADERS,
+    ) as client:
+        await phone_login(client, target)
+        changed = await client.put(
+            "/v1/me/phone",
+            json={"phone": test_phone(seed + 2), "password": PASSWORD},
+        )
+        assert changed.status_code == 200, changed.text
+
+    async with SessionFactory() as db:
+        edge = await db.get(UserContact, (watcher.id, target.id))
+        assert edge is None
