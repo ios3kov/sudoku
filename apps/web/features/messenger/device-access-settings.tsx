@@ -25,6 +25,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState("Biometrics");
   const [biometricBusy, setBiometricBusy] = useState(false);
+  const [biometricPassword, setBiometricPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
   const [phonePassword, setPhonePassword] = useState("");
@@ -158,6 +159,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
 
   async function enableBiometric() {
     if (biometricBusy || busy || !enabled || !biometricAvailable) return;
+    if (!biometricPassword) { setError("Enter your account password for biometric setup."); return; }
     setBiometricBusy(true); setError(null); setNotice(null);
     try {
       const publicKeyX963B64 = await enrollNativeBiometric();
@@ -166,7 +168,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
         credentials: "include",
         cache: "no-store",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ public_key_x963_b64: publicKeyX963B64 }),
+        body: JSON.stringify({ public_key_x963_b64: publicKeyX963B64, password: biometricPassword }),
       });
       if (!response.ok) {
         await clearNativeBiometric().catch(() => undefined);
@@ -179,18 +181,21 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       if (!alive.current || isNativeBiometricCancellation(reason)) return;
       setError(`Unable to enable ${biometricLabel}. Use the device PIN instead.`);
     } finally {
-      if (alive.current) setBiometricBusy(false);
+      if (alive.current) { setBiometricBusy(false); setBiometricPassword(""); }
     }
   }
 
   async function disableBiometric() {
     if (biometricBusy || busy || !biometricEnabled) return;
+    if (!biometricPassword) { setError("Enter your account password for biometric changes."); return; }
     setBiometricBusy(true); setError(null); setNotice(null);
     try {
       const response = await privateFetch("/v1/auth/device-access/biometric", {
         method: "DELETE",
         credentials: "include",
         cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: biometricPassword }),
       });
       if (!response.ok && response.status !== 404) throw new Error("Unable to disable biometric unlock");
       await clearNativeBiometric().catch(() => undefined);
@@ -200,7 +205,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
     } catch {
       if (alive.current) setError("Unable to disable biometric unlock.");
     } finally {
-      if (alive.current) setBiometricBusy(false);
+      if (alive.current) { setBiometricBusy(false); setBiometricPassword(""); }
     }
   }
 
@@ -238,6 +243,11 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
 
     {enabled && biometricAvailable && (
       <div className="device-access-actions">
+        <label>Account password for biometric changes
+          <input type="password" autoComplete="current-password" maxLength={1024}
+            value={biometricPassword} onChange={(e) => setBiometricPassword(e.target.value)}
+            disabled={busy || biometricBusy} />
+        </label>
         <p className="device-access-help">
           {biometricEnabled
             ? `${biometricLabel} can unlock this session. PIN and account password remain available.`
