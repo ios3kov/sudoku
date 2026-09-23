@@ -33,16 +33,27 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
     password = "correct horse battery staple"
 
     async with SessionFactory() as db:
-        admin = User(
-            email=admin_email,
-            phone_e164=admin_phone,
-            phone_verified_at=datetime.now(UTC),
-            display_name="Admin",
-            password_hash=hash_password(password),
-            status="active",
-            is_admin=True,
-        )
-        db.add(admin)
+        admin = (
+            await db.execute(select(User).where(User.is_admin.is_(True)))
+        ).scalar_one_or_none()
+        if admin is None:
+            admin = User(
+                email=admin_email,
+                phone_e164=admin_phone,
+                phone_verified_at=datetime.now(UTC),
+                display_name="Admin",
+                password_hash=hash_password(password),
+                status="active",
+                is_admin=True,
+            )
+            db.add(admin)
+        else:
+            admin.email = admin_email
+            admin.phone_e164 = admin_phone
+            admin.phone_verified_at = datetime.now(UTC)
+            admin.display_name = "Admin"
+            admin.password_hash = hash_password(password)
+            admin.status = "active"
         await db.commit()
         await db.refresh(admin)
         admin_id = admin.id
