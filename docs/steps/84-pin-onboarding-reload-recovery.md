@@ -61,4 +61,15 @@ Browser acceptance now covers:
 
 The browser state-store regression suite also proves that retiring one adapter blocks its later stale writes without deleting the durable state.
 
-Final acceptance requires the exact branch-head CI (lint, tests, typecheck, build, browser E2E and production checks) to pass. No production mutation is authorized or performed by this step.
+## Merge and verification
+
+PR #45 was merged to `main` as `9169a1a5456423515b288c5dfff7b72b7e5e9de1` after exact-head verification of `55ea27ae94e0e870498bf27867a6a46385c5b858`.
+
+Post-merge push-to-main verification passed:
+
+- CI `35825128577`: success, including lifecycle/storage regressions, typecheck, production build, performance budget, browser E2E, Compose validation and production application image builds;
+- device-access `35825128686`: success;
+- beat-runtime `35825128754`: success;
+- api-shutdown `35825128683`: success.
+
+No production deployment, migration, restart or infrastructure mutation was performed for this follow-up.
