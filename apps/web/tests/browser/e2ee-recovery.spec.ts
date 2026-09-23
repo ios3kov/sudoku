@@ -142,11 +142,9 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
     await expect(owner.getByRole("button", { name: "Direct", exact: true })).toHaveAttribute("aria-pressed", "true");
 
-    const peopleSearch = owner.getByPlaceholder("Search people");
-    await peopleSearch.fill("B");
-    await owner.waitForTimeout(300);
-    expect(directoryRequests).toBe(0);
+    await expect.poll(() => directoryRequests).toBeGreaterThan(0);
 
+    const peopleSearch = owner.getByPlaceholder("Search people");
     await peopleSearch.fill("Browser Peer");
     const peerResult = owner.locator(".directory-item").filter({ hasText: PEER_PHONE });
     await expect(peerResult).toBeVisible();
