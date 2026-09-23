@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..db import get_db
 from ..deps import AuthContext, get_auth_context
-from ..models import AuditEvent, Invite, LoginAttempt, MlsDevice, MlsKeyPackage, Session, User
+from ..models import AuditEvent, Invite, LoginAttempt, MlsDevice, MlsKeyPackage, Session, User, UserContact
 from ..rate_limit import enforce_ip_rate_limit, enforce_login_rate_limit, enforce_user_rate_limit
 from ..mls_lifecycle import schedule_mls_device_change
 from ..schemas import InviteAcceptRequest, InviteCreateRequest, InviteCreateResponse, LoginRequest, SessionResponse, UpdatePhoneRequest, UserResponse
@@ -225,7 +225,14 @@ async def update_phone(
     ).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(status_code=409, detail="Phone number is already in use")
+    phone_changed = auth.user.phone_e164 != phone
     auth.user.phone_e164 = phone
+    if phone_changed:
+        # A saved phone-book edge proves knowledge of the old number only.
+        # Other users must resync before they can address this new identity.
+        await db.execute(
+            delete(UserContact).where(UserContact.contact_user_id == auth.user.id)
+        )
     db.add(
         AuditEvent(
             actor_user_id=auth.user.id,
