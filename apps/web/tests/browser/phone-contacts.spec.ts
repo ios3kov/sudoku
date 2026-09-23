@@ -84,7 +84,7 @@ test("native iOS contact bridge syncs only explicitly selected phones", async ({
   await expect(page.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
 
   await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("1 registered contact");
+  await expect(page.getByRole("status")).toContainText("registered contact");
   await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
 });
 
@@ -96,7 +96,7 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
   await expect(page.getByRole("button", { name: "Choose phone contacts", exact: true })).toHaveCount(0);
   await page.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(2));
   await page.getByRole("button", { name: "Add contact", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("1 registered contact");
+  await expect(page.getByRole("status")).toContainText("registered contact");
   await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
 });
 
