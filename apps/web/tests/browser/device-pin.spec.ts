@@ -125,3 +125,24 @@ test("Not now enters the app without enabling a device PIN", async ({ page }) =>
   await expect(page.getByLabel("Device PIN", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toHaveCount(0);
 });
+
+test("login navigation, invite submit and hide buttons work", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await reveal(page);
+
+  await page.getByRole("button", { name: "Use an invite", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Join", exact: true })).toBeVisible();
+  await page.getByLabel("Invite code").fill("invalid-audit-invite");
+  await page.getByLabel("Name").fill("Button Audit");
+  await page.getByLabel("Email", { exact: true }).fill("button-audit@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("button audit password");
+  await page.getByRole("button", { name: "Join", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+
+  await page.getByRole("button", { name: "I already have an account", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+});
