@@ -25,6 +25,27 @@ Production enforces a partial unique index on `is_admin = true`, so at most one 
 - `expires_at timestamptz`
 - `revoked_at timestamptz null`
 
+## `session_pins`
+
+- `session_id uuid pk fk sessions`
+- `pin_hash varchar(512)`
+- `failed_attempts int`
+- `unlock_hash bytea(32) null`
+- `unlock_expires_at timestamptz null`
+
+The four-digit PIN is stored only as an Argon2 verifier. The active unlock capability is stored only as a SHA-256 digest and is bounded by the server session expiry.
+
+## `session_biometric_credentials`
+
+- `session_id uuid pk fk sessions`
+- `public_key_x963 bytea(65)`
+- `challenge_hash bytea(32) null`
+- `challenge_expires_at timestamptz null`
+- `created_at timestamptz`
+- `last_used_at timestamptz null`
+
+The table stores only the native iOS P-256 public key and ephemeral one-time challenge state. The Secure Enclave private key, biometric template, account password and device PIN never enter this table.
+
 ## `invites`
 
 - `id uuid pk`
