@@ -1,6 +1,7 @@
 """Session-bound native biometric public-key authentication."""
 
 import base64
+import binascii
 import hashlib
 import hmac
 import secrets
@@ -10,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
-from sqlalchemy import DateTime, ForeignKey, LargeBinary
+from sqlalchemy import DateTime, ForeignKey, LargeBinary, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,8 +34,8 @@ class SessionBiometricCredential(Base):
     challenge_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        server_default=func.now(),
         nullable=False,
-        default=lambda: datetime.now(UTC),
     )
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -42,7 +43,7 @@ class SessionBiometricCredential(Base):
 def decode_public_key_x963(encoded: str) -> bytes:
     try:
         raw = base64.b64decode(encoded, validate=True)
-    except (ValueError, base64.binascii.Error) as exc:
+    except (ValueError, binascii.Error) as exc:
         raise ValueError("Invalid biometric public key") from exc
     if len(raw) != 65 or raw[0] != 0x04:
         raise ValueError("Invalid biometric public key")
@@ -87,5 +88,5 @@ def verify_signature(public_key_x963: bytes, payload: bytes, signature_b64: str)
         public_key = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), public_key_x963)
         public_key.verify(signature, payload, ec.ECDSA(hashes.SHA256()))
         return True
-    except (ValueError, InvalidSignature, base64.binascii.Error):
+    except (ValueError, InvalidSignature, binascii.Error):
         return False
