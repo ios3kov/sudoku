@@ -110,14 +110,14 @@ async def test_native_biometric_challenge_is_session_bound_one_time_and_pin_gate
         assert (
             await client.put(
                 ROOT + "/biometric",
-                json={"public_key_x963_b64": public_key_b64},
+                json={"public_key_x963_b64": public_key_b64, "password": PASSWORD},
             )
         ).status_code == 423
 
         enrolled = await client.put(
             ROOT + "/biometric",
             headers={HEADER: token},
-            json={"public_key_x963_b64": public_key_b64},
+            json={"public_key_x963_b64": public_key_b64, "password": PASSWORD},
         )
         assert enrolled.status_code == 200, enrolled.text
         assert enrolled.json() == {"biometric_enabled": True}
@@ -198,7 +198,7 @@ async def test_pin_lockout_blocks_biometric_until_password_recovery():
         enrolled = await client.put(
             ROOT + "/biometric",
             headers={HEADER: token},
-            json={"public_key_x963_b64": base64.b64encode(public_key).decode("ascii")},
+            json={"public_key_x963_b64": base64.b64encode(public_key).decode("ascii"), "password": PASSWORD},
         )
         assert enrolled.status_code == 200
 
