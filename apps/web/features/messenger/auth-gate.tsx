@@ -115,7 +115,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
 
   if (user) {
     if (!active) return <MessengerRevealPreview user={user} />;
-    return <ConversationDraftProvider key={user.id}><MessengerShell user={user} onHide={hide} onLoggedOut={signedOut} /></ConversationDraftProvider>;
+    return <ConversationDraftProvider key={user.id}><MessengerShell user={user} onHide={hide} onLoggedOut={signedOut} onUserUpdated={setUser} /></ConversationDraftProvider>;
   }
 
   return <main className="page" aria-label="Private area locked">
