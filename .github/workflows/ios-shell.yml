@@ -33,6 +33,9 @@ jobs:
       - name: Install pinned Capacitor dependencies
         run: npm install --package-lock=false
 
+      - name: Audit production JavaScript dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Generate iOS project
         env:
           SUDOKU_IOS_REMOTE_URL: https://sudoku.moscow
