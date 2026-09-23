@@ -1,5 +1,13 @@
 # Progress
 
+## Current milestone — repository hygiene after final QA
+
+Date: 2026-09-23. The remaining stale PR debt was cleaned after the final interactive-control audit. Old release-readiness PR #34 and obsolete Dependabot PRs #3–17 were closed without merge because they were based on superseded repository state and were no longer valid integration candidates.
+
+Dependabot version updates are now grouped per ecosystem into routine (minor/patch) and major updates, with at most two open version-update PRs per ecosystem. Security updates are not disabled. This keeps future maintenance reviewable without hiding major compatibility work.
+
+No production deployment was performed. See [Step87](steps/87-repository-hygiene.md).
+
 ## Current milestone — final interactive-control audit merged
 
 Date: 2026-09-23. PR #49 is merged to `main` as `e47c4088a026f1100aed4d9d5526d82635bdb356`. It ports the earlier button audit onto the current phone/contact UI and adds regression coverage for the remaining controls: Sudoku Clear, phone change, Contacts add/remove/close, auth navigation/hide, password fallback, Notifications retry, Invite/Devices close, Sign out, encrypted media/file-picker controls and the previously covered conversation/message/group/security actions.
