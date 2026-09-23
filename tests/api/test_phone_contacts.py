@@ -1,0 +1,248 @@
+import uuid
+
+import httpx
+import pytest
+from app.db import SessionFactory
+from app.main import app
+from app.models import User
+from app.security import hash_password
+from sqlalchemy import select
+
+ORIGIN = "https://sudoku.test"
+HEADERS = {"origin": ORIGIN}
+PASSWORD = "correct horse battery staple"
+
+
+def test_phone(seed: int) -> str:
+    return "+" + str(71000000000 + seed)
+
+
+async def create_user(seed: int, name: str, *, phone: bool = True) -> User:
+    user = User(
+        email=f"phone-{seed}-{uuid.uuid4().hex[:8]}@example.test",
+        phone_e164=test_phone(seed) if phone else None,
+        display_name=name,
+        password_hash=hash_password(PASSWORD),
+        status="active",
+        is_admin=False,
+    )
+    async with SessionFactory() as db:
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    return user
+
+
+async def phone_login(client: httpx.AsyncClient, user: User) -> None:
+    response = await client.post(
+        "/v1/auth/login",
+        json={
+            "phone": user.phone_e164,
+            "password": PASSWORD,
+            "device_name": "phone-contact-test",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["phone_e164"] == user.phone_e164
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_contact_sync_controls_directory_and_new_conversations() -> None:
+    seed = int(uuid.uuid4().hex[:6], 16) % 100000
+    owner = await create_user(seed, "Owner")
+    peer = await create_user(seed + 1, "Peer")
+    stranger = await create_user(seed + 2, "Stranger")
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=HEADERS,
+    ) as client:
+        await phone_login(client, owner)
+
+        empty = await client.get("/v1/users")
+        assert empty.status_code == 200
+        assert empty.json() == []
+
+        blocked = await client.post(
+            "/v1/conversations",
+            json={
+                "type": "direct",
+                "title": None,
+                "member_ids": [str(peer.id)],
+                "encryption_required": False,
+            },
+        )
+        assert blocked.status_code == 403
+
+        synced = await client.post(
+            "/v1/contacts/sync",
+            json={"phones": [peer.phone_e164], "replace": False},
+        )
+        assert synced.status_code == 200, synced.text
+        assert [item["id"] for item in synced.json()] == [str(peer.id)]
+        assert synced.json()[0]["phone_e164"] == peer.phone_e164
+
+        directory = await client.get("/v1/users?q=Peer")
+        assert directory.status_code == 200
+        assert [item["id"] for item in directory.json()] == [str(peer.id)]
+        assert "email" not in directory.json()[0]
+
+        allowed = await client.post(
+            "/v1/conversations",
+            json={
+                "type": "direct",
+                "title": None,
+                "member_ids": [str(peer.id)],
+                "encryption_required": False,
+            },
+        )
+        assert allowed.status_code == 201, allowed.text
+
+        stranger_blocked = await client.post(
+            "/v1/conversations",
+            json={
+                "type": "group",
+                "title": "Blocked group",
+                "member_ids": [str(stranger.id)],
+                "encryption_required": False,
+            },
+        )
+        assert stranger_blocked.status_code == 403
+
+        replaced = await client.post(
+            "/v1/contacts/sync",
+            json={"phones": [stranger.phone_e164], "replace": True},
+        )
+        assert replaced.status_code == 200
+        assert [item["id"] for item in replaced.json()] == [str(stranger.id)]
+
+        old_contact = await client.get("/v1/users?q=Peer")
+        assert old_contact.json() == []
+        new_contact = await client.get("/v1/users?q=Stranger")
+        assert [item["id"] for item in new_contact.json()] == [str(stranger.id)]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_phone_update_disables_legacy_email_login_for_migrated_account() -> None:
+    seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 200000
+    legacy = await create_user(seed, "Legacy", phone=False)
+    replacement_phone = test_phone(seed)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=HEADERS,
+    ) as client:
+        legacy_login = await client.post(
+            "/v1/auth/login",
+            json={
+                "email": legacy.email,
+                "password": PASSWORD,
+                "device_name": "legacy-migration",
+            },
+        )
+        assert legacy_login.status_code == 200
+
+        wrong_password = await client.put(
+            "/v1/me/phone",
+            json={"phone": replacement_phone, "password": "wrong"},
+        )
+        assert wrong_password.status_code == 403
+
+        updated = await client.put(
+            "/v1/me/phone",
+            json={"phone": replacement_phone, "password": PASSWORD},
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["phone_e164"] == replacement_phone
+
+        await client.post("/v1/auth/logout")
+        email_after_migration = await client.post(
+            "/v1/auth/login",
+            json={
+                "email": legacy.email,
+                "password": PASSWORD,
+                "device_name": "legacy-email-blocked",
+            },
+        )
+        assert email_after_migration.status_code == 401
+
+        phone_after_migration = await client.post(
+            "/v1/auth/login",
+            json={
+                "phone": replacement_phone,
+                "password": PASSWORD,
+                "device_name": "phone-login",
+            },
+        )
+        assert phone_after_migration.status_code == 200
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_phone_bound_invite_creates_phone_identity() -> None:
+    seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 400000
+    admin = User(
+        email=f"admin-{uuid.uuid4().hex[:8]}@example.test",
+        phone_e164=test_phone(seed),
+        display_name="Admin",
+        password_hash=hash_password(PASSWORD),
+        status="active",
+        is_admin=True,
+    )
+    async with SessionFactory() as db:
+        db.add(admin)
+        await db.commit()
+
+    invited_phone = test_phone(seed + 1)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=HEADERS,
+    ) as admin_client:
+        await phone_login(admin_client, admin)
+        created = await admin_client.post(
+            "/v1/invites",
+            json={"phone": invited_phone, "expires_hours": 1, "max_uses": 1},
+        )
+        assert created.status_code == 201, created.text
+        token = created.json()["token"]
+
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url=ORIGIN,
+            headers=HEADERS,
+        ) as member_client:
+            mismatch = await member_client.post(
+                "/v1/invites/accept",
+                json={
+                    "token": token,
+                    "phone": test_phone(seed + 2),
+                    "display_name": "Wrong",
+                    "password": PASSWORD,
+                    "device_name": "wrong-phone",
+                },
+            )
+            assert mismatch.status_code == 403
+
+            accepted = await member_client.post(
+                "/v1/invites/accept",
+                json={
+                    "token": token,
+                    "phone": invited_phone,
+                    "display_name": "Invited",
+                    "password": PASSWORD,
+                    "device_name": "phone-invite",
+                },
+            )
+            assert accepted.status_code == 201, accepted.text
+            assert accepted.json()["phone_e164"] == invited_phone
+            user_id = uuid.UUID(accepted.json()["id"])
+
+    async with SessionFactory() as db:
+        created_user = await db.scalar(select(User).where(User.id == user_id))
+        assert created_user is not None
+        assert created_user.phone_e164 == invited_phone
