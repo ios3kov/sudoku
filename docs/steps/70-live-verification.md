@@ -281,7 +281,9 @@ The implementation/audit is tracked in `docs/audits/minimal-messenger-redesign-2
 
 ## Release-prep evidence — 2026-09-23 phone/contact rollout
 
-Repository-side pre-deploy work is complete through the current mainline button/control audit. A dedicated legacy migration regression was added separately to exercise an existing `0015_session_pins` database with a user, active session, PIN row, invite and login-attempt row through the `0016_phone_contacts` upgrade.
+Repository-side pre-deploy work is complete through the current mainline button/control audit. PR #59 added a dedicated legacy migration regression that exercises an existing `0015_session_pins` database with a user, active session, PIN row, invite and login-attempt row through the `0016_phone_contacts` upgrade.
+
+The exact reviewed head `1e3d4dcfc4bdb579664cf09721ad5cc021bcd577` passed CI `35874924090`, device-access `35874924177`, beat-runtime `35874924059` and api-shutdown `35874923853`. The legacy upgrade step itself completed successfully before the normal clean-schema migration/API/browser/build gates. PR #59 was squash-merged as `0394298d122876edfa8ddf9a9443ffc6db24a407`.
 
 External production observations on 2026-09-23:
 
