@@ -16,7 +16,7 @@ Normal launch is always a genuine Sudoku game. A deliberate hidden gesture revea
 ```mermaid
 flowchart TB
     WEB[Next.js Web / PWA\nSudoku + Messenger]
-    IOS[iOS Native Host\nCapacitor + Swift]
+    IOS[iOS Native Host\nSwift + WKWebView]
     WK[WKWebView\nSudoku + Messenger UI]
     BRIDGE[Native Capability Bridge\nContacts / Biometrics\nPrivacy / Photos / Files]
 
@@ -69,7 +69,7 @@ The Next.js application owns:
 
 ### Native iOS host
 
-The native host is a **capability layer**, not a second messaging implementation.
+The native host is a **first-party Swift/UIKit capability layer**, not a second messaging implementation. It uses a persistent `WKWebView` for the existing production origin so Secure/HttpOnly cookies, relative API calls, IndexedDB MLS state and WebSocket behavior remain on the same origin.
 
 Allowed native capabilities are intentionally narrow:
 
@@ -87,6 +87,8 @@ The bridge must not expose:
 - unrestricted address-book dumps;
 - plaintext message/attachment upload;
 - arbitrary navigation outside approved application origins.
+
+The initial native host intentionally has no third-party runtime SDK dependency. The Xcode project is generated reproducibly from `ios/Sudoku/project.yml` with XcodeGen, while runtime behavior stays in first-party Swift.
 
 ### Security ownership
 

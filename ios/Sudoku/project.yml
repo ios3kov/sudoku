@@ -1,0 +1,41 @@
+name: Sudoku
+
+options:
+  bundleIdPrefix: moscow.sudoku
+  deploymentTarget:
+    iOS: "15.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"
+
+targets:
+  Sudoku:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sudoku
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: moscow.sudoku.app
+        PRODUCT_NAME: Sudoku
+        INFOPLIST_FILE: Sudoku/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - sdk: WebKit.framework
+      - sdk: Contacts.framework
+      - sdk: ContactsUI.framework
+
+schemes:
+  Sudoku:
+    build:
+      targets:
+        Sudoku: all
+    run:
+      config: Debug
+    archive:
+      config: Release

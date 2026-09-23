@@ -1,0 +1,45 @@
+name: ios-native
+
+on:
+  pull_request:
+    paths:
+      - "ios/**"
+      - "scripts/generate-ios-project.sh"
+      - ".github/workflows/ios-native.yml"
+      - "docs/steps/88-native-ios-production-plan.md"
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - "scripts/generate-ios-project.sh"
+      - ".github/workflows/ios-native.yml"
+      - "docs/steps/88-native-ios-production-plan.md"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Validate plist
+        run: plutil -lint ios/Sudoku/Sudoku/Info.plist
+
+      - name: Generate Xcode project
+        run: bash scripts/generate-ios-project.sh
+
+      - name: Build iOS simulator app
+        working-directory: ios/Sudoku
+        run: |
+          xcodebuild             -project Sudoku.xcodeproj             -scheme Sudoku             -configuration Debug             -sdk iphonesimulator             -destination "generic/platform=iOS Simulator"             CODE_SIGNING_ALLOWED=NO             build

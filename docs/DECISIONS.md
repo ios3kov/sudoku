@@ -51,3 +51,7 @@ The preferred iOS integration is a system contact picker that returns only conta
 
 ## ADR-017 — Mature messengers are design references, not source donors
 Signal iOS, Element X and similar AGPL/GPL projects may inform UX/security patterns, but their source is not copied into this project. Permissively licensed code still requires review before reuse. Product behavior is implemented against Sudoku Messenger's own architecture and acceptance tests.
+
+
+## ADR-018 — Production iOS host is first-party Swift, not Capacitor remote-url mode
+The native iOS release uses a small Swift/UIKit host with `WKWebView`, app-bound domains and narrow script-message handlers. This preserves the existing same-origin session/API/MLS behavior. Capacitor remains a valid general option, but its documented external `server.url` mode is intended for live reload/development rather than production, so it is not used for this release architecture.

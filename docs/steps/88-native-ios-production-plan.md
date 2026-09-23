@@ -43,7 +43,7 @@ This is a product hardening program, not a rewrite. Native Android is explicitly
 ```mermaid
 flowchart TB
     WEB[Web / PWA\nNext.js]
-    IOS[iOS Native Shell\nCapacitor + Swift bridge]
+    IOS[iOS Native Host\nSwift + WKWebView]
     WK[WKWebView\nSudoku + Messenger UI]
     NATIVE[Native capabilities\nContacts / LocalAuthentication\nPrivacy cover / Photos / Files]
     API[FastAPI]
@@ -63,7 +63,7 @@ flowchart TB
     WS --> REDIS
 ```
 
-The first iOS candidate may load the verified production origin inside WKWebView to minimize divergence. Before App Store submission, review whether the release should continue using the remote origin or bundle the web shell locally. The decision must account for update safety, offline behavior, App Store minimum-functionality review risk and CSP/origin constraints.
+The first iOS candidate uses a small first-party Swift host with a persistent `WKWebView` pointed at the verified production origin. This preserves the current same-origin Secure/HttpOnly cookie, relative `/v1` API calls, IndexedDB/MLS state and WebSocket behavior without introducing a second native auth protocol. Navigation is constrained with `WKAppBoundDomains`, `limitsNavigationsToAppBoundDomains` and an explicit navigation delegate. We intentionally do not use Capacitor `server.url` for production because Capacitor documents external `server.url` loading as a live-reload/development feature, not a production deployment path: https://capacitorjs.com/docs/config.
 
 ## Native bridge contract
 
@@ -93,15 +93,17 @@ Do not expose arbitrary filesystem, arbitrary URL loading, generic native execut
 
 ### P0.2 Native container
 
-- Capacitor-based iOS project;
-- production bundle identifier and display name remain Sudoku;
-- only approved production origins may load in the web view;
+- first-party Swift/UIKit project generated reproducibly from `ios/Sudoku/project.yml` with XcodeGen;
+- provisional bundle identifier: `moscow.sudoku.app`; display name remains `Sudoku`;
+- persistent `WKWebView` loads only `https://sudoku.moscow` as the application surface;
+- `WKAppBoundDomains` includes only `sudoku.moscow` and `assets.sudoku.moscow`;
+- JavaScript-to-native handlers validate main-frame + HTTPS + trusted host before doing anything;
 - universal/deep-link behavior must never bypass Sudoku concealment;
 - no App Store publication until explicit release approval.
 
 ### P0.3 Native contact picker
 
-Preferred implementation: custom Swift bridge around the system contact picker rather than broad background address-book access.
+Implementation: a custom Swift bridge around `CNContactPickerViewController`, not broad address-book access. Apple documents that this picker does not require full Contacts permission and exposes only the user's final selection.
 
 Acceptance:
 
@@ -199,7 +201,7 @@ Add native push only after the iOS shell is stable:
 
 ## Platform scope
 
-- **iOS:** native Capacitor/Swift host.
+- **iOS:** first-party Swift/UIKit + WKWebView host.
 - **Android:** existing installable PWA in Chrome/Android; retain browser Contact Picker and manual E.164 fallback.
 - **Desktop/browser:** existing web client.
 - Native Android work requires a separate decision; do not add Android platform code merely for symmetry.
@@ -277,7 +279,7 @@ Apple-specific requirements to verify before TestFlight/App Store:
 
 - add `NSFaceIDUsageDescription` before using Face ID through LocalAuthentication;
 - include `PrivacyInfo.xcprivacy` and accurately declare collected data / required-reason APIs;
-- verify privacy manifests/signatures for third-party SDKs, including Capacitor where applicable;
+- verify privacy manifests/signatures for any third-party SDKs actually added; the initial native host intentionally has no runtime third-party SDK dependency;
 - prefer Apple system pickers over broad library permissions:
   - Contacts UI picker for explicit contact selection;
   - Photos picker for user-selected images without unnecessary full photo-library access;
@@ -332,6 +334,8 @@ As of 2026-09-23:
 - phone login works;
 - four-digit PIN + reload returns to secure messaging without the previous restart-required failure;
 - iPhone Safari cannot provide the desired system phone-book picker, which is the immediate reason for the native iOS track.
+- singleton-admin foundation PR #62 is merged to `main` as `571ce04ad3903f76f7fbdbc1aa607acb767b9095`; exact post-merge CI, device-access, beat-runtime and api-shutdown workflows are green;
+- migration `0017_single_admin` is merged but is **not** deployed to production yet; production remains on `0016_phone_contacts` until the next exact-SHA backend deployment gate.
 
 Still open:
 
