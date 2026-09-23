@@ -36,7 +36,7 @@ const me: CurrentUser = {
 };
 
 const peer = { id: "peer", display_name: "Peer User", email: "peer@example.test", role: "member" as const };
-const candidate = { id: "candidate", display_name: "Candidate User", email: "candidate@example.test" };
+const candidate = { id: "candidate", display_name: "Candidate User", email: "candidate@example.test", last_read_sequence: 0 };
 
 const directConversation = {
   id: "chat",
