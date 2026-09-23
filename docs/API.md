@@ -15,6 +15,16 @@ PUT    /me/phone
 GET    /sessions
 DELETE /sessions/{session_id}
 
+GET    /auth/device-access
+PUT    /auth/device-access
+POST   /auth/device-access/unlock
+POST   /auth/device-access/password
+POST   /auth/device-access/lock
+PUT    /auth/device-access/biometric
+DELETE /auth/device-access/biometric
+POST   /auth/device-access/biometric/challenge
+POST   /auth/device-access/biometric/unlock
+
 POST   /invites                   # singleton global admin only
 DELETE /invites/{invite_id}       # singleton global admin only
 POST   /invites/accept             # invite token is a JSON body field
@@ -57,6 +67,18 @@ Accept invite:
   "device_name": "iPhone"
 }
 ```
+
+### Device PIN and native biometrics
+
+A PIN-enabled session requires the in-memory `X-Sudoku-Unlock` capability on private API requests. Native biometric enrollment is available only to an already PIN-unlocked session and additionally requires account-password confirmation.
+
+The iOS app registers only a P-256 X9.63 public key. Biometric unlock uses:
+
+1. `POST /auth/device-access/biometric/challenge` -> one-time challenge + domain-separated signing payload;
+2. iOS signs the exact payload with its Secure Enclave key after Face ID / Touch ID;
+3. `POST /auth/device-access/biometric/unlock` verifies ECDSA/SHA-256 and returns the ordinary device unlock capability.
+
+Challenges expire after 90 seconds, are session-bound, and are consumed after a verification attempt. Five failed PIN guesses block biometric challenge use until account-password recovery. Changing/removing the PIN removes biometric enrollment.
 
 ## Contacts and user directory
 
