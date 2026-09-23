@@ -79,9 +79,9 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
         ? await selectNativeContacts()
         : await contacts!.select(["tel"], { multiple: true });
       const phones = selected.flatMap((item) => item.tel ?? []);
-      const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
+      const normalized = [...new Set(phones.map(normalizePhone).filter((phone) => /^\\+[1-9][0-9]{7,14}$/.test(phone)))];
       if (normalized.length === 0) {
-        setNotice("No phone numbers selected.");
+        setNotice("No international phone numbers selected. Add the number manually in E.164 format.");
         return;
       }
       const matched = await messengerApi.syncContacts(normalized);
