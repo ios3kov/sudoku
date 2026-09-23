@@ -20,7 +20,7 @@ Still open before a production iOS/App Store claim:
 - destructive PostgreSQL + encrypted-object restore drill;
 - native iOS implementation, physical-device QA and TestFlight/App Store gates.
 
-## Current milestone — repository hygiene after final QA
+## Historical milestone — repository hygiene after final QA
 
 Date: 2026-09-23. The remaining stale PR debt was cleaned after the final interactive-control audit. Old release-readiness PR #34 and obsolete Dependabot PRs #3–17 were closed without merge because they were based on superseded repository state and were no longer valid integration candidates.
 
@@ -28,7 +28,7 @@ Dependabot version updates are now grouped per ecosystem into routine (minor/pat
 
 No production deployment was performed. See [Step87](steps/87-repository-hygiene.md).
 
-## Current milestone — final interactive-control audit merged
+## Historical milestone — final interactive-control audit merged
 
 Date: 2026-09-23. PR #49 is merged to `main` as `e47c4088a026f1100aed4d9d5526d82635bdb356`. It ports the earlier button audit onto the current phone/contact UI and adds regression coverage for the remaining controls: Sudoku Clear, phone change, Contacts add/remove/close, auth navigation/hide, password fallback, Notifications retry, Invite/Devices close, Sign out, encrypted media/file-picker controls and the previously covered conversation/message/group/security actions.
 
@@ -36,7 +36,7 @@ Reviewed head `fca76a9b54c6c965fe68050d7d1c9cbb723a1479` passed CI `35858047355`
 
 PR #46 was closed unmerged as superseded. The current known web/PWA interactive-control QA debt is closed. See [Step86](steps/86-final-button-audit.md). Production deployment and the separate physical-device/two-device/recovery acceptance gates remain open.
 
-## Current milestone — phone identity + contact graph merged
+## Historical milestone — phone identity + contact graph merged
 
 Date: 2026-09-23. PR #47 is merged to `main` as `9e0efdbe0e79efb99c3283e6c78784fe3a6325d0`. It moves the messenger to phone-first login and adds a server-enforced phone-book contact graph. New invite accounts are phone-bound; existing email accounts retain migration-only login until they assign a phone. Contact discovery exposes only active verified phone identities, and server authorization covers new direct/group chats, group additions and direct sends.
 
@@ -46,7 +46,7 @@ Exact post-merge push verification for `9e0efdbe0e79efb99c3283e6c78784fe3a6325d0
 
 Production has not been deployed. Migration `0016_phone_contacts`, legacy-phone verification and live mobile/PWA acceptance remain release steps.
 
-## Current milestone — PIN onboarding + secure reload recovery merged
+## Historical milestone — PIN onboarding + secure reload recovery merged
 
 Date: 2026-09-23. PR #45 is merged to `main` as `9169a1a5456423515b288c5dfff7b72b7e5e9de1`. It moves optional PIN enrollment into the first successful password-login flow for members and administrators and fixes the OpenMLS stale-writer race observed across reload/pagehide. The existing server PIN schema, session UUID device identity and MLS wire format are unchanged.
 
