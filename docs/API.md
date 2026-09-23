@@ -4,50 +4,81 @@ Base path: `/v1`.
 
 All private endpoints use the Secure/HttpOnly server session cookie. Browser mutations are same-origin protected; WebSocket connections additionally require the exact configured `PUBLIC_ORIGIN`.
 
-## Auth and invites
+## Auth, phone identity and invites
 
 ```http
 POST   /auth/login
 POST   /auth/logout
 POST   /auth/refresh
 GET    /me
+PUT    /me/phone
 GET    /sessions
 DELETE /sessions/{session_id}
 
-POST   /invites                  # admin only
-DELETE /invites/{invite_id}      # admin only
-POST   /invites/accept            # token is JSON body field; never place invite secrets in URLs
+POST   /invites                   # singleton global admin only
+DELETE /invites/{invite_id}       # singleton global admin only
+POST   /invites/accept             # invite token is a JSON body field
 ```
 
-Create invite:
+Production is phone-first. A legacy email-only account may authenticate by email only while `phone_e164` is still unset; after a phone is assigned, email login is disabled for that account.
+
+Phone login:
 
 ```json
 {
-  "email": "person@example.com",
-  "expires_hours": 168,
-  "max_uses": 1
-}
-```
-
-The response contains the raw invite `token` exactly once. Only its digest is persisted.
-
-Login:
-
-```json
-{
-  "email": "person@example.com",
+  "phone": "+382...",
   "password": "...",
   "device_name": "iPhone"
 }
 ```
 
-## User directory
+Create a phone-bound invite:
 
-```http
-GET /users?q=alex
+```json
+{
+  "phone": "+382...",
+  "expires_hours": 168,
+  "max_uses": 1
+}
 ```
 
-Only authenticated active users are returned; result count is capped and the endpoint is rate-limited.
+Optional `email` may be included as an additional invite binding, but phone is required.
+
+The response contains the raw invite `token` exactly once. Only its digest is persisted. Production permits at most one global administrator, and only that account may create or revoke account invitations.
+
+Accept invite:
+
+```json
+{
+  "token": "...",
+  "phone": "+382...",
+  "display_name": "Person",
+  "password": "...",
+  "device_name": "iPhone"
+}
+```
+
+## Contacts and user directory
+
+```http
+GET    /contacts?q=alex
+POST   /contacts/sync
+DELETE /contacts/{user_id}
+GET    /users?q=alex
+```
+
+Contact sync accepts explicit phone selections:
+
+```json
+{
+  "phones": ["+382...", "+381..."],
+  "replace": false
+}
+```
+
+Only active accounts with verified phone identities can match. The server persists matched user-to-user edges, not unmatched phone numbers or the caller's complete address book.
+
+After an account has a phone identity, the user directory exposes only current matched contacts. New direct/group creation, group additions and direct sends are additionally enforced server-side against the contact graph.
 
 ## Conversations
 
