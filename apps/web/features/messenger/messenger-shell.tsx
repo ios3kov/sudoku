@@ -13,6 +13,7 @@ import { concealRevokedSession } from "./conceal-revoked-session";
 import { RealtimeClient } from "./realtime";
 import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
+import { ContactsPanel } from "./contacts-panel";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 
@@ -37,6 +38,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
   const [pushState, setPushState] = useState<"idle" | "enabling" | "enabled" | "error">("idle");
   const [showInvite, setShowInvite] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
   const [secureSetupBusy, setSecureSetupBusy] = useState(false);
   const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
   const [deviceRekeyError, setDeviceRekeyError] = useState<string | null>(null);
@@ -330,24 +332,35 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
     if (!user.phone_e164) {
       setCreating(false);
       setShowInvite(false);
+      setShowContacts(false);
       setShowDevices(true);
       return;
     }
     setShowInvite(false);
     setShowDevices(false);
+    setShowContacts(false);
     setCreating(true);
   }
 
   function toggleInvite() {
     setCreating(false);
     setShowDevices(false);
+    setShowContacts(false);
     setShowInvite((value) => !value);
   }
 
   function toggleDevices() {
     setCreating(false);
     setShowInvite(false);
+    setShowContacts(false);
     setShowDevices((value) => !value);
+  }
+
+  function toggleContacts() {
+    setCreating(false);
+    setShowInvite(false);
+    setShowDevices(false);
+    setShowContacts((value) => !value);
   }
 
   function addConversation(conversation: Conversation) {
@@ -605,9 +618,11 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           onClose={() => setShowDevices(false)}
           onCurrentRevoked={revokeLocalSession}
         /> : null}
+        {showContacts ? <ContactsPanel onClose={() => setShowContacts(false)} /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
           {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}
+          <button type="button" onClick={toggleContacts}>Contacts</button>
           <button type="button" onClick={toggleDevices}>Devices</button>
           <button type="button" onClick={() => void enablePush()} disabled={pushState === "enabling" || pushState === "enabled"}>
             {pushState === "enabled" ? "Notifications on" : pushState === "enabling" ? "Enabling…" : pushState === "error" ? "Retry notifications" : "Enable notifications"}
