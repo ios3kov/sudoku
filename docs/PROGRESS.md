@@ -10,6 +10,8 @@ A consistent production backup `20260923T160722Z` was created with the maintenan
 
 The next product track is a native iOS client shell rather than further PWA-only work. The target keeps the existing Next.js UI, FastAPI backend and MLS protocol while adding a narrow native capability layer for explicit iPhone contact selection, biometric unlock, app-switcher privacy and native media/file pickers. See [Step88](steps/88-native-ios-production-plan.md).
 
+PR #62 is merged to `main` as `571ce04ad3903f76f7fbdbc1aa607acb767b9095`; exact post-merge CI, device-access, beat-runtime and api-shutdown are green. Migration `0017_single_admin` is now in the repository but has not yet been deployed to production. The active implementation branch `feat/ios-native-host` adds the first-party Swift/UIKit host, app-bound `WKWebView`, synchronous native privacy cover, explicit Contacts UI picker bridge, XcodeGen project spec and a macOS/Xcode CI build gate.
+
 The global administration model is also being tightened: production remains invite-only and the database will enforce at most one global administrator. Only that singleton administrator may create or revoke account invitations. Conversation-local owner roles do not grant global invite rights.
 
 Still open before a production iOS/App Store claim:
