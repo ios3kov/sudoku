@@ -61,7 +61,7 @@ async def load_pin(db: AsyncSession, session: Session) -> SessionPin | None:
 async def check_password(request: Request, auth: AuthContext, value: SecretStr) -> None:
     password = value.get_secret_value()
     ip = request.client.host if request.client else "unknown"
-    await enforce_login_rate_limit(ip, auth.user.email)
+    await enforce_login_rate_limit(ip, auth.user.phone_e164 or auth.user.email or str(auth.user.id))
     if not 1 <= len(password) <= 1024 or not await run_in_threadpool(verify_password, auth.user.password_hash, password):
         # 403 distinguishes an incorrect password from an expired session.
         raise HTTPException(status_code=403, detail="Invalid password")
@@ -74,7 +74,7 @@ def audit(db: AsyncSession, auth: AuthContext, event: str) -> None:
 @router.get("")
 async def access_status(auth: AuthContext = Depends(get_session_context), db: AsyncSession = Depends(get_db)):
     pin = await load_pin(db, auth.session)
-    # No account name, email, session secret or PIN verifier is returned here.
+    # No account identity, session secret or PIN verifier is returned here.
     return {"pin_enabled": pin is not None, "password_required": bool(pin and pin.failed_attempts >= PIN_LIMIT)}
 
 
