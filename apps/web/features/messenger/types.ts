@@ -1,6 +1,7 @@
 export interface CurrentUser {
   id: string;
-  email: string;
+  phone_e164: string | null;
+  email: string | null;
   display_name: string;
   is_admin: boolean;
 }
@@ -8,7 +9,8 @@ export interface CurrentUser {
 export interface ConversationMember {
   id: string;
   display_name: string;
-  email: string;
+  phone_e164: string | null;
+  email: string | null;
   role: string;
   last_read_sequence: number;
 }
@@ -92,9 +94,16 @@ export interface RealtimeEvent {
 export interface CreatedInvite {
   id: string;
   token: string;
+  phone_e164: string | null;
   email: string | null;
   expires_at: string;
   max_uses: number;
+}
+
+export interface ContactDirectoryItem {
+  id: string;
+  display_name: string;
+  phone_e164: string;
 }
 
 export interface DeviceSession {
