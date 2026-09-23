@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
-import { nativeContactsAvailable, selectNativeContacts } from "./native-contact-access";
+import { NATIVE_CONTACTS_READY_EVENT, nativeContactsAvailable, selectNativeContacts } from "./native-contact-access";
 
 type PickerContact = { name?: string[]; tel?: string[] };
 type ContactsManagerLike = {
@@ -25,7 +25,13 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   const [nativePickerAvailable, setNativePickerAvailable] = useState(false);
 
   useEffect(() => {
-    setNativePickerAvailable(nativeContactsAvailable());
+    function refreshNativeAvailability() {
+      setNativePickerAvailable(nativeContactsAvailable());
+    }
+
+    refreshNativeAvailability();
+    window.addEventListener(NATIVE_CONTACTS_READY_EVENT, refreshNativeAvailability);
+
     let cancelled = false;
     const manager = (navigator as Navigator & { contacts?: ContactsManagerLike }).contacts ?? null;
     contactsRef.current = manager;
@@ -41,6 +47,7 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
     return () => {
       cancelled = true;
       contactsRef.current = null;
+      window.removeEventListener(NATIVE_CONTACTS_READY_EVENT, refreshNativeAvailability);
     };
   }, []);
 
