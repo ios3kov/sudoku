@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import asyncio
 
 from app.db import SessionFactory
@@ -27,6 +28,7 @@ async def main() -> None:
                 user = User(
                     email=email,
                     phone_e164=phone,
+                    phone_verified_at=datetime.now(UTC),
                     display_name=display_name,
                     password_hash=hash_password(PASSWORD),
                     status="active",
@@ -35,6 +37,7 @@ async def main() -> None:
                 db.add(user)
             else:
                 user.phone_e164 = phone
+                user.phone_verified_at = datetime.now(UTC)
                 user.display_name = display_name
                 user.password_hash = hash_password(PASSWORD)
                 user.status = "active"
