@@ -29,6 +29,7 @@ export function GroupSettings({
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contactsRevision, setContactsRevision] = useState(0);
   const me = conversation.members.find((member) => member.id === user.id);
   const isOwner = me?.role === "owner";
   const ownerCount = useMemo(() => conversation.members.filter((member) => member.role === "owner").length, [conversation.members]);
@@ -62,7 +63,7 @@ export function GroupSettings({
       }
     }, term ? 220 : 0);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [conversation.members, isOwner, query]);
+  }, [contactsRevision, conversation.members, isOwner, query]);
 
   async function rename(event: FormEvent) {
     event.preventDefault();
@@ -161,7 +162,7 @@ export function GroupSettings({
       </div>
       {isOwner ? (
         <div className="member-search" aria-busy={searching}>
-          <ContactAccess onSynced={() => setQuery((current) => current + " ")} />
+          <ContactAccess onSynced={() => setContactsRevision((value) => value + 1)} />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
