@@ -309,7 +309,7 @@ async def create_invite(
     secret = generate_invite_secret()
     email = normalize_email(str(payload.email)) if payload.email is not None else None
     try:
-        phone = normalize_phone_e164(payload.phone) if payload.phone is not None else None
+        phone = normalize_phone_e164(payload.phone)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     invite = Invite(
@@ -359,7 +359,7 @@ async def accept_invite(payload: InviteAcceptRequest, request: Request, response
     now = datetime.now(UTC)
     email = normalize_email(str(payload.email)) if payload.email is not None else None
     try:
-        phone = normalize_phone_e164(payload.phone) if payload.phone is not None else None
+        phone = normalize_phone_e164(payload.phone)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     invite = (
@@ -367,21 +367,18 @@ async def accept_invite(payload: InviteAcceptRequest, request: Request, response
     ).scalar_one_or_none()
     if invite is None or invite.revoked_at is not None or invite.expires_at <= now or invite.uses >= invite.max_uses:
         raise HTTPException(status_code=404, detail="Invite is invalid or expired")
-    if invite.phone_e164 is not None and invite.phone_e164 != phone:
+    if invite.phone_e164 != phone:
         raise HTTPException(status_code=403, detail="Invite is not valid for this phone number")
     if invite.email is not None and invite.email != email:
         raise HTTPException(status_code=403, detail="Invite is not valid for this email")
-    if phone is not None:
-        existing = (await db.execute(select(User.id).where(User.phone_e164 == phone))).scalar_one_or_none()
-    else:
-        existing = (await db.execute(select(User.id).where(User.email == email))).scalar_one_or_none()
+    existing = (await db.execute(select(User.id).where(User.phone_e164 == phone))).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(status_code=409, detail="Account already exists")
 
     user = User(
         email=email,
         phone_e164=phone,
-        phone_verified_at=datetime.now(UTC) if phone is not None else None,
+        phone_verified_at=datetime.now(UTC),
         display_name=payload.display_name.strip(),
         password_hash=hash_password(payload.password),
         status="active",
