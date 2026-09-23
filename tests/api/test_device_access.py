@@ -27,13 +27,36 @@ COOKIE = get_settings().session_cookie_name
 @asynccontextmanager
 async def account(admin=False):
     suffix = uuid.uuid4().hex
+    phone = "+" + str(76000000000 + (int(suffix[:8], 16) % 100000000))
     async with SessionFactory() as db:
-        user = User(email=f"pin-{suffix}@example.com", display_name="PIN test", password_hash=hash_password(PASSWORD), status="active", is_admin=admin)
-        db.add(user)
+        user = None
+        if admin:
+            user = (
+                await db.execute(select(User).where(User.is_admin.is_(True)))
+            ).scalar_one_or_none()
+        if user is None:
+            user = User(
+                email=f"pin-{suffix}@example.com",
+                display_name="PIN test",
+                password_hash=hash_password(PASSWORD),
+                status="active",
+                is_admin=admin,
+            )
+            db.add(user)
+
+        user.phone_e164 = phone
+        user.phone_verified_at = datetime.now(UTC)
+        user.display_name = "PIN test"
+        user.password_hash = hash_password(PASSWORD)
+        user.status = "active"
         await db.commit()
+
     transport = httpx.ASGITransport(app=app, client=(f"pin-test-{suffix}", 12345))
     async with httpx.AsyncClient(transport=transport, base_url=ORIGIN, headers={"origin": ORIGIN}) as client:
-        response = await client.post("/v1/auth/login", json={"email": user.email, "password": PASSWORD, "device_name": "PIN test"})
+        response = await client.post(
+            "/v1/auth/login",
+            json={"phone": phone, "password": PASSWORD, "device_name": "PIN test"},
+        )
         assert response.status_code == 200, response.text
         assert "HttpOnly" in response.headers["set-cookie"]
         async with SessionFactory() as db:
