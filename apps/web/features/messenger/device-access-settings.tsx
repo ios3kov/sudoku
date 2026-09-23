@@ -3,10 +3,28 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
 import { acceptUnlock, accessEpoch, forgetUnlock, privateFetch, rememberPhone, savedPhone } from "./device-access";
+import {
+  NATIVE_BIOMETRICS_READY_EVENT,
+  clearNativeBiometric,
+  enrollNativeBiometric,
+  isNativeBiometricCancellation,
+  nativeBiometricAvailability,
+  nativeBiometricsAvailable,
+} from "./native-biometric-access";
 import "./device-access.css";
+
+type AccessSettings = {
+  pin_enabled: boolean;
+  password_required: boolean;
+  biometric_enabled: boolean;
+};
 
 export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (phone: string) => void }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState("Biometrics");
+  const [biometricBusy, setBiometricBusy] = useState(false);
   const [phone, setPhone] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
   const [phonePassword, setPhonePassword] = useState("");
@@ -19,25 +37,56 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const alive = useRef(false);
+
   useEffect(() => {
     alive.current = true;
+
+    async function refreshNativeBiometrics() {
+      if (!nativeBiometricsAvailable()) {
+        if (alive.current) setBiometricAvailable(false);
+        return;
+      }
+      try {
+        const availability = await nativeBiometricAvailability();
+        if (!alive.current) return;
+        setBiometricAvailable(availability.available);
+        setBiometricLabel(availability.label || "Biometrics");
+      } catch {
+        if (alive.current) setBiometricAvailable(false);
+      }
+    }
+
+    function nativeReady() {
+      void refreshNativeBiometrics();
+    }
+
+    window.addEventListener(NATIVE_BIOMETRICS_READY_EVENT, nativeReady);
+    void refreshNativeBiometrics();
+
     void Promise.all([
       privateFetch("/v1/auth/device-access", { credentials: "include", cache: "no-store" }).then(async (r) => {
         if (!r.ok) throw new Error("Unable to load device access");
-        return r.json();
-      }), messengerApi.me(),
+        return r.json() as Promise<AccessSettings>;
+      }),
+      messengerApi.me(),
     ]).then(([settings, user]) => {
       if (alive.current) {
         const currentPhone = user.phone_e164 ?? "";
         setEnabled(settings.pin_enabled);
+        setBiometricEnabled(Boolean(settings.biometric_enabled));
         setPhone(currentPhone);
         setPhoneDraft(currentPhone);
         setRemember(Boolean(currentPhone) && savedPhone() === currentPhone);
       }
-    }).catch(() => { if (alive.current) setError("Unable to load device access. Close and reopen Devices to retry."); });
-    return () => { alive.current = false; };
-  }, []);
+    }).catch(() => {
+      if (alive.current) setError("Unable to load device access. Close and reopen Devices to retry.");
+    });
 
+    return () => {
+      alive.current = false;
+      window.removeEventListener(NATIVE_BIOMETRICS_READY_EVENT, nativeReady);
+    };
+  }, []);
 
   async function savePhone() {
     if (phoneBusy || !phoneDraft.trim() || !phonePassword) return;
@@ -63,26 +112,96 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
   }
 
   async function save(remove = false) {
-    if (busy || enabled === null) return;
+    if (busy || biometricBusy || enabled === null) return;
     setError(null); setNotice(null);
     if (!password) { setError("Enter your account password."); return; }
-    if (!remove && (!/^[0-9]{4}$/.test(pin) || pin !== confirm)) { setError("Enter and confirm the same four-digit PIN."); return; }
+    if (!remove && (!/^[0-9]{4}$/.test(pin) || pin !== confirm)) {
+      setError("Enter and confirm the same four-digit PIN.");
+      return;
+    }
+
     setBusy(true);
     const started = accessEpoch();
     try {
       const response = await privateFetch("/v1/auth/device-access", {
-        method: "PUT", credentials: "include", cache: "no-store", headers: { "content-type": "application/json" },
+        method: "PUT",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ password, pin: remove ? null : pin }),
       });
       if (!alive.current || started !== accessEpoch()) return;
-      if (!response.ok) { setError(response.status === 429 ? "Too many attempts. Try later." : response.status === 401 ? "Session expired. Sign in again." : "Unable to save PIN. Check your account password."); return; }
-      const result = await response.json();
+      if (!response.ok) {
+        setError(response.status === 429 ? "Too many attempts. Try later." : response.status === 401 ? "Session expired. Sign in again." : "Unable to save PIN. Check your account password.");
+        return;
+      }
+      const result = await response.json() as { unlock_token?: unknown };
       if (!alive.current || started !== accessEpoch()) return;
+
+      // Server-side PIN changes always remove the enrolled biometric public key.
+      // Clear the corresponding Secure Enclave key as well.
+      await clearNativeBiometric().catch(() => undefined);
+      setBiometricEnabled(false);
+
       if (remove) forgetUnlock();
       else if (!acceptUnlock(result.unlock_token, started)) throw new Error("Missing unlock capability");
-      setEnabled(!remove); setNotice(remove ? "Device PIN removed." : "Device PIN saved. It is required when you return to the private area.");
-    } catch { if (alive.current) setError("Unable to save PIN. Check your connection."); }
-    finally { if (alive.current) { setBusy(false); setPassword(""); setPin(""); setConfirm(""); } }
+      setEnabled(!remove);
+      setNotice(remove
+        ? "Device PIN and biometric unlock removed."
+        : "Device PIN saved. Re-enable biometric unlock below if you want it.");
+    } catch {
+      if (alive.current) setError("Unable to save PIN. Check your connection.");
+    } finally {
+      if (alive.current) { setBusy(false); setPassword(""); setPin(""); setConfirm(""); }
+    }
+  }
+
+  async function enableBiometric() {
+    if (biometricBusy || busy || !enabled || !biometricAvailable) return;
+    setBiometricBusy(true); setError(null); setNotice(null);
+    try {
+      const publicKeyX963B64 = await enrollNativeBiometric();
+      const response = await privateFetch("/v1/auth/device-access/biometric", {
+        method: "PUT",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ public_key_x963_b64: publicKeyX963B64 }),
+      });
+      if (!response.ok) {
+        await clearNativeBiometric().catch(() => undefined);
+        throw new Error("Unable to register biometric key");
+      }
+      if (!alive.current) return;
+      setBiometricEnabled(true);
+      setNotice(`${biometricLabel} unlock enabled for this iPhone.`);
+    } catch (reason) {
+      if (!alive.current || isNativeBiometricCancellation(reason)) return;
+      setError(`Unable to enable ${biometricLabel}. Use the device PIN instead.`);
+    } finally {
+      if (alive.current) setBiometricBusy(false);
+    }
+  }
+
+  async function disableBiometric() {
+    if (biometricBusy || busy || !biometricEnabled) return;
+    setBiometricBusy(true); setError(null); setNotice(null);
+    try {
+      const response = await privateFetch("/v1/auth/device-access/biometric", {
+        method: "DELETE",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok && response.status !== 404) throw new Error("Unable to disable biometric unlock");
+      await clearNativeBiometric().catch(() => undefined);
+      if (!alive.current) return;
+      setBiometricEnabled(false);
+      setNotice("Biometric unlock disabled.");
+    } catch {
+      if (alive.current) setError("Unable to disable biometric unlock.");
+    } finally {
+      if (alive.current) setBiometricBusy(false);
+    }
   }
 
   function submit(e: FormEvent<HTMLFormElement>) { e.preventDefault(); void save(); }
@@ -104,18 +223,37 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
         if (rememberPhone(phone, value)) { setRemember(value); setError(null); }
         else setError("This browser cannot save the phone number.");
       }} />Remember phone on this device</label>
+
     <p>{enabled === null ? "Loading PIN settings…" : enabled ? "Device PIN is enabled." : "Device PIN is not enabled."}</p>
     <form className="auth-form" onSubmit={submit}>
       <label>Account password<input type="password" name="device-password" autoComplete="current-password" required maxLength={1024}
-        value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy || enabled === null} /></label>
+        value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy || biometricBusy || enabled === null} /></label>
       <label>New four-digit PIN<input type="password" name="new-pin" inputMode="numeric" autoComplete="off" required minLength={4} maxLength={4} pattern="[0-9]{4}" className="device-pin-input"
-        value={pin} onChange={(e) => setPin(e.target.value)} disabled={busy || enabled === null} /></label>
+        value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} disabled={busy || biometricBusy || enabled === null} /></label>
       <label>Confirm PIN<input type="password" name="confirm-pin" inputMode="numeric" autoComplete="off" required minLength={4} maxLength={4} pattern="[0-9]{4}" className="device-pin-input"
-        value={confirm} onChange={(e) => setConfirm(e.target.value)} disabled={busy || enabled === null} /></label>
-      <button type="submit" className="primary-button" disabled={busy || enabled === null}>{busy ? "Saving…" : enabled ? "Change PIN" : "Set PIN"}</button>
-      {enabled && <button type="button" className="secondary-button" disabled={busy} onClick={() => void save(true)}>Remove PIN</button>}
+        value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 4))} disabled={busy || biometricBusy || enabled === null} /></label>
+      <button type="submit" className="primary-button" disabled={busy || biometricBusy || enabled === null}>{busy ? "Saving…" : enabled ? "Change PIN" : "Set PIN"}</button>
+      {enabled && <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void save(true)}>Remove PIN</button>}
     </form>
-    <p className="device-access-help">Five incorrect PIN attempts require your account password. PIN unlock needs an internet connection.</p>
+
+    {enabled && biometricAvailable && (
+      <div className="device-access-actions">
+        <p className="device-access-help">
+          {biometricEnabled
+            ? `${biometricLabel} can unlock this session. PIN and account password remain available.`
+            : `Use ${biometricLabel} for quick unlock on this iPhone. The private key never leaves the Secure Enclave.`}
+        </p>
+        {biometricEnabled
+          ? <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void disableBiometric()}>
+              {biometricBusy ? "Updating…" : `Disable ${biometricLabel}`}
+            </button>
+          : <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void enableBiometric()}>
+              {biometricBusy ? "Setting up…" : `Enable ${biometricLabel}`}
+            </button>}
+      </div>
+    )}
+
+    <p className="device-access-help">Five incorrect PIN attempts require your account password. PIN and biometric unlock need an internet connection.</p>
     {error && <p className="form-error" role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
   </section>;
