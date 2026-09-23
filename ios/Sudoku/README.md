@@ -27,7 +27,7 @@ On the Mac:
 
 ```bash
 brew install xcodegen
-scripts/generate-ios-project.sh
+bash scripts/generate-ios-project.sh
 open ios/Sudoku/Sudoku.xcodeproj
 ```
 
