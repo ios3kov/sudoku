@@ -1,5 +1,6 @@
 """Real PostgreSQL/Redis auth boundaries for session-bound PINs; synthetic accounts."""
 import asyncio
+import base64
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -7,8 +8,12 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from app.config import get_settings
 from app.db import SessionFactory
+from app.device_biometric import SessionBiometricCredential
 from app.device_pin import DevicePinLocked, SessionPin
 from app.main import app
 from app.models import Asset, Session, User
@@ -73,7 +78,7 @@ async def enroll(client, pin="0123"):
 @pytest.mark.parametrize("admin", [False, True])
 async def test_role_parity_protected_apis_and_password_required_configuration(admin):
     async with account(admin) as (client, _, sid):
-        assert (await client.get(ROOT)).json() == {"pin_enabled": False, "password_required": False}
+        assert (await client.get(ROOT)).json() == {"pin_enabled": False, "password_required": False, "biometric_enabled": False}
         assert (await client.put(ROOT, json={"password": "wrong", "pin": "0123"})).status_code == 403
         token = await enroll(client)
         for path in ("/v1/me", "/v1/sessions", "/v1/conversations"):
@@ -88,6 +93,125 @@ async def test_role_parity_protected_apis_and_password_required_configuration(ad
         assert (await client.put(ROOT, json={"password": "wrong", "pin": None})).status_code == 403
         assert (await client.put(ROOT, json={"password": PASSWORD, "pin": None})).status_code == 200
         assert (await client.get("/v1/me")).status_code == 200
+
+
+async def test_native_biometric_challenge_is_session_bound_one_time_and_pin_gated():
+    async with account() as (client, _, sid):
+        token = await enroll(client)
+
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        public_key = private_key.public_key().public_bytes(
+            Encoding.X962,
+            PublicFormat.UncompressedPoint,
+        )
+        public_key_b64 = base64.b64encode(public_key).decode("ascii")
+
+        assert (
+            await client.put(
+                ROOT + "/biometric",
+                json={"public_key_x963_b64": public_key_b64},
+            )
+        ).status_code == 423
+
+        enrolled = await client.put(
+            ROOT + "/biometric",
+            headers={HEADER: token},
+            json={"public_key_x963_b64": public_key_b64},
+        )
+        assert enrolled.status_code == 200, enrolled.text
+        assert enrolled.json() == {"biometric_enabled": True}
+        assert (await client.get(ROOT)).json()["biometric_enabled"] is True
+
+        assert (await client.post(ROOT + "/lock", headers={HEADER: token})).status_code == 204
+
+        challenge_response = await client.post(ROOT + "/biometric/challenge")
+        assert challenge_response.status_code == 200, challenge_response.text
+        challenge = challenge_response.json()
+        assert len(challenge["challenge"]) == 43
+        assert challenge["payload"].startswith(f"sudoku-biometric-unlock:v1:{sid}:")
+
+        signature = private_key.sign(
+            challenge["payload"].encode("ascii"),
+            ec.ECDSA(hashes.SHA256()),
+        )
+        unlocked = await client.post(
+            ROOT + "/biometric/unlock",
+            json={
+                "challenge": challenge["challenge"],
+                "signature_b64": base64.b64encode(signature).decode("ascii"),
+            },
+        )
+        assert unlocked.status_code == 200, unlocked.text
+        biometric_token = unlocked.json()["unlock_token"]
+        assert (await client.get("/v1/me", headers={HEADER: biometric_token})).status_code == 200
+
+        replay = await client.post(
+            ROOT + "/biometric/unlock",
+            json={
+                "challenge": challenge["challenge"],
+                "signature_b64": base64.b64encode(signature).decode("ascii"),
+            },
+        )
+        assert replay.status_code == 409
+
+        second = (await client.post(ROOT + "/biometric/challenge")).json()
+        wrong_signature = private_key.sign(b"wrong-payload", ec.ECDSA(hashes.SHA256()))
+        rejected = await client.post(
+            ROOT + "/biometric/unlock",
+            json={
+                "challenge": second["challenge"],
+                "signature_b64": base64.b64encode(wrong_signature).decode("ascii"),
+            },
+        )
+        assert rejected.status_code == 403
+
+        consumed = await client.post(
+            ROOT + "/biometric/unlock",
+            json={
+                "challenge": second["challenge"],
+                "signature_b64": base64.b64encode(wrong_signature).decode("ascii"),
+            },
+        )
+        assert consumed.status_code == 409
+
+        changed = await client.put(
+            ROOT,
+            json={"password": PASSWORD, "pin": "4321"},
+        )
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["biometric_enabled"] is False
+        assert (await client.get(ROOT)).json()["biometric_enabled"] is False
+
+        async with SessionFactory() as db:
+            assert await db.get(SessionBiometricCredential, sid) is None
+
+
+async def test_pin_lockout_blocks_biometric_until_password_recovery():
+    async with account() as (client, _, _):
+        token = await enroll(client)
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        public_key = private_key.public_key().public_bytes(
+            Encoding.X962,
+            PublicFormat.UncompressedPoint,
+        )
+        enrolled = await client.put(
+            ROOT + "/biometric",
+            headers={HEADER: token},
+            json={"public_key_x963_b64": base64.b64encode(public_key).decode("ascii")},
+        )
+        assert enrolled.status_code == 200
+
+        for _ in range(5):
+            await client.post(ROOT + "/unlock", json={"pin": "9999"})
+
+        blocked = await client.post(ROOT + "/biometric/challenge")
+        assert blocked.status_code == 429
+        assert blocked.headers.get("X-PIN-Password-Required") == "true"
+
+        recovered = await client.post(ROOT + "/password", json={"password": PASSWORD})
+        assert recovered.status_code == 200
+        challenge = await client.post(ROOT + "/biometric/challenge")
+        assert challenge.status_code == 200
 
 
 async def test_exact_ascii_digits_preserve_leading_zero_and_do_not_accept_pin_as_password():
