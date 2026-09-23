@@ -10,3 +10,10 @@
 .device-pin-onboarding .device-access-prompt { margin: 10px 0 4px; font-size: 18px; line-height: 1.35; font-weight: 600; }
 .device-access-actions { display: grid; gap: 10px; margin-top: 18px; }
 .device-access-actions button { min-height: 44px; }
+
+.contact-access { margin: 8px 0 12px; }
+.contact-access-actions { display: grid; gap: 8px; }
+.contact-access-actions form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.contact-access-actions input { min-width: 0; }
+.contact-access-actions button { min-height: 44px; }
+.contact-access-help { margin: 6px 0 0; font-size: 13px; line-height: 1.4; }
