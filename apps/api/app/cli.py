@@ -56,6 +56,29 @@ async def bootstrap_admin(phone: str, password: str, display_name: str, email: s
         print(f"Created bootstrap admin: {normalized_phone}")
 
 
+
+async def verify_phone(phone: str) -> None:
+    normalized_phone = normalize_phone_e164(phone)
+    async with SessionFactory() as db:
+        user = (
+            await db.execute(select(User).where(User.phone_e164 == normalized_phone))
+        ).scalar_one_or_none()
+        if user is None:
+            raise RuntimeError("No account has this phone number.")
+        if user.phone_verified_at is None:
+            user.phone_verified_at = datetime.now(UTC)
+            db.add(
+                AuditEvent(
+                    actor_user_id=user.id,
+                    event_type="admin.phone_verified",
+                    target_type="user",
+                    target_id=user.id,
+                )
+            )
+            await db.commit()
+        print(f"Verified phone identity: {normalized_phone}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -63,11 +86,15 @@ def main() -> None:
     bootstrap.add_argument("--phone", required=True)
     bootstrap.add_argument("--email")
     bootstrap.add_argument("--display-name", required=True)
+    verify = sub.add_parser("verify-phone", help="Verify an existing account phone after out-of-band confirmation")
+    verify.add_argument("--phone", required=True)
     args = parser.parse_args()
 
     if args.command == "bootstrap-admin":
         password = getpass.getpass("Bootstrap admin password (min 12 chars): ")
         asyncio.run(bootstrap_admin(args.phone, password, args.display_name, args.email))
+    elif args.command == "verify-phone":
+        asyncio.run(verify_phone(args.phone))
 
 
 if __name__ == "__main__":
