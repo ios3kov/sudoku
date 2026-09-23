@@ -26,6 +26,7 @@ async def _directory(
             UserContact.owner_user_id == owner_user_id,
             User.status == "active",
             User.phone_e164.is_not(None),
+            User.phone_verified_at.is_not(None),
         )
     )
     normalized_term = term.strip().casefold()
@@ -75,6 +76,7 @@ async def sync_contacts(
         await db.execute(
             select(User).where(
                 User.phone_e164.in_(phones),
+                User.phone_verified_at.is_not(None),
                 User.status == "active",
                 User.id != auth.user.id,
             )
