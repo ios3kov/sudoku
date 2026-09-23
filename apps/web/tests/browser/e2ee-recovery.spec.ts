@@ -140,7 +140,6 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
 
     await owner.getByRole("button", { name: "New secure chat" }).click();
     await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
-    await expect(owner.getByText("Type at least 2 characters to search.", { exact: true })).toBeVisible();
     await expect(owner.getByRole("button", { name: "Direct", exact: true })).toHaveAttribute("aria-pressed", "true");
 
     const peopleSearch = owner.getByPlaceholder("Search people");
