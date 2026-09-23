@@ -2,9 +2,9 @@
 
 ## UX and scope
 
-All users, including admins, follow the same primary flow. After a successful normal email + account-password login, the app immediately asks **Use PIN for quick sign-in on this device?**. **Set PIN** collects and confirms four digits; **Not now** enters the messenger immediately. The Devices screen remains the secondary place to change/remove an existing PIN and manage the optional remembered email.
+All users, including admins, follow the same primary flow. After a successful normal phone + account-password login, the app immediately asks **Use PIN for quick sign-in on this device?**. **Set PIN** collects and confirms four digits; **Not now** enters the messenger immediately. The Devices screen remains the secondary place to change/remove an existing PIN and manage the optional remembered email.
 
-Remembering email is opt-in and can be undone on the login form or Devices. The existing persistent HttpOnly session cookie continues to represent account login; remembering email does not store a password or grant access. During first-login enrollment, the already-verified account password is retained only in component memory for the optional PIN request and is cleared after enrollment, skip, sign-out, hide/unmount, or session teardown.
+Remembering phone is opt-in and can be undone on the login form or Devices. The existing persistent HttpOnly session cookie continues to represent account login; remembering the phone number does not store a password or grant access. During first-login enrollment, the already-verified account password is retained only in component memory for the optional PIN request and is cleared after enrollment, skip, sign-out, hide/unmount, or session teardown.
 
 Set/change/remove PIN requires the account password. A PIN has exactly four ASCII digits and can start with zero. On reopening the private surface, reloading or backgrounding the page, a PIN-enabled session needs a new online unlock. After five wrong guesses the account password is required; reloading or deleting browser storage does not reset the server counter. Password recovery resets the counter and retains the current session UUID/MLS device identity. Expired/revoked sessions need a normal account login.
 
@@ -14,7 +14,7 @@ Set/change/remove PIN requires the account password. A PIN has exactly four ASCI
 
 `get_session_context` authenticates only the existing cookie and is restricted to PIN lifecycle endpoints. `get_auth_context` additionally requires `X-Sudoku-Unlock` for PIN-enabled sessions on private APIs. The only path-specific exception is self logout, which revokes rather than reveals private data. A failed PIN gate is HTTP 423, distinct from expired/revoked-session 401.
 
-A random unlock capability is kept only in the current tab's module RAM. Its lifetime is at most 12 hours and never beyond the session expiry at issuance. The app never persists the PIN, verifier, account password or capability to localStorage/sessionStorage/IndexedDB. Only the optional remembered email is stored. Hide/background clears RAM synchronously and requests best-effort server invalidation of that exact capability; late locks cannot invalidate a newer capability. Client epoch guards discard late results; a rejection for an older capability cannot lock a newer successful unlock. Lock-related request failures are retryable rather than permanent 4xx message failures.
+A random unlock capability is kept only in the current tab's module RAM. Its lifetime is at most 12 hours and never beyond the session expiry at issuance. The app never persists the PIN, verifier, account password or capability to localStorage/sessionStorage/IndexedDB. Only the optional remembered phone number is stored by the web client. Hide/background clears RAM synchronously and requests best-effort server invalidation of that exact capability; late locks cannot invalidate a newer capability. Client epoch guards discard late results; a rejection for an older capability cannot lock a newer successful unlock. Lock-related request failures are retryable rather than permanent 4xx message failures.
 
 WebSockets offer the public `sudoku.v1` subprotocol and a separate credential-bearing protocol value; only `sudoku.v1` is echoed. Credentials are never added to URLs. The server checks PIN access during authentication and before forwarding/processing events. Close code 4423 returns to the PIN gate without invoking session-revocation/MLS-clearing handling. A new unlock replaces the previous capability for this browser session and reconnects realtime. Multiple tabs sharing one session therefore do not maintain independent simultaneous unlock capabilities.
 
@@ -22,12 +22,28 @@ WebSockets offer the public `sudoku.v1` subprotocol and a separate credential-be
 
 All routes require a valid active-user session cookie; mutation Origin checks remain in force. Responses inherit private no-store policy.
 
-- `GET /v1/auth/device-access`: `pin_enabled`, `password_required`; no account details or credentials.
+- `GET /v1/auth/device-access`: `pin_enabled`, `password_required`, `biometric_enabled`; no account details or credentials.
 - `PUT /v1/auth/device-access`: account `password` plus four-digit `pin`, or explicit null to disable. Returns enabled state and a new capability when enabled.
 - `POST /v1/auth/device-access/unlock`: `pin`; correct -> new capability; wrong -> 403; fifth wrong/exhausted -> 429 with `X-PIN-Password-Required: true`.
 - `POST /v1/auth/device-access/password`: account password recovery; same session UUID, reset attempts, new capability.
 - `POST /v1/auth/device-access/lock`: invalidate only the matching supplied capability.
 - `GET /v1/assets/{id}/download-url`: PIN-gated JSON resolution using the existing asset ownership/membership checks and presigner. This avoids redirecting an unlock header across origins. Object bytes use a fresh request with no capability/cookie and redirect rejection. Legacy native attachments under PIN use bounded lazy blob loading and cleanup; non-PIN sessions preserve native behavior.
+
+## Native biometric unlock
+
+The iOS app may bind the existing PIN-protected session to a Secure Enclave P-256 key after the user explicitly enables Face ID / Touch ID in Devices.
+
+- the private key is generated inside the Secure Enclave and is not exported;
+- key use is protected by `biometryCurrentSet`, so changing enrolled biometrics invalidates access to the private key;
+- the server stores only the uncompressed P-256 public key;
+- enabling or disabling biometric unlock requires both the current PIN-unlocked session and the account password;
+- a biometric unlock starts with a fresh 90-second, session-bound, one-time challenge;
+- the native app signs the challenge payload only after LocalAuthentication succeeds;
+- a valid signature issues the same short-lived RAM-only `X-Sudoku-Unlock` capability used by PIN unlock;
+- five failed PIN attempts block biometric challenge issuance until account-password recovery resets the PIN counter;
+- changing or removing the device PIN deletes the server biometric binding and the client removes the Secure Enclave key.
+
+The server never receives Face ID / Touch ID data and the native app never stores the four-digit PIN.
 
 ## Security limits
 
