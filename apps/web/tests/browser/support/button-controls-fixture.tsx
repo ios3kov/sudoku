@@ -2,7 +2,10 @@ import { useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { AdminInvite } from "../../../features/messenger/admin-invite";
 import { ContactsPanel } from "../../../features/messenger/contacts-panel";
+import { ConversationView } from "../../../features/messenger/conversation-view";
 import { ConversationPreferences } from "../../../features/messenger/conversation-preferences";
+import { DevicePinOnboarding } from "../../../features/messenger/device-pin-onboarding";
+import { DevicePinUnlock } from "../../../features/messenger/device-pin-unlock";
 import { DeviceSessions } from "../../../features/messenger/device-sessions";
 import { GroupSettings } from "../../../features/messenger/group-settings";
 import { MessageSearch } from "../../../features/messenger/message-search";
@@ -30,7 +33,11 @@ type Mode =
   | "group"
   | "new-chat"
   | "contacts"
-  | "protected";
+  | "protected"
+  | "protected-retry"
+  | "onboarding"
+  | "unlock"
+  | "legacy-chat";
 
 const syntheticPhone = (index: number) => "+" + String(74000000000 + index);
 
@@ -47,6 +54,9 @@ const calls = {
   phoneUpdates: [] as string[],
   removedContacts: [] as string[],
   contactSyncs: [] as string[][],
+  onboarding: [] as string[],
+  unlock: [] as string[],
+  legacy: [] as string[],
   fetches: [] as Array<{ path: string; method: string; body: unknown }>,
 };
 
@@ -125,6 +135,7 @@ let sessions: DeviceSession[] = [
 ];
 
 let contactState: ContactDirectoryItem[] = [candidate];
+let failProtectedOnce = false;
 
 const legacyAsset = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -183,6 +194,8 @@ api.searchMessages = async (_conversationId: string, query: string) => {
   calls.searches.push(query);
   return [message];
 };
+api.messages = async () => [message];
+api.markRead = async () => undefined;
 api.searchUsers = async (query: string) => {
   calls.searches.push(query);
   return [candidate];
@@ -299,9 +312,16 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     return Response.json({ url: "https://assets.example.test/signed" });
   }
   if (pathValue === "https://assets.example.test/signed") {
+    if (failProtectedOnce) {
+      failProtectedOnce = false;
+      return new Response("temporary failure", { status: 503 });
+    }
     return new Response(new Blob(["legacy-data"], { type: "text/plain" }), {
       status: 200,
     });
+  }
+  if (pathValue === "/v1/auth/logout" && method === "POST") {
+    return new Response(null, { status: 204 });
   }
   return nativeFetch(input, init);
 };
@@ -464,12 +484,55 @@ function ContactsFixture() {
   );
 }
 
-function ProtectedFixture() {
+function ProtectedFixture({ retry = false }: { retry?: boolean }) {
   acceptUnlock("b".repeat(43), accessEpoch());
+  failProtectedOnce = retry;
   return (
     <main>
       <ProtectedAttachment asset={legacyAsset} voice={false} />
     </main>
+  );
+}
+
+function OnboardingFixture() {
+  const [visible, setVisible] = useState(true);
+  return visible ? (
+    <DevicePinOnboarding
+      onSetPin={async (pin) => { calls.onboarding.push("set:" + pin); }}
+      onSkip={() => { calls.onboarding.push("skip"); setVisible(false); }}
+      onHide={() => { calls.onboarding.push("hide"); setVisible(false); }}
+    />
+  ) : <p>onboarding closed</p>;
+}
+
+function UnlockFixture() {
+  const [visible, setVisible] = useState(true);
+  return visible ? (
+    <DevicePinUnlock
+      onUnlocked={() => calls.unlock.push("unlocked")}
+      onSignedOut={() => { calls.unlock.push("signed-out"); setVisible(false); }}
+      onHide={() => { calls.unlock.push("hide"); setVisible(false); }}
+    />
+  ) : <p>unlock closed</p>;
+}
+
+function LegacyChatFixture() {
+  const [visible, setVisible] = useState(true);
+  const [conversation, setConversation] = useState(groupState);
+  if (!visible) return <p>legacy chat closed</p>;
+  return (
+    <ConversationView
+      conversation={conversation}
+      user={me}
+      realtime={null}
+      realtimeEvent={null}
+      reconnectTick={0}
+      onBack={() => { calls.legacy.push("back"); setVisible(false); }}
+      onHide={() => { calls.legacy.push("hide"); setVisible(false); }}
+      onConversationUpdated={setConversation}
+      onReadAcknowledged={() => undefined}
+      onConversationLeft={() => { calls.legacy.push("left"); setVisible(false); }}
+    />
   );
 }
 
@@ -485,6 +548,10 @@ function mount(mode: Mode) {
   if (mode === "new-chat") root.render(<NewChatFixture />);
   if (mode === "contacts") root.render(<ContactsFixture />);
   if (mode === "protected") root.render(<ProtectedFixture />);
+  if (mode === "protected-retry") root.render(<ProtectedFixture retry />);
+  if (mode === "onboarding") root.render(<OnboardingFixture />);
+  if (mode === "unlock") root.render(<UnlockFixture />);
+  if (mode === "legacy-chat") root.render(<LegacyChatFixture />);
 }
 
 window.__buttonAudit = { calls, mount, syntheticPhone };
