@@ -305,3 +305,52 @@ Do not start the `0016_phone_contacts` rollout until all of the following are tr
 5. the exact release SHA is identified and its full CI gate is green.
 
 After deployment, do not mark Step70 complete until the live phone/PIN/contact/E2EE checks, persistence/reboot test, destructive restore drill, two-device MLS test and physical iOS/Android PWA acceptance have all passed.
+
+
+## Execution log — 2026-09-23 phone/contact production rollout
+
+The coordinated phone/contact release was deployed to production.
+
+Evidence:
+
+- deployed source: `c0f71313b92aaa8206eda036ecb819f796854f30`;
+- database: `0016_phone_contacts (head)`;
+- consistent backup: `./backups/20260923T160722Z`;
+- backup checksums passed on-host;
+- PostgreSQL custom dump passed `pg_restore -l`;
+- live MinIO object count was `0`, matching the backup object count;
+- the backup was copied to the operator workstation and its checksum manifest passed there as well;
+- production preflight passed before deployment;
+- application images rebuilt successfully;
+- API, PostgreSQL and Redis returned healthy after restart;
+- the initial live smoke saw two transient HTTP 502 responses while the replacement Web container was not yet accepting TCP connections, then completed successfully;
+- five subsequent application requests returned HTTP 200;
+- readiness returned PostgreSQL, Redis and object storage ready;
+- `assets.sudoku.moscow` responded through Caddy/MinIO over valid HTTPS;
+- the existing administrator account was migrated to a verified phone identity without replacing the account;
+- administrator phone login succeeded;
+- four-digit PIN unlock succeeded after literal page reload;
+- the earlier `Secure messaging needs a restart` failure did not reproduce.
+
+### iPhone contacts finding
+
+Physical iPhone/Safari testing confirmed that the desired system phone-book flow cannot be relied on through the current PWA/browser surface. The browser fallback correctly offers manual E.164 entry.
+
+The product therefore moves the iPhone contact-selection requirement into the native iOS program in [Step88](88-native-ios-production-plan.md), while preserving the current server contact graph and manual web fallback.
+
+### Remaining Step70 gates
+
+Step70 is still open. Do not mark production fully verified until all of these pass:
+
+- create/accept a second phone-bound account invite;
+- sync that verified phone as a contact and create an E2EE direct chat;
+- remove the contact and prove new direct sends fail closed;
+- two-device MLS direct send/receive;
+- MLS group add/remove and post-transition send;
+- encrypted image/file/voice send/open;
+- offline/reconnect exactly-once visible send;
+- remote session revocation;
+- persistence across full stack restart and host reboot;
+- destructive PostgreSQL + encrypted-object restore drill;
+- native iOS physical-device acceptance;
+- Android/PWA acceptance if Android remains a supported release target.
