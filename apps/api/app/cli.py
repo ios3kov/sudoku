@@ -2,6 +2,8 @@ import argparse
 import asyncio
 import getpass
 
+from datetime import UTC, datetime
+
 from sqlalchemy import func, select
 
 from .db import SessionFactory
@@ -26,6 +28,7 @@ async def bootstrap_admin(phone: str, password: str, display_name: str, email: s
                 raise RuntimeError("Refusing to promote an existing user after bootstrap. Use an audited admin migration instead.")
             existing.is_admin = True
             existing.status = "active"
+            existing.phone_verified_at = datetime.now(UTC)
             existing.password_hash = hash_password(password)
             if normalized_email is not None:
                 existing.email = normalized_email
@@ -40,6 +43,7 @@ async def bootstrap_admin(phone: str, password: str, display_name: str, email: s
         user = User(
             email=normalized_email,
             phone_e164=normalized_phone,
+            phone_verified_at=datetime.now(UTC),
             display_name=display_name.strip(),
             password_hash=hash_password(password),
             status="active",
