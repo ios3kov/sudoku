@@ -118,6 +118,17 @@ async def test_contact_sync_controls_directory_and_new_conversations() -> None:
         assert replaced.status_code == 200
         assert [item["id"] for item in replaced.json()] == [str(stranger.id)]
 
+        blocked_send = await client.post(
+            f"/v1/conversations/{allowed.json()['id']}/messages",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "type": "text",
+                "body": "must be blocked",
+                "asset_ids": [],
+            },
+        )
+        assert blocked_send.status_code == 403
+
         old_contact = await client.get("/v1/users?q=Peer")
         assert old_contact.json() == []
         new_contact = await client.get("/v1/users?q=Stranger")
