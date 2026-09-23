@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import UserContact
+from .models import User, UserContact
 from .security import normalize_phone_e164
 
 
@@ -45,6 +45,13 @@ async def require_contacts(
     target_user_ids: set[uuid.UUID],
 ) -> None:
     if not target_user_ids:
+        return
+    owner_phone = await db.scalar(
+        select(User.phone_e164).where(User.id == owner_user_id)
+    )
+    # Migration compatibility only. Once a phone identity is assigned, the
+    # contact graph is mandatory and email login is disabled for that account.
+    if owner_phone is None:
         return
     allowed = set(
         (
