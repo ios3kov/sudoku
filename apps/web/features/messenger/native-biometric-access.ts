@@ -60,11 +60,12 @@ export async function clearNativeBiometric(): Promise<void> {
   await bridge().clear();
 }
 
+export function nativeBiometricErrorCode(reason: unknown): string | null {
+  if (!reason || typeof reason !== "object" || !("code" in reason)) return null;
+  const code = (reason as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
 export function isNativeBiometricCancellation(reason: unknown): boolean {
-  return Boolean(
-    reason
-    && typeof reason === "object"
-    && "code" in reason
-    && (reason as { code?: unknown }).code === "cancelled"
-  );
+  return nativeBiometricErrorCode(reason) === "cancelled";
 }
