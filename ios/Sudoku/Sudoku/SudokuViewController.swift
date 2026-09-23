@@ -7,6 +7,7 @@ final class SudokuViewController: UIViewController {
     private static let appURL = URL(string: "https://sudoku.moscow/")!
     private static let trustedHost = "sudoku.moscow"
     private static let contactHandlerName = "sudokuContacts"
+    private static let biometricHandlerName = "sudokuBiometrics"
 
     private lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
@@ -16,9 +17,17 @@ final class SudokuViewController: UIViewController {
 
         let controller = WKUserContentController()
         controller.add(self, name: Self.contactHandlerName)
+        controller.add(self, name: Self.biometricHandlerName)
         controller.addUserScript(
             WKUserScript(
                 source: Self.contactBridgeScript,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        controller.addUserScript(
+            WKUserScript(
+                source: Self.biometricBridgeScript,
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: true
             )
@@ -71,6 +80,9 @@ final class SudokuViewController: UIViewController {
     deinit {
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.contactHandlerName
+        )
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: Self.biometricHandlerName
         )
     }
 
@@ -159,6 +171,120 @@ final class SudokuViewController: UIViewController {
         )
     }
 
+    private func resolveBiometricRequest(requestID: String, value: Any) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeBiometricsResolve(id, value);",
+            arguments: [
+                "id": requestID,
+                "value": value,
+            ],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
+    private func rejectBiometricRequest(
+        requestID: String,
+        error: BiometricKeyStoreError,
+        message: String
+    ) {
+        let code: String
+        switch error {
+        case .cancelled:
+            code = "cancelled"
+        case .unavailable:
+            code = "unavailable"
+        case .invalidated:
+            code = "invalidated"
+        case .failed:
+            code = "failed"
+        }
+
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeBiometricsReject(id, code, message);",
+            arguments: [
+                "id": requestID,
+                "code": code,
+                "message": message,
+            ],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
+    private func handleBiometricRequest(body: [String: Any]) {
+        guard let requestID = body["id"] as? String,
+              !requestID.isEmpty,
+              let action = body["action"] as? String else {
+            return
+        }
+
+        switch action {
+        case "availability":
+            resolveBiometricRequest(
+                requestID: requestID,
+                value: BiometricKeyStore.shared.availability()
+            )
+        case "enroll":
+            BiometricKeyStore.shared.enroll { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .success(let publicKey):
+                    self.resolveBiometricRequest(
+                        requestID: requestID,
+                        value: ["publicKeyX963B64": publicKey]
+                    )
+                case .failure(let error):
+                    self.rejectBiometricRequest(
+                        requestID: requestID,
+                        error: error,
+                        message: "Biometric enrollment failed"
+                    )
+                }
+            }
+        case "sign":
+            guard let payload = body["payload"] as? String,
+                  payload.hasPrefix("sudoku-biometric-unlock:v1:"),
+                  payload.utf8.count <= 256 else {
+                rejectBiometricRequest(
+                    requestID: requestID,
+                    error: .failed,
+                    message: "Invalid biometric payload"
+                )
+                return
+            }
+
+            BiometricKeyStore.shared.sign(payload: payload) { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .success(let signature):
+                    self.resolveBiometricRequest(
+                        requestID: requestID,
+                        value: ["signatureB64": signature]
+                    )
+                case .failure(let error):
+                    self.rejectBiometricRequest(
+                        requestID: requestID,
+                        error: error,
+                        message: "Biometric unlock failed"
+                    )
+                }
+            }
+        case "clear":
+            BiometricKeyStore.shared.clear { [weak self] in
+                self?.resolveBiometricRequest(requestID: requestID, value: NSNull())
+            }
+        default:
+            rejectBiometricRequest(
+                requestID: requestID,
+                error: .failed,
+                message: "Unsupported biometric action"
+            )
+        }
+    }
+
     private static let contactBridgeScript = #"""
     (() => {
       if (location.protocol !== "https:" || location.hostname !== "sudoku.moscow") return;
@@ -198,6 +324,54 @@ final class SudokuViewController: UIViewController {
       };
 
       window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+    })();
+    """#
+
+    private static let biometricBridgeScript = #"""
+    (() => {
+      if (location.protocol !== "https:" || location.hostname !== "sudoku.moscow") return;
+
+      const pending = new Map();
+      let sequence = 0;
+
+      const call = (action, input = {}) => new Promise((resolve, reject) => {
+        const id = String(++sequence);
+        pending.set(id, { resolve, reject });
+        window.webkit.messageHandlers.sudokuBiometrics.postMessage({ id, action, ...input });
+      });
+
+      window.SudokuNativeBiometrics = {
+        availability() {
+          return call("availability");
+        },
+        enroll() {
+          return call("enroll");
+        },
+        sign(payload) {
+          return call("sign", { payload });
+        },
+        clear() {
+          return call("clear");
+        }
+      };
+
+      window.__sudokuNativeBiometricsResolve = (id, value) => {
+        const item = pending.get(id);
+        if (!item) return;
+        pending.delete(id);
+        item.resolve(value);
+      };
+
+      window.__sudokuNativeBiometricsReject = (id, code, message) => {
+        const item = pending.get(id);
+        if (!item) return;
+        pending.delete(id);
+        const error = new Error(message || "Native biometrics failed");
+        error.code = code || "failed";
+        item.reject(error);
+      };
+
+      window.dispatchEvent(new Event("sudoku:native-biometrics-ready"));
     })();
     """#
 }
@@ -256,19 +430,21 @@ extension SudokuViewController: WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard message.name == Self.contactHandlerName else { return }
+        guard message.name == Self.contactHandlerName || message.name == Self.biometricHandlerName else { return }
         guard message.frameInfo.isMainFrame else { return }
         guard let sourceURL = message.frameInfo.request.url,
               sourceURL.scheme == "https",
               sourceURL.host == Self.trustedHost else {
             return
         }
-        guard let body = message.body as? [String: Any],
-              let requestID = body["id"] as? String,
-              !requestID.isEmpty else {
+        guard let body = message.body as? [String: Any] else { return }
+
+        if message.name == Self.biometricHandlerName {
+            handleBiometricRequest(body: body)
             return
         }
 
+        guard let requestID = body["id"] as? String, !requestID.isEmpty else { return }
         presentContactPicker(requestID: requestID)
     }
 }
