@@ -1,5 +1,13 @@
 # Progress
 
+## Current milestone — final interactive-control audit merged
+
+Date: 2026-09-23. PR #49 is merged to `main` as `e47c4088a026f1100aed4d9d5526d82635bdb356`. It ports the earlier button audit onto the current phone/contact UI and adds regression coverage for the remaining controls: Sudoku Clear, phone change, Contacts add/remove/close, auth navigation/hide, password fallback, Notifications retry, Invite/Devices close, Sign out, encrypted media/file-picker controls and the previously covered conversation/message/group/security actions.
+
+Reviewed head `fca76a9b54c6c965fe68050d7d1c9cbb723a1479` passed CI `35858047355`, device-access `35858047426`, beat-runtime `35858047382` and api-shutdown `35858047293`. Exact post-merge push verification for `e47c4088a026f1100aed4d9d5526d82635bdb356` is also green: CI `35859529252`, device-access `35859529261`, beat-runtime `35859529116`, api-shutdown `35859529199`.
+
+PR #46 was closed unmerged as superseded. The current known web/PWA interactive-control QA debt is closed. See [Step86](steps/86-final-button-audit.md). Production deployment and the separate physical-device/two-device/recovery acceptance gates remain open.
+
 ## Current milestone — phone identity + contact graph merged
 
 Date: 2026-09-23. PR #47 is merged to `main` as `9e0efdbe0e79efb99c3283e6c78784fe3a6325d0`. It moves the messenger to phone-first login and adds a server-enforced phone-book contact graph. New invite accounts are phone-bound; existing email accounts retain migration-only login until they assign a phone. Contact discovery exposes only active verified phone identities, and server authorization covers new direct/group chats, group additions and direct sends.
