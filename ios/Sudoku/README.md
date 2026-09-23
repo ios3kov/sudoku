@@ -11,8 +11,10 @@ The native binary is intentionally small:
 - app-bound domains for `sudoku.moscow` and `assets.sudoku.moscow`;
 - synchronous native privacy cover for app-switcher/background snapshots;
 - explicit system contact selection through `CNContactPickerViewController`;
+- Face ID / Touch ID quick unlock through a Secure Enclave P-256 key and server challenge-response;
 - no broad Contacts permission and no full address-book import;
-- no native plaintext messaging or attachment path.
+- no native plaintext messaging or attachment path;
+- no native storage of the four-digit PIN, account password, session cookie or MLS private state.
 
 The existing web client remains responsible for auth, PIN, MLS state, E2EE, contacts sync, conversations and encrypted attachments.
 
@@ -45,3 +47,10 @@ In Xcode:
 4. select the physical iPhone and Run.
 
 No production/TestFlight/App Store release is authorized merely by generating or running this project.
+
+
+## Biometric boundary
+
+Biometric enrollment creates a P-256 private key in the Secure Enclave with current-biometric-set protection. Only the X9.63 public key is registered with the authenticated server session. Unlock signs a one-time server challenge; the resulting server response is the same RAM-only unlock capability used by the device PIN.
+
+Changing/removing the PIN invalidates biometric enrollment. Five failed PIN attempts also block biometric unlock until account-password recovery. Face ID / Touch ID is therefore a quick local presence check, not a replacement for the server session, account password or MLS.
