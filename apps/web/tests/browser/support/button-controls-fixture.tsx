@@ -103,10 +103,10 @@ const message = {
   sequence: 2,
 } as unknown as Message;
 
-const api = messengerApi as unknown as Record<string, (...args: any[]) => Promise<any>>;
+const api = messengerApi;
 api.createInvite = async (email: string | null) => {
   calls.invites.push(email);
-  return { token: "invite-token", expires_at: "2026-09-30T00:00:00Z" };
+  return { id: "invite-id", token: "invite-token", email, expires_at: "2026-09-30T00:00:00Z", max_uses: 1 };
 };
 api.updateConversationPreferences = async (_id: string, value: unknown) => {
   calls.preferences.push(value);
