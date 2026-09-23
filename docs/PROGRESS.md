@@ -1,12 +1,12 @@
 # Progress
 
-## Current work — PIN onboarding + secure reload recovery
+## Current milestone — PIN onboarding + secure reload recovery merged
 
-Date: 2026-09-23. Draft PR #45 (`fix/reload-pin-onboarding`) moves optional PIN enrollment into the first successful password-login flow for members and administrators and fixes the OpenMLS stale-writer race observed across reload/pagehide. The existing server PIN schema, session UUID device identity and MLS wire format are unchanged.
+Date: 2026-09-23. PR #45 is merged to `main` as `9169a1a5456423515b288c5dfff7b72b7e5e9de1`. It moves optional PIN enrollment into the first successful password-login flow for members and administrators and fixes the OpenMLS stale-writer race observed across reload/pagehide. The existing server PIN schema, session UUID device identity and MLS wire format are unchanged.
 
-The reload fix retires the old browser adapter synchronously before page destruction/background concealment so its unfinished async work cannot overwrite or conflict with a freshly rehydrated IndexedDB snapshot. The optimistic concurrency guard remains fail-closed. Browser acceptance now requires a literal reload followed by PIN unlock and a fully ready secure-messaging runtime with no restart banner.
+The reload fix retires the old browser adapter synchronously before page destruction/background concealment so its unfinished async work cannot overwrite or conflict with a freshly rehydrated IndexedDB snapshot. The optimistic concurrency guard remains fail-closed. Browser acceptance proves a literal reload followed by PIN unlock returns to a fully ready secure-messaging runtime with no restart banner.
 
-This work is not merged or deployed. Exact branch-head CI and browser acceptance remain the release gate. See [Step84](steps/84-pin-onboarding-reload-recovery.md).
+Exact post-merge push-to-main verification is green: CI `35825128577`, device-access `35825128686`, beat-runtime `35825128754`, and api-shutdown `35825128683`. Production deployment has not been performed for this follow-up. See [Step84](steps/84-pin-onboarding-reload-recovery.md).
 
 ## Previous milestone — device PIN production rollout
 
