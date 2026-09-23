@@ -1,10 +1,12 @@
 # Progress
 
-## Current milestone — phone identity + contact graph candidate
+## Current milestone — phone identity + contact graph merged
 
-Date: 2026-09-23. Draft PR #47 moves the messenger to phone-first login and adds a server-enforced phone-book contact graph. New invite accounts are phone-bound; existing email accounts retain migration-only login until they assign a phone. Contact discovery exposes only active verified phone identities, and server authorization covers new direct/group chats, group additions and direct sends.
+Date: 2026-09-23. PR #47 is merged to `main` as `9e0efdbe0e79efb99c3283e6c78784fe3a6325d0`. It moves the messenger to phone-first login and adds a server-enforced phone-book contact graph. New invite accounts are phone-bound; existing email accounts retain migration-only login until they assign a phone. Contact discovery exposes only active verified phone identities, and server authorization covers new direct/group chats, group additions and direct sends.
 
 Reviewed code head `fdd5658473438a8a6617672cbb01389c6015c775` passed exact-head CI `35844463475`, device-access `35844463463`, beat-runtime `35844463482` and api-shutdown `35844463467`. Browser acceptance includes Contact Picker, manual fallback, Contacts removal, phone/PIN login and the existing E2EE recovery path. See [Step85](steps/85-phone-contacts.md).
+
+Exact post-merge push verification for `9e0efdbe0e79efb99c3283e6c78784fe3a6325d0` is also green: CI `35846683142`, device-access `35846682972`, beat-runtime `35846683044`, api-shutdown `35846683074`.
 
 Production has not been deployed. Migration `0016_phone_contacts`, legacy-phone verification and live mobile/PWA acceptance remain release steps.
 
