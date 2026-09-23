@@ -32,7 +32,7 @@ Unlock is challenge-response:
 4. the server verifies ECDSA/SHA-256 and issues the existing PIN unlock capability;
 5. the challenge is consumed whether signature verification succeeds or fails.
 
-Changing or removing the device PIN deletes the server biometric credential and the native client clears its Secure Enclave key. Biometric enrollment changes invalidate the key through `.biometryCurrentSet`. After five wrong PIN guesses, biometric challenge issuance is blocked until account-password recovery resets the lockout. Revoked or expired sessions cannot be restored by biometrics.
+Changing or removing the device PIN deletes the server biometric credential and the native client clears its Secure Enclave key. Enabling, replacing or disabling the biometric key also requires the current account password in addition to the active PIN unlock capability. Biometric enrollment changes invalidate the key through `.biometryCurrentSet`. After five wrong PIN guesses, biometric challenge issuance is blocked until account-password recovery resets the lockout. Revoked or expired sessions cannot be restored by biometrics.
 
 The WKWebView bridge is main-frame-only, HTTPS-only and host-bound to `sudoku.moscow`. Native signing accepts only the `sudoku-biometric-unlock:v1:` domain-separated payload family, preventing the bridge from becoming a generic signing oracle.
 
@@ -44,8 +44,8 @@ All routes require a valid active-user session cookie; mutation Origin checks re
 - `PUT /v1/auth/device-access`: account `password` plus four-digit `pin`, or explicit null to disable. A PIN change/removal invalidates biometric enrollment and returns a new capability when PIN remains enabled.
 - `POST /v1/auth/device-access/unlock`: `pin`; correct -> new capability; wrong -> 403; fifth wrong/exhausted -> 429 with `X-PIN-Password-Required: true`.
 - `POST /v1/auth/device-access/password`: account password recovery; same session UUID, reset attempts, new capability.
-- `PUT /v1/auth/device-access/biometric`: PIN-unlocked session registers the native P-256 public key only.
-- `DELETE /v1/auth/device-access/biometric`: PIN-unlocked session removes the server biometric credential.
+- `PUT /v1/auth/device-access/biometric`: PIN-unlocked session plus account-password confirmation registers the native P-256 public key only.
+- `DELETE /v1/auth/device-access/biometric`: PIN-unlocked session plus account-password confirmation removes the server biometric credential.
 - `POST /v1/auth/device-access/biometric/challenge`: cookie-authenticated, rate-limited, one-time 90-second challenge; blocked after PIN attempt exhaustion.
 - `POST /v1/auth/device-access/biometric/unlock`: verifies a Secure Enclave ECDSA/SHA-256 signature and, on success, returns the same RAM-only unlock capability used by PIN.
 - `POST /v1/auth/device-access/lock`: invalidate only the matching supplied capability.
