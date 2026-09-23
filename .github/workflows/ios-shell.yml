@@ -31,7 +31,7 @@ jobs:
           node-version: "22"
 
       - name: Install pinned Capacitor dependencies
-        run: npm install --package-lock=false
+        run: npm install
 
       - name: Audit production JavaScript dependencies
         run: npm audit --omit=dev --audit-level=high
