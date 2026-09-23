@@ -74,6 +74,13 @@ Exact-head workflows:
 
 The CI gate passed API integration, migration, lint, typecheck, production build, performance, Browser E2E, production Compose validation and production image builds.
 
+PR #47 was squash-merged as `9e0efdbe0e79efb99c3283e6c78784fe3a6325d0`. Exact post-merge push workflows also passed:
+
+- CI `35846683142` — success
+- device-access `35846682972` — success
+- beat-runtime `35846683044` — success
+- api-shutdown `35846683074` — success
+
 Browser coverage includes phone login, PIN/reload regression, Contact Picker flow, manual phone fallback, Contacts removal and the existing E2EE recovery scenario.
 
 ## Release boundary
