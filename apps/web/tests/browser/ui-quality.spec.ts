@@ -118,6 +118,11 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await page.getByRole("button", { name: "Erase", exact: true }).click();
   await expect(editableCell).toHaveText("");
 
+  await expect(editableCell).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(page.locator('[role="gridcell"][aria-selected="true"]')).toHaveCount(0);
+  await editableCell.click();
+
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await page.getByRole("button", { name: "2", exact: true }).click();
   await expect(editableCell).toContainText("2");
