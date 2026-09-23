@@ -57,7 +57,7 @@ jobs:
       - name: Python lint
         run: ruff check apps/api/app apps/api/alembic tests/api tests/browser tests/ops
       - name: Python dependency audit
-        run: pip-audit --local
+        run: pip-audit --local --skip-editable
       - name: Migrate database
         working-directory: apps/api
         run: alembic upgrade head
