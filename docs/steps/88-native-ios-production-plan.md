@@ -251,6 +251,32 @@ Submit only after:
 - App Store metadata presents the app consistently with the shipped behavior;
 - production incident/rollback plan covers both server and iOS release.
 
+## App Store / Apple platform gates
+
+The native product must be materially more than a repackaged website. Apple App Review guideline 4.2 requires useful, app-like functionality beyond a thin web wrapper. The native release therefore does not ship until Contacts, biometrics, privacy shielding and native media/file interaction are real, tested capabilities.
+
+Apple-specific requirements to verify before TestFlight/App Store:
+
+- add `NSFaceIDUsageDescription` before using Face ID through LocalAuthentication;
+- include `PrivacyInfo.xcprivacy` and accurately declare collected data / required-reason APIs;
+- verify privacy manifests/signatures for third-party SDKs, including Capacitor where applicable;
+- prefer Apple system pickers over broad library permissions:
+  - Contacts UI picker for explicit contact selection;
+  - Photos picker for user-selected images without unnecessary full photo-library access;
+  - document picker for files;
+- provide the required App Store privacy-policy URL;
+- App Store Connect privacy answers must describe actual app/server behavior, including phone identity, selected contacts, diagnostics and push;
+- do not describe Sudoku concealment as cryptographic/security protection in store metadata.
+
+Primary Apple references:
+
+- App Review Guidelines, especially 4.2 Minimum Functionality: https://developer.apple.com/app-store/review/guidelines/
+- Contacts UI / `CNContactPickerViewController`: https://developer.apple.com/documentation/contactsui/cncontactpickerviewcontroller
+- LocalAuthentication / `LAContext`: https://developer.apple.com/documentation/localauthentication/lacontext
+- Photos picker: https://developer.apple.com/documentation/photosui/phpickerviewcontroller
+- Privacy manifests: https://developer.apple.com/documentation/bundleresources/privacy-manifest-files
+- Third-party SDK requirements: https://developer.apple.com/support/third-party-SDK-requirements/
+
 ## Production backend gate
 
 The backend remains independently deployable. An iOS release must not require an unverified moving `main`.
