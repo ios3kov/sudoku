@@ -1,31 +1,47 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    phone: str | None = Field(default=None, min_length=8, max_length=32)
+    email: EmailStr | None = None
     password: str = Field(min_length=1, max_length=1024)
     device_name: str = Field(min_length=1, max_length=160)
+
+    @model_validator(mode="after")
+    def require_identifier(self):
+        if self.phone is None and self.email is None:
+            raise ValueError("Phone number is required")
+        return self
 
 
 class InviteAcceptRequest(BaseModel):
     token: str = Field(min_length=16, max_length=512)
-    email: EmailStr
+    phone: str | None = Field(default=None, min_length=8, max_length=32)
+    email: EmailStr | None = None
     display_name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=12, max_length=1024)
     device_name: str = Field(min_length=1, max_length=160)
 
+    @model_validator(mode="after")
+    def require_identifier(self):
+        if self.phone is None and self.email is None:
+            raise ValueError("Phone number is required")
+        return self
+
 
 class UserResponse(BaseModel):
     id: uuid.UUID
-    email: str
+    phone_e164: str | None
+    email: str | None
     display_name: str
     is_admin: bool
 
 
 class InviteCreateRequest(BaseModel):
+    phone: str | None = Field(default=None, min_length=8, max_length=32)
     email: EmailStr | None = None
     expires_hours: int = Field(default=168, ge=1, le=720)
     max_uses: int = Field(default=1, ge=1, le=10)
@@ -34,9 +50,26 @@ class InviteCreateRequest(BaseModel):
 class InviteCreateResponse(BaseModel):
     id: uuid.UUID
     token: str
+    phone_e164: str | None
     email: str | None
     expires_at: datetime
     max_uses: int
+
+
+class UpdatePhoneRequest(BaseModel):
+    phone: str = Field(min_length=8, max_length=32)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class ContactSyncRequest(BaseModel):
+    phones: list[str] = Field(min_length=1, max_length=500)
+    replace: bool = False
+
+
+class ContactDirectoryItem(BaseModel):
+    id: uuid.UUID
+    display_name: str
+    phone_e164: str
 
 
 class SessionResponse(BaseModel):
@@ -61,7 +94,7 @@ class ReadinessResponse(BaseModel):
 class UserDirectoryItem(BaseModel):
     id: uuid.UUID
     display_name: str
-    email: str
+    phone_e164: str | None
 
 
 class CreateConversationRequest(BaseModel):
@@ -74,7 +107,8 @@ class CreateConversationRequest(BaseModel):
 class ConversationMemberResponse(BaseModel):
     id: uuid.UUID
     display_name: str
-    email: str
+    phone_e164: str | None
+    email: str | None
     role: str
     last_read_sequence: int
 
