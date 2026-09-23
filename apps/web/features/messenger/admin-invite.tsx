@@ -48,7 +48,7 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
       </div>
       {!token ? (
         <form className="auth-form" onSubmit={submit}>
-          <label>Phone number (optional)<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." /></label>
+          <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required /></label>
           <p className="muted">One use · expires in 7 days.</p>
           <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create invite"}</button>
         </form>
