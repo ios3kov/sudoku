@@ -338,18 +338,42 @@ async def test_database_rejects_second_global_admin_and_member_invites() -> None
 
     member = await create_user(seed + 2, "Invite-less Member")
     transport = httpx.ASGITransport(app=app)
+
     async with httpx.AsyncClient(
         transport=transport,
         base_url=ORIGIN,
         headers=HEADERS,
-    ) as member_client:
-        await phone_login(member_client, member)
-        denied = await member_client.post(
+    ) as admin_client:
+        await phone_login(admin_client, admin)
+        created = await admin_client.post(
             "/v1/invites",
             json={
-                "phone": synthetic_phone(seed + 3),
+                "phone": synthetic_phone(seed + 4),
                 "expires_hours": 1,
                 "max_uses": 1,
             },
         )
-        assert denied.status_code == 403
+        assert created.status_code == 201, created.text
+        invite_id = created.json()["id"]
+
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url=ORIGIN,
+            headers=HEADERS,
+        ) as member_client:
+            await phone_login(member_client, member)
+            denied = await member_client.post(
+                "/v1/invites",
+                json={
+                    "phone": synthetic_phone(seed + 3),
+                    "expires_hours": 1,
+                    "max_uses": 1,
+                },
+            )
+            assert denied.status_code == 403
+
+            revoke_denied = await member_client.delete(f"/v1/invites/{invite_id}")
+            assert revoke_denied.status_code == 403
+
+        revoked = await admin_client.delete(f"/v1/invites/{invite_id}")
+        assert revoked.status_code == 204
