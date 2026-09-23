@@ -485,6 +485,18 @@ async def create_message(
     conversation_for_policy = (await db.execute(select(Conversation).where(Conversation.id == conversation_id))).scalar_one_or_none()
     if conversation_for_policy is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_for_policy.type == "direct":
+        other_user_id = (
+            await db.execute(
+                select(ConversationMember.user_id).where(
+                    ConversationMember.conversation_id == conversation_id,
+                    ConversationMember.user_id != auth.user.id,
+                    ConversationMember.e2ee_state != "pending_add",
+                )
+            )
+        ).scalar_one_or_none()
+        if other_user_id is not None:
+            await require_contacts(db, auth.user.id, {other_user_id})
     if conversation_for_policy.encryption_required:
         if not conversation_for_policy.e2ee_ready:
             raise HTTPException(
