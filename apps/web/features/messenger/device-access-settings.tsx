@@ -430,7 +430,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
     </p>
 
     {biometricBridgePresent ? (
-      <div className="auth-form native-biometric-settings">
+      <div className="auth-form">
         <p>
           {enabled
             ? biometricEnabled
