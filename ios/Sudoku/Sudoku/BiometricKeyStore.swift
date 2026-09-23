@@ -157,11 +157,11 @@ final class BiometricKeyStore {
                 query as CFDictionary,
                 &item
             )
-            guard copyStatus == errSecSuccess,
-                  let privateKey = item as! SecKey? else {
+            guard copyStatus == errSecSuccess, let item else {
                 completion(.failure(BiometricKeyStoreError.noKey))
                 return
             }
+            let privateKey = item as! SecKey
 
             let algorithm = SecKeyAlgorithm.ecdsaSignatureMessageX962SHA256
             guard SecKeyIsAlgorithmSupported(privateKey, .sign, algorithm) else {
