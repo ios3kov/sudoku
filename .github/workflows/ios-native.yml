@@ -37,7 +37,7 @@ jobs:
         run: plutil -lint ios/Sudoku/Sudoku/Info.plist
 
       - name: Generate Xcode project
-        run: scripts/generate-ios-project.sh
+        run: bash scripts/generate-ios-project.sh
 
       - name: Build iOS simulator app
         working-directory: ios/Sudoku
