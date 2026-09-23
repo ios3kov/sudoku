@@ -2,69 +2,89 @@
 
 export const NATIVE_BIOMETRICS_READY_EVENT = "sudoku:native-biometrics-ready";
 
+export type NativeBiometricKind = "face" | "touch" | "biometric" | "none";
+
 export type NativeBiometricAvailability = {
   available: boolean;
-  kind: "faceID" | "touchID" | "opticID" | "biometric" | "none";
-  label: string;
+  kind: NativeBiometricKind;
 };
 
-type NativeBiometricBridge = {
+type NativeBiometricsBridge = {
   availability: () => Promise<NativeBiometricAvailability>;
   enroll: () => Promise<{ publicKeyX963B64: string }>;
   sign: (payload: string) => Promise<{ signatureB64: string }>;
-  clear: () => Promise<void>;
+  remove: () => Promise<boolean>;
 };
 
 declare global {
   interface Window {
-    SudokuNativeBiometrics?: NativeBiometricBridge;
+    SudokuNativeBiometrics?: NativeBiometricsBridge;
   }
-}
-
-function bridge(): NativeBiometricBridge {
-  if (typeof window === "undefined" || !window.SudokuNativeBiometrics) {
-    throw new Error("Native biometrics bridge is unavailable");
-  }
-  return window.SudokuNativeBiometrics;
 }
 
 export function nativeBiometricsAvailable(): boolean {
-  return typeof window !== "undefined" && Boolean(window.SudokuNativeBiometrics);
+  return typeof window !== "undefined"
+    && typeof window.SudokuNativeBiometrics?.availability === "function";
 }
 
-export async function nativeBiometricAvailability(): Promise<NativeBiometricAvailability> {
+function bridge(): NativeBiometricsBridge {
+  if (!nativeBiometricsAvailable()) {
+    throw new DOMException(
+      "Native biometric bridge is unavailable",
+      "NotSupportedError",
+    );
+  }
+  return window.SudokuNativeBiometrics!;
+}
+
+export async function getNativeBiometricAvailability(): Promise<NativeBiometricAvailability> {
   return bridge().availability();
 }
 
-export async function enrollNativeBiometric(): Promise<string> {
+export async function enrollNativeBiometricCredential(): Promise<string> {
   const result = await bridge().enroll();
-  if (!result || typeof result.publicKeyX963B64 !== "string" || result.publicKeyX963B64.length < 80) {
-    throw new Error("Native biometric enrollment returned an invalid public key");
+  if (
+    !result
+    || typeof result.publicKeyX963B64 !== "string"
+    || result.publicKeyX963B64.length < 80
+  ) {
+    throw new DOMException(
+      "Invalid native biometric public key",
+      "DataError",
+    );
   }
   return result.publicKeyX963B64;
 }
 
-export async function signNativeBiometric(payload: string): Promise<string> {
-  if (!payload.startsWith("sudoku-biometric-unlock:v1:") || payload.length > 256) {
-    throw new Error("Invalid biometric signing payload");
+export async function signNativeBiometricPayload(payload: string): Promise<string> {
+  if (!payload.startsWith("sudoku-biometric-unlock:v1:") || payload.length > 512) {
+    throw new DOMException("Invalid biometric payload", "DataError");
   }
   const result = await bridge().sign(payload);
-  if (!result || typeof result.signatureB64 !== "string" || result.signatureB64.length < 64) {
-    throw new Error("Native biometric signature is invalid");
+  if (
+    !result
+    || typeof result.signatureB64 !== "string"
+    || result.signatureB64.length < 64
+  ) {
+    throw new DOMException(
+      "Invalid native biometric signature",
+      "DataError",
+    );
   }
   return result.signatureB64;
 }
 
-export async function clearNativeBiometric(): Promise<void> {
+export async function removeNativeBiometricCredential(): Promise<void> {
   if (!nativeBiometricsAvailable()) return;
-  await bridge().clear();
+  await bridge().remove();
+}
+
+export function biometricLabel(kind: NativeBiometricKind): string {
+  if (kind === "face") return "Face ID";
+  if (kind === "touch") return "Touch ID";
+  return "Biometrics";
 }
 
 export function isNativeBiometricCancellation(reason: unknown): boolean {
-  return Boolean(
-    reason
-    && typeof reason === "object"
-    && "code" in reason
-    && (reason as { code?: unknown }).code === "cancelled"
-  );
+  return reason instanceof DOMException && reason.name === "AbortError";
 }
