@@ -241,7 +241,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       {enabled && <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void save(true)}>Remove PIN</button>}
     </form>
 
-    {enabled && biometricAvailable && (
+    {enabled && (biometricAvailable || biometricEnabled) && (
       <div className="device-access-actions">
         <label>Account password for biometric changes
           <input type="password" autoComplete="current-password" maxLength={1024}
@@ -250,16 +250,20 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
         </label>
         <p className="device-access-help">
           {biometricEnabled
-            ? `${biometricLabel} can unlock this session. PIN and account password remain available.`
+            ? biometricAvailable
+              ? `${biometricLabel} can unlock this session. PIN and account password remain available.`
+              : "Biometric unlock is registered for this session but is currently unavailable on this iPhone."
             : `Use ${biometricLabel} for quick unlock on this iPhone. The private key never leaves the Secure Enclave.`}
         </p>
         {biometricEnabled ? (
           <>
-            <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void enableBiometric()}>
-              {biometricBusy ? "Updating…" : `Re-enroll ${biometricLabel}`}
-            </button>
+            {biometricAvailable && (
+              <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void enableBiometric()}>
+                {biometricBusy ? "Updating…" : `Re-enroll ${biometricLabel}`}
+              </button>
+            )}
             <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void disableBiometric()}>
-              {biometricBusy ? "Updating…" : `Disable ${biometricLabel}`}
+              {biometricBusy ? "Updating…" : "Disable biometric unlock"}
             </button>
           </>
         ) : (
