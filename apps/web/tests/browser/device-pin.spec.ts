@@ -76,7 +76,9 @@ for (const role of ["member", "admin"]) {
       await expect(page.getByLabel("Account password", { exact: true })).toBeVisible();
       await page.getByLabel("Account password", { exact: true }).fill(PASSWORD);
     } else {
-      await page.getByLabel("Device PIN", { exact: true }).fill("0123");
+      await page.getByRole("button", { name: "Use account password", exact: true }).click();
+      await expect(page.getByLabel("Account password", { exact: true })).toBeVisible();
+      await page.getByLabel("Account password", { exact: true }).fill(PASSWORD);
     }
 
     await page.getByRole("button", { name: "Unlock", exact: true }).click();
@@ -84,12 +86,34 @@ for (const role of ["member", "admin"]) {
     await expect(page.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New secure chat", exact: true })).toBeEnabled({ timeout: 120_000 });
 
+    if (role === "member") {
+      await page.evaluate(() => {
+        Object.defineProperty(Notification, "requestPermission", {
+          configurable: true,
+          value: async () => "denied",
+        });
+      });
+      await page.getByRole("button", { name: "Enable notifications", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Retry notifications", exact: true })).toBeVisible();
+    }
+
+    if (role === "admin") {
+      await page.getByRole("button", { name: "Invite", exact: true }).click();
+      const invite = page.getByRole("dialog", { name: "Create invite", exact: true });
+      await expect(invite).toBeVisible();
+      await invite.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(invite).toHaveCount(0);
+    }
+
     // Settings remain a secondary management surface after onboarding.
     await page.getByRole("button", { name: "Devices", exact: true }).click();
     const panel = page.getByRole("region", { name: "Login and device PIN" });
     await expect(panel.getByText("Device PIN is enabled.")).toBeVisible();
+    const devices = page.getByRole("dialog", { name: "Devices and sessions", exact: true });
+    await devices.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(devices).toHaveCount(0);
 
-    expect((await context.request.post("/v1/auth/logout", { headers: { origin: "http://127.0.0.1:3000" } })).status()).toBe(204);
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await reveal(page);
     await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue(phone);
     await page.getByLabel("Remember phone on this device").uncheck();
@@ -114,4 +138,26 @@ test("Not now enters the app without enabling a device PIN", async ({ page }) =>
   await expect(page.getByText("Messages", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Device PIN", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toHaveCount(0);
+});
+
+
+test("login navigation, invite submit and Hide controls work", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await reveal(page);
+
+  await page.getByRole("button", { name: "Use an invite", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Join", exact: true })).toBeVisible();
+  await page.getByLabel("Invite code").fill("invalid-audit-invite");
+  await page.getByLabel("Name").fill("Button Audit");
+  await page.getByLabel("Phone number", { exact: true }).fill(testPhone(9));
+  await page.getByLabel("Password", { exact: true }).fill("button audit password");
+  await page.getByRole("button", { name: "Join", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+
+  await page.getByRole("button", { name: "I already have an account", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
 });
