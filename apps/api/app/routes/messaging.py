@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..contacts import require_contacts
 from ..db import get_db
 from ..deps import AuthContext, get_auth_context
 from ..rate_limit import enforce_user_rate_limit
@@ -19,6 +20,7 @@ from ..models import (
     Message,
     MessageReaction,
     User,
+    UserContact,
     AuditEvent,
     Asset,
     MessageAsset,
@@ -59,12 +61,32 @@ async def user_directory(
 ):
     await enforce_user_rate_limit(auth.user.id, "user-search", 60, 60)
     term = q.strip().casefold()
-    query = select(User).where(User.status == "active", User.id != auth.user.id)
+    query = (
+        select(User)
+        .join(UserContact, UserContact.contact_user_id == User.id)
+        .where(
+            UserContact.owner_user_id == auth.user.id,
+            User.status == "active",
+            User.id != auth.user.id,
+        )
+    )
     if term:
         escaped = term.replace("%", "\\%").replace("_", "\\_")
-        query = query.where(or_(func.lower(User.display_name).like(f"%{escaped}%", escape="\\"), User.email.like(f"%{escaped}%", escape="\\")))
-    users = (await db.execute(query.order_by(User.display_name).limit(20))).scalars().all()
-    return [UserDirectoryItem(id=user.id, display_name=user.display_name, email=user.email) for user in users]
+        query = query.where(
+            or_(
+                func.lower(User.display_name).like(f"%{escaped}%", escape="\\"),
+                User.phone_e164.like(f"%{escaped}%", escape="\\"),
+            )
+        )
+    users = (await db.execute(query.order_by(User.display_name).limit(100))).scalars().all()
+    return [
+        UserDirectoryItem(
+            id=user.id,
+            display_name=user.display_name,
+            phone_e164=user.phone_e164,
+        )
+        for user in users
+    ]
 
 
 @router.post("/conversations", response_model=ConversationResponse, status_code=201)
@@ -93,6 +115,7 @@ async def create_conversation(
     valid_ids = set((await db.execute(select(User.id).where(User.id.in_(member_ids), User.status == "active"))).scalars().all())
     if valid_ids != member_ids:
         raise HTTPException(status_code=422, detail="One or more members are invalid")
+    await require_contacts(db, auth.user.id, member_ids)
 
     direct_key = None
     if payload.type == "direct":
@@ -207,6 +230,7 @@ async def add_conversation_members(
     )
     if valid_ids != new_ids:
         raise HTTPException(status_code=422, detail="One or more members are invalid")
+    await require_contacts(db, auth.user.id, new_ids)
 
     for user_id in new_ids:
         db.add(ConversationMember(conversation_id=conversation_id, user_id=user_id, role="member"))
