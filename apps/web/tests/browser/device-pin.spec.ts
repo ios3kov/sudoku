@@ -85,6 +85,17 @@ for (const role of ["member", "admin"]) {
     await expect(page.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New secure chat", exact: true })).toBeEnabled({ timeout: 120_000 });
 
+    if (role === "member") {
+      await page.evaluate(() => {
+        Object.defineProperty(Notification, "requestPermission", {
+          configurable: true,
+          value: async () => "denied",
+        });
+      });
+      await page.getByRole("button", { name: "Enable notifications", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Retry notifications", exact: true })).toBeVisible();
+    }
+
     if (role === "admin") {
       await page.getByRole("button", { name: "Invite", exact: true }).click();
       await expect(page.getByRole("dialog", { name: "Create invite", exact: true })).toBeVisible();
