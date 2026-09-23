@@ -1,6 +1,7 @@
 export interface CurrentUser {
   id: string;
   phone_e164: string | null;
+  phone_verified: boolean;
   email: string | null;
   display_name: string;
   is_admin: boolean;
