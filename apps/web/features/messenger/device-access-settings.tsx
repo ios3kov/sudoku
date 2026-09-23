@@ -2,12 +2,15 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
-import { acceptUnlock, accessEpoch, forgetUnlock, privateFetch, rememberEmail, savedEmail } from "./device-access";
+import { acceptUnlock, accessEpoch, forgetUnlock, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import "./device-access.css";
 
 export function DeviceAccessSettings() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneDraft, setPhoneDraft] = useState("");
+  const [phonePassword, setPhonePassword] = useState("");
+  const [phoneBusy, setPhoneBusy] = useState(false);
   const [remember, setRemember] = useState(false);
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
@@ -24,10 +27,37 @@ export function DeviceAccessSettings() {
         return r.json();
       }), messengerApi.me(),
     ]).then(([settings, user]) => {
-      if (alive.current) { setEnabled(settings.pin_enabled); setEmail(user.email); setRemember(savedEmail() === user.email); }
+      if (alive.current) {
+        const currentPhone = user.phone_e164 ?? "";
+        setEnabled(settings.pin_enabled);
+        setPhone(currentPhone);
+        setPhoneDraft(currentPhone);
+        setRemember(Boolean(currentPhone) && savedPhone() === currentPhone);
+      }
     }).catch(() => { if (alive.current) setError("Unable to load device access. Close and reopen Devices to retry."); });
     return () => { alive.current = false; };
   }, []);
+
+
+  async function savePhone() {
+    if (phoneBusy || !phoneDraft.trim() || !phonePassword) return;
+    setPhoneBusy(true); setError(null); setNotice(null);
+    try {
+      const user = await messengerApi.updatePhone(phoneDraft, phonePassword);
+      const next = user.phone_e164 ?? "";
+      if (!alive.current) return;
+      setPhone(next);
+      setPhoneDraft(next);
+      if (remember && next) rememberPhone(next, true);
+      setNotice("Phone number updated.");
+    } catch (reason) {
+      if (!alive.current) return;
+      const status = (reason as Error & { status?: number }).status;
+      setError(status === 409 ? "Phone number is already in use." : status === 403 ? "Incorrect account password." : "Unable to update phone number.");
+    } finally {
+      if (alive.current) { setPhoneBusy(false); setPhonePassword(""); }
+    }
+  }
 
   async function save(remove = false) {
     if (busy || enabled === null) return;
@@ -56,13 +86,21 @@ export function DeviceAccessSettings() {
 
   return <section className="device-access-panel" aria-label="Login and device PIN">
     <h3>Login and device PIN</h3>
-    <p>Applies only to this device. Your account password is not saved.</p>
-    <label className="device-access-choice"><input type="checkbox" checked={remember} disabled={!email}
+    <p>PIN applies only to this device. Your account password is not saved.</p>
+    <div className="auth-form">
+      <label>Phone number<input type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..."
+        value={phoneDraft} onChange={(e) => setPhoneDraft(e.target.value)} disabled={phoneBusy} /></label>
+      <label>Account password for phone change<input type="password" autoComplete="current-password"
+        value={phonePassword} onChange={(e) => setPhonePassword(e.target.value)} disabled={phoneBusy} /></label>
+      <button type="button" className="secondary-button" disabled={phoneBusy || !phoneDraft.trim() || !phonePassword || phoneDraft === phone}
+        onClick={() => void savePhone()}>{phoneBusy ? "Saving phone…" : phone ? "Change phone" : "Set phone"}</button>
+    </div>
+    <label className="device-access-choice"><input type="checkbox" checked={remember} disabled={!phone}
       onChange={(e) => {
         const value = e.target.checked;
-        if (rememberEmail(email, value)) { setRemember(value); setError(null); }
-        else setError("This browser cannot save the login.");
-      }} />Remember email on this device</label>
+        if (rememberPhone(phone, value)) { setRemember(value); setError(null); }
+        else setError("This browser cannot save the phone number.");
+      }} />Remember phone on this device</label>
     <p>{enabled === null ? "Loading PIN settings…" : enabled ? "Device PIN is enabled." : "Device PIN is not enabled."}</p>
     <form className="auth-form" onSubmit={submit}>
       <label>Account password<input type="password" name="device-password" autoComplete="current-password" required maxLength={1024}
