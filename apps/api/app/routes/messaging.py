@@ -68,6 +68,7 @@ async def user_directory(
             UserContact.owner_user_id == auth.user.id,
             User.status == "active",
             User.phone_e164.is_not(None),
+            User.phone_verified_at.is_not(None),
             User.id != auth.user.id,
         )
     )
