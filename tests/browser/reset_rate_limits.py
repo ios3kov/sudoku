@@ -1,8 +1,7 @@
 import asyncio
 
-from redis.asyncio import Redis
-
 from app.config import get_settings
+from redis.asyncio import Redis
 
 
 async def main() -> None:
