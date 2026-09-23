@@ -273,7 +273,7 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
           />
         </label>
         <button type="submit" className="secondary-button" disabled={busy}>
-          {busy ? "Checking…" : mode === "pin" ? "Use PIN" : "Unlock"}
+          {busy ? "Checking…" : "Unlock"}
         </button>
       </form>
       {error && <p className="form-error" role="alert">{error}</p>}
