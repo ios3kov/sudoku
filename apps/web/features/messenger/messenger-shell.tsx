@@ -24,7 +24,7 @@ function sortConversations(items: Conversation[]): Conversation[] {
   });
 }
 
-export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUser; onHide: () => void; onLoggedOut: () => void }) {
+export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { user: CurrentUser; onHide: () => void; onLoggedOut: () => void; onUserUpdated: (user: CurrentUser) => void }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationQuery, setConversationQuery] = useState("");
@@ -617,6 +617,7 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
         {showDevices ? <DeviceSessions
           onClose={() => setShowDevices(false)}
           onCurrentRevoked={revokeLocalSession}
+          onPhoneUpdated={(phone) => onUserUpdated({ ...user, phone_e164: phone })}
         /> : null}
         {showContacts ? <ContactsPanel onClose={() => setShowContacts(false)} /> : null}
 
