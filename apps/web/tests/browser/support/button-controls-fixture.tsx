@@ -63,6 +63,7 @@ const initialGroup = {
     peer,
   ],
 } as unknown as Conversation;
+let groupState = initialGroup;
 
 let sessions: DeviceSession[] = [
   {
@@ -116,26 +117,30 @@ api.searchUsers = async (query: string) => {
 };
 api.updateGroup = async (_id: string, title: string) => {
   calls.group.push("rename:" + title);
-  return { ...initialGroup, title };
+  groupState = { ...groupState, title };
+  return groupState;
 };
 api.setGroupMemberRole = async (_conversationId: string, userId: string, role: "owner" | "member") => {
   calls.group.push("role:" + userId + ":" + role);
-  return {
-    ...initialGroup,
-    members: initialGroup.members.map((member) => member.id === userId ? { ...member, role } : member),
+  groupState = {
+    ...groupState,
+    members: groupState.members.map((member) => member.id === userId ? { ...member, role } : member),
   };
+  return groupState;
 };
 api.removeGroupMember = async (_conversationId: string, userId: string) => {
   calls.group.push("remove:" + userId);
+  groupState = { ...groupState, members: groupState.members.filter((member) => member.id !== userId) };
 };
 api.addGroupMembers = async (_conversationId: string, userIds: string[]) => {
   calls.group.push("add:" + userIds.join(","));
-  return {
-    ...initialGroup,
-    members: [...initialGroup.members, { ...candidate, role: "member" }],
+  groupState = {
+    ...groupState,
+    members: [...groupState.members, { ...candidate, role: "member" }],
   };
+  return groupState;
 };
-api.conversations = async () => [initialGroup];
+api.conversations = async () => [groupState];
 api.createDirect = async (userId: string) => {
   calls.created.push("direct:" + userId);
   return { ...directConversation, id: "new-direct", encryption_required: true } as Conversation;
@@ -230,7 +235,7 @@ function SecurityFixture() {
 }
 
 function GroupFixture() {
-  const [conversation, setConversation] = useState(initialGroup);
+  const [conversation, setConversation] = useState(groupState);
   const [open, setOpen] = useState(true);
   const [left, setLeft] = useState(false);
   return <Frame onClose={() => setOpen(false)}>{open ? <GroupSettings
