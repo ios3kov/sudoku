@@ -179,3 +179,12 @@ test("new chat direct, group, selection, create and close buttons work", async (
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByText("new chat closed", { exact: true })).toBeVisible();
 });
+
+test("PIN-protected attachment open button resolves a safe blob link", async ({ page }) => {
+  await mount(page, "protected");
+  await page.getByRole("button", { name: /Open legacy\.txt/ }).click();
+  await expect(page.getByRole("link", { name: /legacy\.txt/ })).toBeVisible();
+  const paths = await page.evaluate(() => window.__buttonAudit.calls.fetches.map((item) => item.path));
+  expect(paths).toContain("/v1/assets/00000000-0000-4000-8000-000000000001/download-url");
+  expect(paths).toContain("https://assets.example.test/signed");
+});
