@@ -73,6 +73,10 @@ The native iOS client is a capability host around the existing authenticated/E2E
 - Native contacts use explicit user selection; do not silently enumerate/upload the entire address book.
 - Only selected phone numbers cross the native bridge and then flow through the existing contact-sync API.
 - Face ID / Touch ID is a local quick-unlock/privacy control only. It must not mint sessions, bypass expired/revoked sessions or replace password recovery.
+- Biometric quick unlock is public-key challenge-response: the Secure Enclave holds a P-256 private key protected by the current biometric set; the API stores only the per-session public key.
+- Biometric challenges are random, one-time, session-bound, short-lived and consumed after verification attempts; signatures use ECDSA/SHA-256 over a domain-separated payload.
+- Native signing accepts only the biometric-unlock domain, so the WebView bridge is not a generic signing oracle.
+- PIN lockout also blocks biometric unlock until account-password recovery; changing/removing the PIN invalidates biometric enrollment.
 - Native media/file pickers may supply local bytes to the existing client-side encryption pipeline, but native code must not upload plaintext directly to object storage.
 - The app must synchronously hide private UI before iOS can snapshot it for the app switcher.
 - The WebView may load only approved application origins and must not expose arbitrary navigation or arbitrary native execution.
