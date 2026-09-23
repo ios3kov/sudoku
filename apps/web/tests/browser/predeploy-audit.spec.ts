@@ -138,3 +138,41 @@ for (const [width,height] of [[320,568],[390,844],[844,390],[768,1024]]) {
     expect(await page.locator(".message-interaction").first().evaluate(node=>parseFloat(getComputedStyle(node).transitionDuration))).toBeLessThanOrEqual(0.00002);
   });
 }
+
+
+test("encrypted file and image buttons start the real decrypt/download flow", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("file"));
+  await page.locator("button.file-attachment").click();
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.io.downloads.length)).toBe(1);
+  await page.evaluate(()=>window.__predeployAudit.resolveDownload());
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.urls.created.length)).toBe(1);
+
+  await page.evaluate(() => {
+    class IdleIntersectionObserver {
+      root = null; rootMargin = "0px"; thresholds = [0];
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() { return []; }
+    }
+    Object.defineProperty(window, "IntersectionObserver", {
+      configurable: true,
+      value: IdleIntersectionObserver,
+    });
+  });
+  await page.evaluate(()=>window.__predeployAudit.mount("image"));
+  const image = page.getByRole("button",{name:/Open encrypted image/});
+  await expect(image).toBeVisible();
+  await image.click();
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.io.downloads.length)).toBe(2);
+  await page.evaluate(()=>window.__predeployAudit.resolveDownload(1));
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.urls.created.length)).toBeGreaterThanOrEqual(2);
+});
+
+test("encrypted Attach button opens the hidden file picker", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  const input = page.locator('input[type="file"]');
+  await input.evaluate((node) => node.addEventListener("click", () => node.setAttribute("data-audit-clicked", "true")));
+  await page.getByRole("button",{name:"Attach encrypted file",exact:true}).click();
+  await expect(input).toHaveAttribute("data-audit-clicked", "true");
+});
