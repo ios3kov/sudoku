@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 
 import psycopg
 
-
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 API_DIR = os.path.join(ROOT, "apps", "api")
 
