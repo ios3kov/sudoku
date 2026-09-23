@@ -6,7 +6,7 @@ import { MessengerRevealPreview } from "./messenger-reveal-preview";
 import { ConversationDraftProvider } from "./conversation-drafts";
 import { DevicePinUnlock } from "./device-pin-unlock";
 import { DevicePinOnboarding } from "./device-pin-onboarding";
-import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberEmail, savedEmail } from "./device-access";
+import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import type { CurrentUser } from "./types";
 import "./device-access.css";
 
@@ -136,12 +136,12 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
 
 function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, password: string) => void; onError: (message: string | null) => void }) {
   const [submitting, setSubmitting] = useState(false);
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [remember, setRemember] = useState(false);
   const alive = useRef(false);
   useEffect(() => {
     alive.current = true;
-    const stored = savedEmail(); setEmail(stored); setRemember(Boolean(stored));
+    const stored = savedPhone(); setPhone(stored); setRemember(Boolean(stored));
     return () => { alive.current = false; };
   }, []);
 
@@ -155,25 +155,25 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, pass
     try {
       const response = await fetch("/v1/auth/login", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, device_name: "Sudoku web app" }),
+        body: JSON.stringify({ phone, password, device_name: "Sudoku web app" }),
       });
       if (!alive.current || started !== accessEpoch()) return;
-      if (!response.ok) { onError(response.status === 429 ? "Too many attempts. Try later." : "Invalid email or password"); return; }
+      if (!response.ok) { onError(response.status === 429 ? "Too many attempts. Try later." : "Invalid phone number or password"); return; }
       const current = await response.json() as CurrentUser;
       if (!alive.current || started !== accessEpoch()) return;
-      rememberEmail(current.email, remember);
+      rememberPhone(current.phone_e164 ?? phone, remember);
       forgetUnlock(); onSuccess(current, password);
     } catch { if (alive.current) onError("Network unavailable"); }
     finally { if (alive.current) setSubmitting(false); }
   }
 
   return <form className="auth-form" onSubmit={submit}>
-    <label>Email<input name="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+    <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
     <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
     <label className="device-access-choice"><input type="checkbox" checked={remember} onChange={(e) => {
       const checked = e.target.checked; setRemember(checked);
-      if (!checked && !rememberEmail("", false)) onError("Unable to forget saved email. Clear this site's storage in your browser settings.");
-    }} />Remember email on this device</label>
+      if (!checked && !rememberPhone("", false)) onError("Unable to forget saved phone. Clear this site's storage in your browser settings.");
+    }} />Remember phone on this device</label>
     <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
   </form>;
 }
@@ -193,13 +193,13 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
     try {
       const response = await fetch("/v1/invites/accept", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, email: data.get("email"), display_name: data.get("display_name"), password: data.get("password"), device_name: "Sudoku web app" }),
+        body: JSON.stringify({ token, phone: data.get("phone"), display_name: data.get("display_name"), password: data.get("password"), device_name: "Sudoku web app" }),
       });
       if (!alive.current || started !== accessEpoch()) return;
       if (!response.ok) {
-        if (response.status === 403) onError("This invite is for a different email");
+        if (response.status === 403) onError("This invite is for a different phone number");
         else if (response.status === 409) onError("Account already exists");
-        else if (response.status === 422) onError("Check the invite code, email, name, and password");
+        else if (response.status === 422) onError("Check the invite code, phone number, name, and password");
         else if (response.status === 429) onError("Too many attempts. Try later.");
         else onError("Invite is invalid or expired");
         return;
@@ -213,7 +213,7 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
   return <form className="auth-form" onSubmit={submit}>
     <label>Invite code<input name="invite" autoCapitalize="none" autoCorrect="off" required /></label>
     <label>Name<input name="display_name" autoComplete="name" required maxLength={120} /></label>
-    <label>Email<input name="email" type="email" autoComplete="username" required /></label>
+    <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required /></label>
     <label>Password<input name="password" type="password" autoComplete="new-password" minLength={12} required /></label>
     <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Joining…" : "Join"}</button>
   </form>;
