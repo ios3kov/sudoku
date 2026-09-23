@@ -12,6 +12,10 @@ The next product track is a native iOS client shell rather than further PWA-only
 
 PR #62 is merged to `main` as `571ce04ad3903f76f7fbdbc1aa607acb767b9095`; exact post-merge CI, device-access, beat-runtime and api-shutdown are green. Migration `0017_single_admin` is now in the repository but has not yet been deployed to production. The active implementation branch `feat/ios-native-host` adds the first-party Swift/UIKit host, app-bound `WKWebView`, synchronous native privacy cover, explicit Contacts UI picker bridge, XcodeGen project spec and a macOS/Xcode CI build gate.
 
+PR #65 is merged to `main` as `cd0d91657e0654a91c2e70f9c1400dd60b602059`, adding the first-party Swift/UIKit + WKWebView iOS host, app-bound navigation, native app-switcher privacy cover, system Contacts picker bridge, XcodeGen project source and macOS/Xcode build gate. The native-host workflow, device-access, beat-runtime and api-shutdown post-merge checks are green; the full general CI result is tracked separately.
+
+PR #66 is the active biometric hardening step. It adds session-bound Secure Enclave P-256 enrollment, one-time challenge-response Face ID / Touch ID unlock, replay/tamper tests and migration `0018_session_biometrics`. Neither `0017_single_admin` nor `0018_session_biometrics` is deployed to production yet.
+
 The global administration model is also being tightened: production remains invite-only and the database will enforce at most one global administrator. Only that singleton administrator may create or revoke account invitations. Conversation-local owner roles do not grant global invite rights.
 
 Still open before a production iOS/App Store claim:
