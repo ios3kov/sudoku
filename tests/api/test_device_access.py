@@ -11,8 +11,6 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 import httpx
 import pytest
-from sqlalchemy import select
-
 from app.config import get_settings
 from app.db import SessionFactory
 from app.device_biometric import SessionBiometricCredential
@@ -21,6 +19,10 @@ from app.main import app
 from app.models import Asset, Session, User
 from app.realtime import authenticate_websocket, session_still_valid
 from app.security import hash_password, hash_secret
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from sqlalchemy import select
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 ORIGIN = "https://sudoku.test"
