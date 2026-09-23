@@ -39,7 +39,7 @@ class ConfigureRequest(PasswordRequest):
     pin: SecretStr | None
 
 
-class BiometricEnrollRequest(BaseModel):
+class BiometricEnrollRequest(PasswordRequest):
     public_key_x963_b64: str = Field(min_length=80, max_length=128)
 
 
@@ -239,9 +239,11 @@ async def password_unlock(
 @router.put("/biometric")
 async def enroll_biometric(
     payload: BiometricEnrollRequest,
+    request: Request,
     auth: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ):
+    await check_password(request, auth, payload.password)
     try:
         public_key = decode_public_key_x963(payload.public_key_x963_b64)
     except ValueError as exc:
@@ -271,9 +273,12 @@ async def enroll_biometric(
 
 @router.delete("/biometric", status_code=204)
 async def disable_biometric(
+    payload: PasswordRequest,
+    request: Request,
     auth: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ):
+    await check_password(request, auth, payload.password)
     current = await current_locked(db, auth)
     biometric = await load_biometric(db, current)
     if biometric is not None:
