@@ -117,12 +117,20 @@ Acceptance:
 
 ### P0.4 Biometric privacy gate
 
-- add Face ID / Touch ID through LocalAuthentication;
-- preserve current server-backed four-digit PIN;
-- biometric success may satisfy the local quick-unlock step;
+Implementation track: Secure Enclave P-256 challenge-response, not a stored PIN or a trusted client boolean.
+
+- Face ID / Touch ID uses LocalAuthentication plus a Secure Enclave private key protected by the current biometric enrollment;
+- server stores only the per-session X9.63 public key;
+- unlock uses a 90-second one-time session-bound challenge and ECDSA/SHA-256 signature;
+- successful verification issues the existing RAM-only device unlock capability; it does not mint/refresh the account session;
+- native signing is restricted to the `sudoku-biometric-unlock:v1:` payload family;
+- challenge replay and tampered signatures fail closed;
 - biometric failure/cancel never logs the user out or damages MLS state;
-- password remains the recovery path;
-- changing biometric enrollment must force a safe re-authentication path where the platform allows detection.
+- current four-digit PIN remains available;
+- five failed PIN attempts also block biometric unlock until account-password recovery;
+- changing/removing PIN deletes biometric enrollment;
+- `.biometryCurrentSet` invalidates the Secure Enclave key when enrolled biometrics change;
+- password remains the recovery path.
 
 ### P0.5 App-switcher privacy
 
@@ -336,6 +344,7 @@ As of 2026-09-23:
 - iPhone Safari cannot provide the desired system phone-book picker, which is the immediate reason for the native iOS track.
 - singleton-admin foundation PR #62 is merged to `main` as `571ce04ad3903f76f7fbdbc1aa607acb767b9095`; exact post-merge CI, device-access, beat-runtime and api-shutdown workflows are green;
 - migration `0017_single_admin` is merged but is **not** deployed to production yet; production remains on `0016_phone_contacts` until the next exact-SHA backend deployment gate.
+- biometric implementation PR #66 introduces migration `0018_session_biometrics`; it is repository-only until full CI/review and a separately authorized production deployment gate complete.
 
 Still open:
 
