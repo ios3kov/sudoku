@@ -19,17 +19,12 @@ class LoginRequest(BaseModel):
 
 class InviteAcceptRequest(BaseModel):
     token: str = Field(min_length=16, max_length=512)
-    phone: str | None = Field(default=None, min_length=8, max_length=32)
+    phone: str = Field(min_length=8, max_length=32)
     email: EmailStr | None = None
     display_name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=12, max_length=1024)
     device_name: str = Field(min_length=1, max_length=160)
 
-    @model_validator(mode="after")
-    def require_identifier(self):
-        if self.phone is None and self.email is None:
-            raise ValueError("Phone number is required")
-        return self
 
 
 class UserResponse(BaseModel):
@@ -42,7 +37,7 @@ class UserResponse(BaseModel):
 
 
 class InviteCreateRequest(BaseModel):
-    phone: str | None = Field(default=None, min_length=8, max_length=32)
+    phone: str = Field(min_length=8, max_length=32)
     email: EmailStr | None = None
     expires_hours: int = Field(default=168, ge=1, le=720)
     max_uses: int = Field(default=1, ge=1, le=10)
