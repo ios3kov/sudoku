@@ -5,7 +5,7 @@ import { messengerApi } from "./api";
 import { acceptUnlock, accessEpoch, forgetUnlock, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import "./device-access.css";
 
-export function DeviceAccessSettings() {
+export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (phone: string) => void }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [phone, setPhone] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
@@ -48,6 +48,7 @@ export function DeviceAccessSettings() {
       if (!alive.current) return;
       setPhone(next);
       setPhoneDraft(next);
+      if (next) onPhoneUpdated?.(next);
       if (remember && next) rememberPhone(next, true);
       setNotice("Phone number updated.");
     } catch (reason) {
