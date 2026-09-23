@@ -103,7 +103,7 @@ Run inside the API container so the password is read from a hidden prompt rather
 
 ```bash
 docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml \
-  exec api python -m app.cli bootstrap-admin --email '<admin-email>' --display-name '<display-name>'
+  exec api python -m app.cli bootstrap-admin --phone '<e164-phone>' --display-name '<display-name>'
 ```
 
 Do this only once on the empty production users table.
@@ -277,3 +277,31 @@ Acceptance for this follow-up:
 - no API/MLS protocol behavior changes are permitted.
 
 The implementation/audit is tracked in `docs/audits/minimal-messenger-redesign-2026-09-21.md`.
+
+
+## Release-prep evidence — 2026-09-23 phone/contact rollout
+
+Repository-side pre-deploy work is complete through the current mainline button/control audit. PR #59 added a dedicated legacy migration regression that exercises an existing `0015_session_pins` database with a user, active session, PIN row, invite and login-attempt row through the `0016_phone_contacts` upgrade.
+
+The exact reviewed head `1e3d4dcfc4bdb579664cf09721ad5cc021bcd577` passed CI `35874924090`, device-access `35874924177`, beat-runtime `35874924059` and api-shutdown `35874923853`. The legacy upgrade step itself completed successfully before the normal clean-schema migration/API/browser/build gates. PR #59 was squash-merged as `0394298d122876edfa8ddf9a9443ffc6db24a407`.
+
+External production observations on 2026-09-23:
+
+- `https://sudoku.moscow/v1/health/ready` returned ready with PostgreSQL, Redis and object-storage readiness reported true;
+- the hidden live Messenger login still displayed **Email** + password and “Remember email on this device”, proving the phone/contact release was not yet deployed;
+- `assets.sudoku.moscow` resolves by A record to `185.31.167.36`, with no AAAA or CNAME observed;
+- independent HTTPS navigation to `https://assets.sudoku.moscow/` timed out before an HTTP response, so the asset-host TLS/edge gate is currently **failed** and must be fixed/verified before rollout;
+- no production backup, migration, restart or deployment was executed during this check;
+- authenticated Selectel/host access was unavailable in the active automation profile, so host-side diagnosis and the required backup/preflight/deploy cannot be truthfully marked complete.
+
+### Stop rule for the phone/contact deployment
+
+Do not start the `0016_phone_contacts` rollout until all of the following are true on the same operator session:
+
+1. authenticated SSH or Selectel-console access to `sudoku-prod` is available;
+2. `assets.sudoku.moscow` responds over verified HTTPS and the production smoke script passes the asset-host checks;
+3. a fresh consistent backup is created and its manifest/checksums are verified;
+4. production preflight passes;
+5. the exact release SHA is identified and its full CI gate is green.
+
+After deployment, do not mark Step70 complete until the live phone/PIN/contact/E2EE checks, persistence/reboot test, destructive restore drill, two-device MLS test and physical iOS/Android PWA acceptance have all passed.

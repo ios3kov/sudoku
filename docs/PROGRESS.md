@@ -1,5 +1,13 @@
 # Progress
 
+## Current release-prep gate — phone/contact production rollout blocked
+
+Date: 2026-09-23. Repository code/QA is ready, but production rollout is not yet authorized by evidence. The live hidden Messenger still shows Email login, confirming the phone/contact release is not deployed. The app readiness endpoint reports ready, but external HTTPS checks for `assets.sudoku.moscow` time out even though DNS resolves to the expected Selectel IPv4 and has no AAAA/CNAME.
+
+The repository-side legacy migration gate is now closed: PR #59 reviewed head `1e3d4dcfc4bdb579664cf09721ad5cc021bcd577` passed the full workflow set, including an explicit existing-data `0015_session_pins → 0016_phone_contacts` upgrade, and was merged as `0394298d122876edfa8ddf9a9443ffc6db24a407`.
+
+Host-side backup, production preflight/deployment, persistence/reboot verification and restore drill remain blocked until authenticated Selectel/SSH access is available and the asset-host edge failure is diagnosed. See [Step70](steps/70-live-verification.md).
+
 ## Current milestone — repository hygiene after final QA
 
 Date: 2026-09-23. The remaining stale PR debt was cleaned after the final interactive-control audit. Old release-readiness PR #34 and obsolete Dependabot PRs #3–17 were closed without merge because they were based on superseded repository state and were no longer valid integration candidates.

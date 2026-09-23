@@ -29,7 +29,23 @@ Docker and Compose versions were verified during provisioning and must continue 
 
 ## Release status
 
-Checkpoint: 2026-09-22. Repository verification and production evidence are separate.
+### Current checkpoint — 2026-09-23 phone/contact rollout
+
+Repository verification and production evidence remain separate.
+
+- PR #59 added and passed an explicit legacy `0015_session_pins → 0016_phone_contacts` upgrade regression with existing user/session/PIN/invite/login-attempt rows; reviewed head `1e3d4dcfc4bdb579664cf09721ad5cc021bcd577` passed the full workflow set and was squash-merged as `0394298d122876edfa8ddf9a9443ffc6db24a407`.
+- The public app readiness endpoint currently reports PostgreSQL, Redis and object storage ready.
+- The hidden live Messenger still shows **Email** login and “Remember email on this device”, so the phone/contact application release is not yet deployed.
+- `assets.sudoku.moscow` resolves to the expected Selectel IPv4 `185.31.167.36` with no observed AAAA/CNAME, but independent HTTPS navigation times out before an HTTP response. Treat the asset-host edge as **failed** until host-side diagnosis and `scripts/smoke-production.sh` pass.
+- No new production backup, migration, restart or deployment has been executed for the phone/contact release. Authenticated Selectel/SSH access is required before those operations can proceed.
+
+**Stop rule:** do not start the `0016_phone_contacts` production rollout until authenticated host access is available, the asset-host HTTPS failure is resolved, a fresh consistent backup is verified, production preflight passes, and an exact fully-green release SHA is selected.
+
+See [Step70](steps/70-live-verification.md) for the live evidence checklist and remaining physical-device/recovery gates.
+
+### Historical checkpoint — 2026-09-22
+
+Repository verification and production evidence are separate.
 
 - **Last operator-reported live smoke:** `1e404b2c25d4c2582b42ab8e774a60ddde5a2f4b`, reported in [issue #38](https://github.com/ios3kov/sudoku/issues/38). Beat remained running with restart count `0 -> 0`; the worker executed empty outbox jobs; DNS, HTTPS, API readiness, asset TLS and redirects passed. This is bounded operator evidence, not a fresh host inspection or full Step70 acceptance.
 - **Merged PIN candidate:** [PR #40](https://github.com/ios3kov/sudoku/pull/40), `5205a4add164fdf84702afea870040413e5acfb9`. Its tree `38c0e5ee3188d314272371457daf2b37e8128983` exactly matches reviewed head `a2d86e2a5b1db458b5eff761583a2f6ff26d93d1`.
