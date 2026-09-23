@@ -176,3 +176,16 @@ test("encrypted Attach button opens the hidden file picker", async ({page}) => {
   await page.getByRole("button",{name:"Attach encrypted file",exact:true}).click();
   await expect(input).toHaveAttribute("data-audit-clicked", "true");
 });
+
+
+test("encrypted Verify panel and Hide controls work from the chat header", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  await page.getByRole("button",{name:"Verify",exact:true}).click();
+  const verify = page.getByRole("dialog",{name:"Security verification",exact:true});
+  await expect(verify).toBeVisible();
+  await verify.getByRole("button",{name:"Close",exact:true}).click();
+  await expect(verify).toHaveCount(0);
+
+  await page.getByRole("button",{name:"Hide",exact:true}).click();
+  await expect(page.getByText("Private surface unmounted",{exact:true})).toBeVisible();
+});
