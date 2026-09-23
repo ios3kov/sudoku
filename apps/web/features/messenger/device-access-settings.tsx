@@ -24,6 +24,7 @@ import "./device-access.css";
 export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (phone: string) => void }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricBridgePresent, setBiometricBridgePresent] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricKind, setBiometricKind] = useState<NativeBiometricKind>("none");
   const [biometricPassword, setBiometricPassword] = useState("");
@@ -45,7 +46,9 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
     alive.current = true;
 
     const refreshNativeBiometrics = () => {
-      if (!nativeBiometricsAvailable()) {
+      const bridgePresent = nativeBiometricsAvailable();
+      if (alive.current) setBiometricBridgePresent(bridgePresent);
+      if (!bridgePresent) {
         if (alive.current) {
           setBiometricAvailable(false);
           setBiometricKind("none");
@@ -204,9 +207,10 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
   async function configureBiometric(remove = false) {
     if (
       biometricBusy
-      || !biometricAvailable
+      || !biometricBridgePresent
       || enabled !== true
       || !biometricPassword
+      || (!remove && !biometricAvailable)
     ) {
       if (!biometricPassword) setError("Enter your account password.");
       return;
@@ -425,13 +429,17 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       Five incorrect PIN attempts require your account password. PIN unlock needs an internet connection.
     </p>
 
-    {biometricAvailable ? (
+    {biometricBridgePresent ? (
       <div className="auth-form native-biometric-settings">
         <p>
           {enabled
             ? biometricEnabled
-              ? `${nativeLabel} unlock is enabled.`
-              : `${nativeLabel} unlock is available.`
+              ? biometricAvailable
+                ? `${nativeLabel} unlock is enabled.`
+                : "Biometric unlock is enabled but currently unavailable on this iPhone."
+              : biometricAvailable
+                ? `${nativeLabel} unlock is available.`
+                : "Biometric unlock is unavailable on this iPhone."
             : `Set a device PIN before enabling ${nativeLabel}.`}
         </p>
         <label>Account password for {nativeLabel}
@@ -465,6 +473,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
             disabled={
               biometricBusy
               || enabled !== true
+              || !biometricAvailable
               || !biometricPassword
             }
             onClick={() => void configureBiometric(false)}
