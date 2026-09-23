@@ -75,7 +75,9 @@ for (const role of ["member", "admin"]) {
       await expect(page.getByLabel("Account password", { exact: true })).toBeVisible();
       await page.getByLabel("Account password", { exact: true }).fill(PASSWORD);
     } else {
-      await page.getByLabel("Device PIN", { exact: true }).fill("0123");
+      await page.getByRole("button", { name: "Use account password", exact: true }).click();
+      await expect(page.getByLabel("Account password", { exact: true })).toBeVisible();
+      await page.getByLabel("Account password", { exact: true }).fill(PASSWORD);
     }
 
     await page.getByRole("button", { name: "Unlock", exact: true }).click();
@@ -83,12 +85,21 @@ for (const role of ["member", "admin"]) {
     await expect(page.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New secure chat", exact: true })).toBeEnabled({ timeout: 120_000 });
 
+    if (role === "admin") {
+      await page.getByRole("button", { name: "Invite", exact: true }).click();
+      await expect(page.getByRole("dialog", { name: "Create invite", exact: true })).toBeVisible();
+      await page.getByRole("dialog", { name: "Create invite", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
+      await expect(page.getByRole("dialog", { name: "Create invite", exact: true })).toHaveCount(0);
+    }
+
     // Settings remain a secondary management surface after onboarding.
     await page.getByRole("button", { name: "Devices", exact: true }).click();
     const panel = page.getByRole("region", { name: "Login and device PIN" });
     await expect(panel.getByText("Device PIN is enabled.")).toBeVisible();
+    await page.getByRole("dialog", { name: "Devices and sessions", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Devices and sessions", exact: true })).toHaveCount(0);
 
-    expect((await context.request.post("/v1/auth/logout", { headers: { origin: "http://127.0.0.1:3000" } })).status()).toBe(204);
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await reveal(page);
     await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
     await page.getByLabel("Remember email on this device").uncheck();
