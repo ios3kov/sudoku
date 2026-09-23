@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { messengerApi } from "./api";
+import { ContactAccess } from "./contact-access";
 import type { Conversation } from "./types";
 import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 
 interface DirectoryUser {
   id: string;
   display_name: string;
-  email: string;
+  phone_e164: string;
 }
 
 type Mode = "direct" | "group";
@@ -33,13 +34,6 @@ export function NewChat({
 
   useEffect(() => {
     const term = query.trim();
-    if (term.length < 2) {
-      setUsers([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -55,7 +49,7 @@ export function NewChat({
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 220);
+    }, term ? 220 : 0);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -143,6 +137,7 @@ export function NewChat({
       {mode === "group" ? (
         <input className="group-title-input" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} placeholder="Group name" maxLength={160} />
       ) : null}
+      <ContactAccess onSynced={() => setQuery((current) => current + " ")} />
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -158,12 +153,10 @@ export function NewChat({
       {error ? <p className="form-error">{error}</p> : null}
       {mode === "group" && selected.size > 0 ? <p className="selected-count">{selected.size} selected</p> : null}
       <div className="directory-list" aria-busy={loading}>
-        {query.trim().length < 2 ? (
-          <p className="muted new-chat-hint">Type at least 2 characters to search.</p>
-        ) : loading ? (
-          <p className="muted">Searching…</p>
+        {loading ? (
+          <p className="muted">Loading contacts…</p>
         ) : users.length === 0 && !error ? (
-          <p className="muted new-chat-hint">No people found.</p>
+          <p className="muted new-chat-hint">No registered phone contacts yet.</p>
         ) : users.map((user) => (
           <button
             type="button"
@@ -174,7 +167,7 @@ export function NewChat({
             onClick={() => mode === "direct" ? void createDirect(user) : toggleUser(user.id)}
           >
             <span className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</span>
-            <span><strong>{user.display_name}</strong><small>{user.email}</small></span>
+            <span><strong>{user.display_name}</strong><small>{user.phone_e164}</small></span>
             {mode === "group" ? <span className="selection-mark">{selected.has(user.id) ? "✓" : ""}</span> : null}
           </button>
         ))}
