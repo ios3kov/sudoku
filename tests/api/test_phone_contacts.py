@@ -13,14 +13,14 @@ HEADERS = {"origin": ORIGIN}
 PASSWORD = "correct horse battery staple"
 
 
-def test_phone(seed: int) -> str:
+def synthetic_phone(seed: int) -> str:
     return "+" + str(71000000000 + seed)
 
 
 async def create_user(seed: int, name: str, *, phone: bool = True) -> User:
     user = User(
-        email=f"phone-{seed}-{uuid.uuid4().hex[:8]}@example.test",
-        phone_e164=test_phone(seed) if phone else None,
+        email=f"phone-{seed}-{uuid.uuid4().hex[:8]}@example.com",
+        phone_e164=synthetic_phone(seed) if phone else None,
         display_name=name,
         password_hash=hash_password(PASSWORD),
         status="active",
@@ -139,7 +139,7 @@ async def test_contact_sync_controls_directory_and_new_conversations() -> None:
 async def test_phone_update_disables_legacy_email_login_for_migrated_account() -> None:
     seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 200000
     legacy = await create_user(seed, "Legacy", phone=False)
-    replacement_phone = test_phone(seed)
+    replacement_phone = synthetic_phone(seed)
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
@@ -197,7 +197,7 @@ async def test_phone_bound_invite_creates_phone_identity() -> None:
     seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 400000
     admin = User(
         email=f"admin-{uuid.uuid4().hex[:8]}@example.test",
-        phone_e164=test_phone(seed),
+        phone_e164=synthetic_phone(seed),
         display_name="Admin",
         password_hash=hash_password(PASSWORD),
         status="active",
@@ -207,7 +207,7 @@ async def test_phone_bound_invite_creates_phone_identity() -> None:
         db.add(admin)
         await db.commit()
 
-    invited_phone = test_phone(seed + 1)
+    invited_phone = synthetic_phone(seed + 1)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport,
@@ -231,7 +231,7 @@ async def test_phone_bound_invite_creates_phone_identity() -> None:
                 "/v1/invites/accept",
                 json={
                     "token": token,
-                    "phone": test_phone(seed + 2),
+                    "phone": synthetic_phone(seed + 2),
                     "display_name": "Wrong",
                     "password": PASSWORD,
                     "device_name": "wrong-phone",
@@ -278,7 +278,7 @@ async def test_phone_change_invalidates_inbound_contact_edges() -> None:
         await phone_login(client, target)
         changed = await client.put(
             "/v1/me/phone",
-            json={"phone": test_phone(seed + 2), "password": PASSWORD},
+            json={"phone": synthetic_phone(seed + 2), "password": PASSWORD},
         )
         assert changed.status_code == 200, changed.text
 
