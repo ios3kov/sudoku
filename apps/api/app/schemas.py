@@ -35,6 +35,7 @@ class InviteAcceptRequest(BaseModel):
 class UserResponse(BaseModel):
     id: uuid.UUID
     phone_e164: str | None
+    phone_verified: bool
     email: str | None
     display_name: str
     is_admin: bool
