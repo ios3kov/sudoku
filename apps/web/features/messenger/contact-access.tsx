@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
 
 type PickerContact = { name?: string[]; tel?: string[] };
@@ -18,10 +18,15 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const contacts = typeof navigator === "undefined"
-    ? undefined
-    : (navigator as Navigator & { contacts?: ContactsManagerLike }).contacts;
-  const pickerAvailable = Boolean(contacts);
+  const contactsRef = useRef<ContactsManagerLike | null>(null);
+  const [pickerAvailable, setPickerAvailable] = useState(false);
+
+  useEffect(() => {
+    const manager = (navigator as Navigator & { contacts?: ContactsManagerLike }).contacts ?? null;
+    contactsRef.current = manager;
+    setPickerAvailable(Boolean(manager));
+    return () => { contactsRef.current = null; };
+  }, []);
 
   async function syncPhones(phones: string[]) {
     const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
@@ -39,6 +44,7 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   }
 
   async function chooseContacts() {
+    const contacts = contactsRef.current;
     if (!contacts || busy) return;
     setBusy(true); setError(null); setNotice(null);
     try {
