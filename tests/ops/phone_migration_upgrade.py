@@ -163,7 +163,7 @@ def main() -> None:
             FROM alembic_version
             """
         )
-        assert cursor.fetchone() == ("0017_single_admin",)
+        assert cursor.fetchone() == ("0018_session_biometrics",)
 
         cursor.execute(
             """
@@ -178,6 +178,16 @@ def main() -> None:
         assert admin_index is not None
         assert "UNIQUE INDEX" in admin_index[0]
         assert "WHERE (is_admin IS TRUE)" in admin_index[0]
+
+        cursor.execute(
+            """
+            SELECT count(*)
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'session_biometric_credentials'
+            """
+        )
+        assert cursor.fetchone() == (1,)
 
     alembic("downgrade", "base")
     print("PHONE_MIGRATION_UPGRADE_OK")
