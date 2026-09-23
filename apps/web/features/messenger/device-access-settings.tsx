@@ -243,13 +243,20 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
             ? `${biometricLabel} can unlock this session. PIN and account password remain available.`
             : `Use ${biometricLabel} for quick unlock on this iPhone. The private key never leaves the Secure Enclave.`}
         </p>
-        {biometricEnabled
-          ? <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void disableBiometric()}>
+        {biometricEnabled ? (
+          <>
+            <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void enableBiometric()}>
+              {biometricBusy ? "Updating…" : `Re-enroll ${biometricLabel}`}
+            </button>
+            <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void disableBiometric()}>
               {biometricBusy ? "Updating…" : `Disable ${biometricLabel}`}
             </button>
-          : <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void enableBiometric()}>
-              {biometricBusy ? "Setting up…" : `Enable ${biometricLabel}`}
-            </button>}
+          </>
+        ) : (
+          <button type="button" className="secondary-button" disabled={busy || biometricBusy} onClick={() => void enableBiometric()}>
+            {biometricBusy ? "Setting up…" : `Enable ${biometricLabel}`}
+          </button>
+        )}
       </div>
     )}
 
