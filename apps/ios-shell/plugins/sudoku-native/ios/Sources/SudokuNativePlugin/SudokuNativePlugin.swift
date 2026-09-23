@@ -3,6 +3,7 @@ import Capacitor
 import Contacts
 import ContactsUI
 import LocalAuthentication
+import UIKit
 
 @objc(SudokuNativePlugin)
 public final class SudokuNativePlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDelegate {
@@ -15,6 +16,71 @@ public final class SudokuNativePlugin: CAPPlugin, CAPBridgedPlugin, CNContactPic
     ]
 
     private var contactCall: CAPPluginCall?
+    private var privacyCover: UIView?
+
+    override public func load() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(showPrivacyCover),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(hidePrivacyCover),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func showPrivacyCover() {
+        DispatchQueue.main.async { [weak self] in
+            guard
+                let self,
+                self.privacyCover == nil,
+                let hostView = self.bridge?.viewController?.view
+            else {
+                return
+            }
+
+            let cover = UIView(frame: hostView.bounds)
+            cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            cover.backgroundColor = UIColor(
+                red: 247.0 / 255.0,
+                green: 245.0 / 255.0,
+                blue: 239.0 / 255.0,
+                alpha: 1.0
+            )
+            cover.isUserInteractionEnabled = true
+            cover.accessibilityIdentifier = "sudoku-native-privacy-cover"
+
+            let title = UILabel()
+            title.translatesAutoresizingMaskIntoConstraints = false
+            title.text = "Sudoku"
+            title.font = .systemFont(ofSize: 26, weight: .semibold)
+            title.textColor = .label
+            cover.addSubview(title)
+
+            NSLayoutConstraint.activate([
+                title.centerXAnchor.constraint(equalTo: cover.centerXAnchor),
+                title.centerYAnchor.constraint(equalTo: cover.centerYAnchor)
+            ])
+
+            hostView.addSubview(cover)
+            self.privacyCover = cover
+        }
+    }
+
+    @objc private func hidePrivacyCover() {
+        DispatchQueue.main.async { [weak self] in
+            self?.privacyCover?.removeFromSuperview()
+            self?.privacyCover = nil
+        }
+    }
 
     @objc public func selectContacts(_ call: CAPPluginCall) {
         guard contactCall == nil else {
