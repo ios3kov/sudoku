@@ -15,7 +15,7 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
 
 export const messengerApi = {
   me: () => request<CurrentUser>("/v1/me"),
-  createInvite: (phone: string | null) => request<CreatedInvite>("/v1/invites", {
+  createInvite: (phone: string) => request<CreatedInvite>("/v1/invites", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ phone, expires_hours: 168, max_uses: 1 }),
