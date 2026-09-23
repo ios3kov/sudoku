@@ -82,6 +82,7 @@ def _user_response(user: User) -> UserResponse:
     return UserResponse(
         id=user.id,
         phone_e164=user.phone_e164,
+        phone_verified=user.phone_verified_at is not None,
         email=user.email,
         display_name=user.display_name,
         is_admin=user.is_admin,
@@ -107,7 +108,12 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
         if payload.phone is not None:
             identifier = normalize_phone_e164(payload.phone)
             user = (
-                await db.execute(select(User).where(User.phone_e164 == identifier))
+                await db.execute(
+                    select(User).where(
+                        User.phone_e164 == identifier,
+                        User.phone_verified_at.is_not(None),
+                    )
+                )
             ).scalar_one_or_none()
         else:
             # Temporary migration-only compatibility: once an account has a
@@ -117,7 +123,7 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
                 await db.execute(
                     select(User).where(
                         User.email == identifier,
-                        User.phone_e164.is_(None),
+                        User.phone_verified_at.is_(None),
                     )
                 )
             ).scalar_one_or_none()
@@ -228,6 +234,7 @@ async def update_phone(
     phone_changed = auth.user.phone_e164 != phone
     auth.user.phone_e164 = phone
     if phone_changed:
+        auth.user.phone_verified_at = None
         # A saved phone-book edge proves knowledge of the old number only.
         # Other users must resync before they can address this new identity.
         await db.execute(
@@ -379,6 +386,7 @@ async def accept_invite(payload: InviteAcceptRequest, request: Request, response
     user = User(
         email=email,
         phone_e164=phone,
+        phone_verified_at=datetime.now(UTC) if phone is not None else None,
         display_name=payload.display_name.strip(),
         password_hash=hash_password(payload.password),
         status="active",
