@@ -1,12 +1,24 @@
 # Progress
 
-## Current release-prep gate — phone/contact production rollout blocked
+## Current milestone — native iOS production program
 
-Date: 2026-09-23. Repository code/QA is ready, but production rollout is not yet authorized by evidence. The live hidden Messenger still shows Email login, confirming the phone/contact release is not deployed. The app readiness endpoint reports ready, but external HTTPS checks for `assets.sudoku.moscow` time out even though DNS resolves to the expected Selectel IPv4 and has no AAAA/CNAME.
+Date: 2026-09-23.
 
-The repository-side legacy migration gate is now closed: PR #59 reviewed head `1e3d4dcfc4bdb579664cf09721ad5cc021bcd577` passed the full workflow set, including an explicit existing-data `0015_session_pins → 0016_phone_contacts` upgrade, and was merged as `0394298d122876edfa8ddf9a9443ffc6db24a407`.
+The phone/contact release is now live on production commit `c0f71313b92aaa8206eda036ecb819f796854f30`. Database migration `0016_phone_contacts` is applied, readiness is healthy, the live smoke passes, phone login works for the migrated administrator, and the four-digit PIN + reload path returns to secure messaging without the previous restart-required failure.
 
-Host-side backup, production preflight/deployment, persistence/reboot verification and restore drill remain blocked until authenticated Selectel/SSH access is available and the asset-host edge failure is diagnosed. See [Step70](steps/70-live-verification.md).
+A consistent production backup `20260923T160722Z` was created with the maintenance backup script, its PostgreSQL dump and checksum manifest were verified, the live MinIO bucket contained zero objects, and the backup was copied to encrypted/off-host operator storage where checksums were verified again.
+
+The next product track is a native iOS client shell rather than further PWA-only work. The target keeps the existing Next.js UI, FastAPI backend and MLS protocol while adding a narrow native capability layer for explicit iPhone contact selection, biometric unlock, app-switcher privacy and native media/file pickers. See [Step88](steps/88-native-ios-production-plan.md).
+
+The global administration model is also being tightened: production remains invite-only and the database will enforce at most one global administrator. Only that singleton administrator may create or revoke account invitations. Conversation-local owner roles do not grant global invite rights.
+
+Still open before a production iOS/App Store claim:
+- second-account live invite/contact ACL verification;
+- contact removal -> direct-send denial verification;
+- two-device MLS direct/group/media/revocation acceptance;
+- host reboot persistence;
+- destructive PostgreSQL + encrypted-object restore drill;
+- native iOS implementation, physical-device QA and TestFlight/App Store gates.
 
 ## Current milestone — repository hygiene after final QA
 
