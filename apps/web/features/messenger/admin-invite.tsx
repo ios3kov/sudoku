@@ -17,8 +17,13 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
     setToken(null);
     const data = new FormData(event.currentTarget);
     const phone = String(data.get("phone") ?? "").trim();
+    if (!phone) {
+      setSubmitting(false);
+      setError("Phone number is required");
+      return;
+    }
     try {
-      const invite = await messengerApi.createInvite(phone || null);
+      const invite = await messengerApi.createInvite(phone);
       setToken(invite.token);
       setExpiresAt(invite.expires_at);
     } catch (requestError) {
