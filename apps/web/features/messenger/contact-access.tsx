@@ -5,7 +5,6 @@ import { messengerApi } from "./api";
 
 type PickerContact = { name?: string[]; tel?: string[] };
 type ContactsManagerLike = {
-  getProperties: () => Promise<string[]>;
   select: (properties: string[], options?: { multiple?: boolean }) => Promise<PickerContact[]>;
 };
 
@@ -43,12 +42,9 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
     if (!contacts || busy) return;
     setBusy(true); setError(null); setNotice(null);
     try {
-      const properties = await contacts.getProperties();
-      if (!properties.includes("tel")) throw new Error("Phone numbers are unavailable");
-      const selected = await contacts.select(
-        properties.includes("name") ? ["name", "tel"] : ["tel"],
-        { multiple: true },
-      );
+      // Call select() directly from the click handler: Contact Picker requires
+      // transient user activation and must not be delayed behind another await.
+      const selected = await contacts.select(["tel"], { multiple: true });
       const phones = selected.flatMap((item) => item.tel ?? []);
       const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
       if (normalized.length === 0) {
