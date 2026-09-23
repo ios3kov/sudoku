@@ -7,11 +7,13 @@ import { GroupSettings } from "../../../features/messenger/group-settings";
 import { MessageSearch } from "../../../features/messenger/message-search";
 import { NewChat } from "../../../features/messenger/new-chat";
 import { SecurityVerification } from "../../../features/messenger/security-verification";
+import { ProtectedAttachment } from "../../../features/messenger/protected-attachment";
+import { acceptUnlock, accessEpoch } from "../../../features/messenger/device-access";
 import { messengerApi } from "../../../features/messenger/api";
 import type { OpenMlsProtocolAdapter } from "../../../features/messenger/crypto/openmls-adapter";
-import type { Conversation, CurrentUser, DeviceSession, Message } from "../../../features/messenger/types";
+import type { AssetSummary, Conversation, CurrentUser, DeviceSession, Message } from "../../../features/messenger/types";
 
-type Mode = "invite" | "preferences" | "sessions" | "search" | "security" | "group" | "new-chat";
+type Mode = "invite" | "preferences" | "sessions" | "search" | "security" | "group" | "new-chat" | "protected";
 
 const calls = {
   invites: [] as Array<string | null>,
@@ -81,6 +83,15 @@ let sessions: DeviceSession[] = [
     current: false,
   },
 ];
+
+const legacyAsset = {
+  id: "00000000-0000-4000-8000-000000000001",
+  filename: "legacy.txt",
+  mime_type: "text/plain",
+  size_bytes: 10,
+  content_url: "/v1/assets/00000000-0000-4000-8000-000000000001/content",
+  e2ee_ciphertext: false,
+} as unknown as AssetSummary;
 
 const message = {
   id: "message-1",
@@ -171,6 +182,12 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const remove = (body as {pin?: string | null} | null)?.pin === null;
     return Response.json({ pin_enabled: !remove, unlock_token: remove ? null : "a".repeat(43) });
   }
+  if (path === "/v1/assets/00000000-0000-4000-8000-000000000001/download-url") {
+    return Response.json({ url: "https://assets.example.test/signed" });
+  }
+  if (path === "https://assets.example.test/signed") {
+    return new Response(new Blob(["legacy-data"], { type: "text/plain" }), { status: 200 });
+  }
   return nativeFetch(input, init);
 };
 
@@ -257,6 +274,11 @@ function NewChatFixture() {
   /> : <p>new chat closed</p>}{created ? <p>created {created}</p> : null}</Frame>;
 }
 
+function ProtectedFixture() {
+  acceptUnlock("b".repeat(43), accessEpoch());
+  return <main><ProtectedAttachment asset={legacyAsset} voice={false} /></main>;
+}
+
 const root = createRoot(document.getElementById("root")!);
 function mount(mode: Mode) {
   if (mode === "invite") root.render(<InviteFixture />);
@@ -266,6 +288,7 @@ function mount(mode: Mode) {
   if (mode === "security") root.render(<SecurityFixture />);
   if (mode === "group") root.render(<GroupFixture />);
   if (mode === "new-chat") root.render(<NewChatFixture />);
+  if (mode === "protected") root.render(<ProtectedFixture />);
 }
 
 window.__buttonAudit = { calls, mount };
