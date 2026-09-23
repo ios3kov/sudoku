@@ -5,6 +5,7 @@ import { messengerApi } from "./api";
 
 type PickerContact = { name?: string[]; tel?: string[] };
 type ContactsManagerLike = {
+  getProperties: () => Promise<string[]>;
   select: (properties: string[], options?: { multiple?: boolean }) => Promise<PickerContact[]>;
 };
 
@@ -22,10 +23,22 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   const [pickerAvailable, setPickerAvailable] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const manager = (navigator as Navigator & { contacts?: ContactsManagerLike }).contacts ?? null;
     contactsRef.current = manager;
-    setPickerAvailable(Boolean(manager));
-    return () => { contactsRef.current = null; };
+    if (manager) {
+      void manager.getProperties()
+        .then((properties) => {
+          if (!cancelled) setPickerAvailable(properties.includes("tel"));
+        })
+        .catch(() => {
+          if (!cancelled) setPickerAvailable(false);
+        });
+    }
+    return () => {
+      cancelled = true;
+      contactsRef.current = null;
+    };
   }, []);
 
   async function syncPhones(phones: string[]) {
