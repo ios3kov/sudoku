@@ -22,7 +22,9 @@ def upgrade() -> None:
             sa.ForeignKey("sessions.id", ondelete="CASCADE"),
             primary_key=True,
         ),
-        sa.Column("public_key_x963", sa.LargeBinary(), nullable=False),
+        sa.Column("public_key_x963", sa.LargeBinary(length=65), nullable=False),
+        sa.Column("challenge_hash", sa.LargeBinary(length=32), nullable=True),
+        sa.Column("challenge_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
