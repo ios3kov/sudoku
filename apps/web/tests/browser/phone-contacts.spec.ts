@@ -75,3 +75,23 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
   await expect(page.getByRole("status")).toContainText("1 registered contact");
   await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
 });
+
+
+test("Contacts panel lists and removes an allowed contact", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(3));
+
+  await page.getByRole("button", { name: "Contacts", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  await expect(panel).toBeVisible();
+
+  await panel.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(5));
+  await panel.getByRole("button", { name: "Add contact", exact: true }).click();
+  await expect(panel.getByText(testPhone(5), { exact: true })).toBeVisible();
+
+  await panel.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(panel.getByText(testPhone(5), { exact: true })).toHaveCount(0);
+
+  await panel.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(panel).toHaveCount(0);
+});
