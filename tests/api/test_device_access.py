@@ -116,6 +116,13 @@ async def test_native_biometric_challenge_is_session_bound_one_time_and_pin_gate
             )
         ).status_code == 423
 
+        wrong_password = await client.put(
+            ROOT + "/biometric",
+            headers={HEADER: token},
+            json={"public_key_x963_b64": public_key_b64, "password": "wrong"},
+        )
+        assert wrong_password.status_code == 403
+
         enrolled = await client.put(
             ROOT + "/biometric",
             headers={HEADER: token},
