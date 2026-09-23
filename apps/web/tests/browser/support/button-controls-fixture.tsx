@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { AdminInvite } from "../../../features/messenger/admin-invite";
 import { ConversationPreferences } from "../../../features/messenger/conversation-preferences";
@@ -181,7 +181,7 @@ const adapter = {
   },
 } as unknown as OpenMlsProtocolAdapter;
 
-function Frame({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function Frame({ children, onClose }: { children: ReactNode; onClose: () => void }) {
   return <main><button type="button" onClick={onClose}>Fixture close</button>{children}</main>;
 }
 
