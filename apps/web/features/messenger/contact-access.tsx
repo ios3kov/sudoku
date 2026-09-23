@@ -19,7 +19,9 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const contacts = (navigator as Navigator & { contacts?: ContactsManagerLike }).contacts;
+  const contacts = typeof navigator === "undefined"
+    ? undefined
+    : (navigator as Navigator & { contacts?: ContactsManagerLike }).contacts;
   const pickerAvailable = Boolean(contacts);
 
   async function syncPhones(phones: string[]) {
