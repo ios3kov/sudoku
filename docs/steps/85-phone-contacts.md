@@ -95,3 +95,20 @@ Before production:
 6. run live smoke plus member/admin phone login, PIN unlock, Contact Picker/manual fallback, contact removal and E2EE send tests.
 
 No production command, migration, restart or secret change was executed in this step.
+
+
+## Production follow-up — 2026-09-23
+
+The release boundary described above was subsequently executed.
+
+- production source: `c0f71313b92aaa8206eda036ecb819f796854f30`;
+- `0016_phone_contacts` is the live database head;
+- a fresh consistent backup was created, verified and copied off-host before deployment;
+- production preflight and live smoke passed;
+- the existing administrator account was migrated to a verified phone identity;
+- live administrator phone login passed;
+- PIN + literal reload passed without the earlier secure-messaging restart-required state.
+
+Physical iPhone testing also established the product limit that triggers the next step: Safari/PWA cannot provide the desired reliable system phone-book flow. Native iOS contact selection is therefore tracked in [Step88](88-native-ios-production-plan.md). Manual E.164 entry remains the supported web/PWA fallback.
+
+Full contact authorization and two-device E2EE live acceptance remain open in Step70.
