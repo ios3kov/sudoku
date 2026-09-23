@@ -6,3 +6,7 @@
 .device-pin-input { letter-spacing: .35em; font-size: 20px !important; }
 .device-access-panel button { min-height: 44px; }
 .device-access-help { font-size: 14px; line-height: 1.5; color: #475569; }
+
+.device-pin-onboarding .device-access-prompt { margin: 10px 0 4px; font-size: 18px; line-height: 1.35; font-weight: 600; }
+.device-access-actions { display: grid; gap: 10px; margin-top: 18px; }
+.device-access-actions button { min-height: 44px; }

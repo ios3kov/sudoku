@@ -1,8 +1,16 @@
 # Progress
 
-## Current milestone — device PIN merged; release verification
+## Current work — PIN onboarding + secure reload recovery
 
-Date: 2026-09-22. [PR #40](https://github.com/ios3kov/sudoku/pull/40) is merged as application candidate `5205a4add164fdf84702afea870040413e5acfb9`. The PIN feature has not been deployed by this step.
+Date: 2026-09-23. Draft PR #45 (`fix/reload-pin-onboarding`) moves optional PIN enrollment into the first successful password-login flow for members and administrators and fixes the OpenMLS stale-writer race observed across reload/pagehide. The existing server PIN schema, session UUID device identity and MLS wire format are unchanged.
+
+The reload fix retires the old browser adapter synchronously before page destruction/background concealment so its unfinished async work cannot overwrite or conflict with a freshly rehydrated IndexedDB snapshot. The optimistic concurrency guard remains fail-closed. Browser acceptance now requires a literal reload followed by PIN unlock and a fully ready secure-messaging runtime with no restart banner.
+
+This work is not merged or deployed. Exact branch-head CI and browser acceptance remain the release gate. See [Step84](steps/84-pin-onboarding-reload-recovery.md).
+
+## Previous milestone — device PIN production rollout
+
+Date: 2026-09-23. [PR #40](https://github.com/ios3kov/sudoku/pull/40) was merged, and the production rollout completed on application commit `7ae408baf61f7fd978735773d82d038ce4d1cdc4`. [Step83](steps/83-pin-production-deploy.md) records the migration to `0015_session_pins`, service verification and production smoke. Manual UX acceptance remained open and led to the follow-up work in Step84.
 
 The merged source tree `38c0e5ee3188d314272371457daf2b37e8128983` exactly matches reviewed head `a2d86e2a5b1db458b5eff761583a2f6ff26d93d1`. All three PR workflows passed. [Step79](steps/79-device-pin-merge.md) records exact post-merge runs, their final decision, documentation checks and the next release boundary. Earlier pending/branch-only checkpoints in Step78 and the feature audit are historical; Step79 supersedes their status, not their limitations.
 

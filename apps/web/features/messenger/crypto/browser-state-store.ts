@@ -137,9 +137,15 @@ export class BrowserProtocolStateStore {
     }
   }
 
-  async delete(id: string): Promise<void> {
+  close(id: string): void {
+    // Synchronously retire one adapter's view of this state. This blocks stale
+    // async writes during pagehide/unmount without deleting durable MLS state.
     this.closed.add(id);
     this.observed.delete(id);
+  }
+
+  async delete(id: string): Promise<void> {
+    this.close(id);
     const db = await openDatabase();
     try {
       await requestInTransaction(db, STATE_STORE, "readwrite", (store) => store.delete(id));

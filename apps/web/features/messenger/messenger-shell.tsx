@@ -111,28 +111,41 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
   useEffect(() => {
     let cancelled = false;
+    let adapter: OpenMlsProtocolAdapter | null = null;
+
+    // pagehide can destroy the document before React cleanup finishes. Retire
+    // the adapter synchronously so an old page cannot write MLS state after a
+    // reloaded page has already rehydrated the same device state.
+    const retireAdapter = () => { adapter?.retire(); };
+    const retireWhenHidden = () => {
+      if (document.visibilityState === "hidden") retireAdapter();
+    };
+    window.addEventListener("pagehide", retireAdapter);
+    document.addEventListener("visibilitychange", retireWhenHidden);
 
     void (async () => {
       try {
         const sessions = await messengerApi.sessions();
+        if (cancelled) return;
         const current = sessions.find((session) => session.current);
         if (!current) throw new Error("Current device session is unavailable");
 
-        const adapter = new OpenMlsProtocolAdapter({
+        const currentAdapter = new OpenMlsProtocolAdapter({
           userId: user.id,
           deviceId: current.id,
         });
-        await adapter.initialize();
+        adapter = currentAdapter;
+        await currentAdapter.initialize();
 
-        if (cancelled) return;
-        e2eeRef.current = adapter;
-        setE2eeAdapter(adapter);
+        if (cancelled) { currentAdapter.retire(); return; }
+        e2eeRef.current = currentAdapter;
+        setE2eeAdapter(currentAdapter);
         setE2eeState("ready");
 
         const latestConversations = sortConversations(
           await messengerApi.conversations(),
         );
-        if (cancelled) return;
+        if (cancelled) { currentAdapter.retire(); return; }
         conversationsRef.current = latestConversations;
         setConversations(latestConversations);
 
@@ -140,14 +153,15 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
           (conversation) => conversation.encryption_required && conversation.e2ee_ready,
         );
         for (const conversation of encryptedConversations) {
+          if (cancelled) return;
           // Unified transport is authoritative for recovery. It includes both
           // MLS control events and application messages in one durable order,
           // so a Welcome must never be consumed first through the legacy
           // control-only feed and then replayed from transport sequence 0.
-          await adapter.syncTransport(conversation.id);
-          if (adapter.trackedConversationIds().includes(conversation.id)) {
-            await reconcileDeviceChange(adapter, conversation.id);
-            await adapter.syncTransport(conversation.id);
+          await currentAdapter.syncTransport(conversation.id);
+          if (currentAdapter.trackedConversationIds().includes(conversation.id)) {
+            await reconcileDeviceChange(currentAdapter, conversation.id);
+            await currentAdapter.syncTransport(conversation.id);
           }
         }
       } catch {
@@ -161,6 +175,9 @@ export function MessengerShell({ user, onHide, onLoggedOut }: { user: CurrentUse
 
     return () => {
       cancelled = true;
+      adapter?.retire();
+      window.removeEventListener("pagehide", retireAdapter);
+      document.removeEventListener("visibilitychange", retireWhenHidden);
       e2eeRef.current = null;
     };
   }, [reconcileDeviceChange, user.id]);

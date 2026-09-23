@@ -71,6 +71,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   private provider: Provider | null = null;
   private identity: DeviceIdentity | null = null;
   private localState: LocalMlsStateV1 | null = null;
+  private retired = false;
   private readonly stateStore: BrowserProtocolStateStore;
   private readonly stateKey: string;
   private operationQueue: Promise<void> = Promise.resolve();
@@ -85,10 +86,17 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   }
 
   get ready(): boolean {
-    return Boolean(this.module && this.provider && this.identity && this.localState);
+    return Boolean(!this.retired && this.module && this.provider && this.identity && this.localState);
+  }
+
+  retire(): void {
+    if (this.retired) return;
+    this.retired = true;
+    this.stateStore.close(this.stateKey);
   }
 
   async initialize(): Promise<void> {
+    this.assertActive();
     const previous = initializationQueues.get(this.stateKey) ?? Promise.resolve();
     const current = previous
       .catch(() => undefined)
@@ -105,8 +113,11 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   }
 
   private async initializeUnlocked(): Promise<void> {
+    this.assertActive();
     const wasm = await loadOpenMlsWasm();
+    this.assertActive();
     const stored = await this.stateStore.get(this.stateKey);
+    this.assertActive();
 
     let provider: Provider;
     let identity: DeviceIdentity;
@@ -137,9 +148,12 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         transportCursors: {},
         trackedConversations: [],
       };
+      this.assertActive();
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
+      this.assertActive();
     }
 
+    this.assertActive();
     this.module = wasm;
     this.provider = provider;
     this.identity = identity;
@@ -149,6 +163,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       this.options.deviceId,
       bytesToBase64(identity.publicKeyBytes()),
     );
+    this.assertActive();
     await this.flushPendingKeyPackages();
     await this.flushPendingOutboundTransition();
     await this.flushPendingApplicationSends();
@@ -1748,19 +1763,26 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     }
   }
 
+  private assertActive(): void {
+    if (this.retired) throw new Error("OpenMLS adapter is retired");
+  }
+
   private assertReady(): void {
+    this.assertActive();
     if (!this.ready) {
       throw new Error("OpenMLS adapter is not initialized");
     }
   }
 
   private async enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    this.assertActive();
     const previous = this.operationQueue;
     let release: () => void = () => undefined;
     this.operationQueue = new Promise<void>((resolve) => {
       release = resolve;
     });
     await previous;
+    this.assertActive();
     try {
       return await operation();
     } finally {
