@@ -3,13 +3,17 @@
 ## `users`
 
 - `id uuid pk`
-- `email varchar(320) unique`
+- `email varchar(320) unique null`
+- `phone_e164 varchar(16) unique null`
+- `phone_verified_at timestamptz null`
 - `display_name varchar(120)`
 - `password_hash varchar(512)`
 - `status varchar(32)`
 - `is_admin boolean`
 - `created_at timestamptz`
 - `last_seen_at timestamptz null`
+
+Production enforces a partial unique index on `is_admin = true`, so at most one global administrator can exist.
 
 ## `sessions`
 
@@ -26,6 +30,7 @@
 - `id uuid pk`
 - `token_hash bytea(32) unique`
 - `email varchar(320) null`
+- `phone_e164 varchar(16) null`
 - `created_by uuid fk users null`
 - `expires_at timestamptz`
 - `max_uses int`
@@ -142,7 +147,17 @@ Message bodies are deliberately not stored in audit records.
 
 ## `login_attempts`
 
-Stores a SHA-256 email audit hash, success flag and timestamp; it does not store the submitted password.
+Stores a SHA-256 normalized login-identifier audit hash, success flag and timestamp. The identifier may be a phone number or legacy email; raw identifiers and submitted passwords are not stored in this table.
+
+## `user_contacts`
+
+- `owner_user_id uuid fk users`
+- `contact_user_id uuid fk users`
+- `created_at timestamptz`
+- primary key `(owner_user_id, contact_user_id)`
+- check `owner_user_id <> contact_user_id`
+
+Only matched registered-user edges are persisted. The server does not store unmatched phone-book entries or a complete device address book.
 
 
 ## `mls_devices`
