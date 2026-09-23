@@ -77,7 +77,7 @@ test("native iOS contact bridge syncs only explicitly selected phones", async ({
         Plugins: {
           SudokuNative: {
             selectContacts: async () => ({
-              contacts: [{ name: ["PIN Member"], tel: [selectedPhone] }],
+              contacts: [{ name: ["PIN Member"], tel: [selectedPhone, "067 123 456"] }],
             }),
           },
         },
