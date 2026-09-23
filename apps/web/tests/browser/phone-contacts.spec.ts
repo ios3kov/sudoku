@@ -64,6 +64,27 @@ test("system contact picker sync exposes only selected registered contacts", asy
   await expect(directory.filter({ hasText: testPhone(3) })).toBeVisible();
 });
 
+
+test("native iOS contact bridge syncs only explicitly selected phones", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.addInitScript(({ selectedPhone }) => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["PIN Member"], tel: [selectedPhone] }],
+      },
+    });
+  }, { selectedPhone: testPhone(2) });
+
+  await login(page, testPhone(5));
+  await page.getByRole("button", { name: "New secure chat", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("1 registered contact");
+  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+});
+
 test("manual phone fallback syncs a contact when picker is unavailable", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(4));
