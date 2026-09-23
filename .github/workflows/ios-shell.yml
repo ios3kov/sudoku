@@ -1,0 +1,51 @@
+name: ios-shell
+
+on:
+  pull_request:
+    paths:
+      - "apps/ios-shell/**"
+      - "apps/web/features/messenger/native-contact-access.ts"
+      - ".github/workflows/ios-shell.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/ios-shell/**"
+      - "apps/web/features/messenger/native-contact-access.ts"
+      - ".github/workflows/ios-shell.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/ios-shell
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pinned Capacitor dependencies
+        run: npm install --package-lock=false
+
+      - name: Generate iOS project
+        env:
+          SUDOKU_IOS_REMOTE_URL: https://sudoku.moscow
+        run: npx cap add ios
+
+      - name: Sync native plugin
+        env:
+          SUDOKU_IOS_REMOTE_URL: https://sudoku.moscow
+        run: npx cap sync ios
+
+      - name: Configure generated iOS privacy strings
+        run: bash scripts/configure-generated-ios.sh
+
+      - name: Build iPhone Simulator app
+        run: |
+          xcodebuild             -project ios/App/App.xcodeproj             -scheme App             -sdk iphonesimulator             -configuration Debug             CODE_SIGNING_ALLOWED=NO             build
