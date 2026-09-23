@@ -10,7 +10,7 @@ fi
 
 export SUDOKU_IOS_REMOTE_URL="${SUDOKU_IOS_REMOTE_URL:-https://sudoku.moscow}"
 
-npm install --package-lock=false
+npm install
 
 if [[ ! -d ios ]]; then
   npx cap add ios
