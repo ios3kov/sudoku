@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "SudokuNative",
+    name: "SudokuCapacitorNative",
     platforms: [.iOS(.v15)],
     products: [
-        .library(name: "SudokuNative", targets: ["SudokuNativePlugin"])
+        .library(name: "SudokuCapacitorNative", targets: ["SudokuNativePlugin"])
     ],
     dependencies: [
         .package(
