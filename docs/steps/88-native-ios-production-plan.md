@@ -15,6 +15,15 @@ Evolve Sudoku Messenger from a PWA-only product into a dual-client product:
 
 This is a product hardening program, not a rewrite. Native Android is explicitly out of scope unless later Android/PWA QA exposes a platform limitation that materially requires it.
 
+## Implementation status — 2026-09-24
+
+- P0.1 singleton-admin invariant: merged in PR #62; migration `0017_single_admin` is not yet deployed to production.
+- P0.2 first-party native Swift/UIKit host: merged in PR #65 as `cd0d91657e0654a91c2e70f9c1400dd60b602059`; exact post-merge CI/device-access/beat-runtime/ios-native/api-shutdown are green.
+- P0.3 native Contacts UI picker bridge: implemented in the merged iOS host; physical-iPhone acceptance remains open.
+- P0.5 synchronous native app-switcher privacy cover: implemented in the merged iOS host; physical-iPhone acceptance remains open.
+- P0.4 biometric quick unlock and P0.6 native Photos/Files selection: active implementation is [Step89](89-ios-biometric-media.md) on `feat/ios-biometric-media`; do not mark complete until exact-head CI and physical-device acceptance pass.
+- Android remains Web/PWA for this production cycle.
+
 ## Product rules
 
 1. **Exactly one global administrator**
@@ -70,11 +79,9 @@ The first iOS candidate uses a small first-party Swift host with a persistent `W
 Expose only narrow, auditable capabilities to the web UI:
 
 - `contacts.select()` -> selected names/phone numbers only;
-- `localAuth.canEvaluate()`;
-- `localAuth.evaluate(reason)`;
-- `privacy.cover()/uncover()`;
-- `media.pickPhotos()`;
-- `media.pickFiles()`;
+- `biometric.status()` / `biometric.enroll(pin)` / `biometric.unlock()` / `biometric.clear()`;
+- native lifecycle privacy cover owned by the Swift host;
+- `media.pickAttachment()` -> one explicit Photos/Files selection;
 - later: `push.register()` for APNs token registration.
 
 Do not expose arbitrary filesystem, arbitrary URL loading, generic native execution or unrestricted address-book reads.
