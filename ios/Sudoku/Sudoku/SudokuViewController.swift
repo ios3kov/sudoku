@@ -10,6 +10,7 @@ final class SudokuViewController: UIViewController {
 
     private lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
         configuration.websiteDataStore = .default()
         configuration.limitsNavigationsToAppBoundDomains = true
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -18,6 +19,8 @@ final class SudokuViewController: UIViewController {
         controller.add(self, name: Self.contactHandlerName)
         biometricBridge.install(into: controller)
         mediaBridge.install(into: controller)
+        videoPlayback.install(into: controller)
+        videoPlayback.presenter = self
         controller.addUserScript(
             WKUserScript(
                 source: Self.contactBridgeScript,
@@ -42,6 +45,18 @@ final class SudokuViewController: UIViewController {
     private let privacyCover = PrivacyCoverView()
     private let biometricBridge = BiometricBridge()
     private let mediaBridge = NativeMediaBridge()
+    private let videoPlayback = NativeVideoPlayback()
+
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
+
+    func restorePortraitOrientation() {
+        if #available(iOS 16.0, *) {
+            setNeedsUpdateOfSupportedInterfaceOrientations()
+            view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        } else {
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
+    }
     private var pendingContactRequestID: String?
     private var webContentLoaded = false
 
@@ -87,6 +102,7 @@ final class SudokuViewController: UIViewController {
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.contactHandlerName
         )
+        videoPlayback.uninstall(from: webView.configuration.userContentController)
         biometricBridge.uninstall(
             from: webView.configuration.userContentController
         )
@@ -96,6 +112,7 @@ final class SudokuViewController: UIViewController {
     }
 
     func showPrivacyCover() {
+        videoPlayback.cancel()
         webView.accessibilityElementsHidden = true
         privacyCover.isHidden = false
         view.bringSubviewToFront(privacyCover)
@@ -261,6 +278,8 @@ extension SudokuViewController: WKNavigationDelegate {
             decisionHandler(.cancel)
             return
         }
+
+        if navigationAction.targetFrame?.isMainFrame == true { videoPlayback.cancel() }
 
         if url.scheme == "https", url.host == Self.trustedHost {
             decisionHandler(.allow)

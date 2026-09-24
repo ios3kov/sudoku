@@ -5,6 +5,7 @@ import { messengerApi } from "./api";
 import type { EncryptedAttachmentMetadata } from "./types";
 import { downloadEncryptedAsset } from "./uploads";
 import { formatBytes } from "./chat-utils";
+import { VideoAttachment } from "./video-attachment";
 import { VoiceMessagePlayback } from "./voice-waveform";
 
 export { isEncryptedAttachmentMetadata } from "./attachment-metadata";
@@ -116,6 +117,10 @@ export function EncryptedAttachment({
     } catch {
       // Visible state remains generic by design.
     }
+  }
+
+  if (metadata.originalMime.startsWith("video/")) {
+    return <VideoAttachment name={metadata.originalName} onLoad={decrypt} onRelease={releaseDecrypted} />;
   }
 
   if (state === "error") {

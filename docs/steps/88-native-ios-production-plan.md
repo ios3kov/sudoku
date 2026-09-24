@@ -46,7 +46,7 @@ This is a product hardening program, not a rewrite. Native Android is explicitly
 - Landscape is permitted only while playing a landscape video in the video player. Leaving playback must restore portrait orientation before returning to the application.
 - Portrait videos remain supported; this rule controls the application interface, not the orientation of files users may send.
 - Text can grow through iPhone accessibility settings while the interface remains within the mobile viewport; whole-page zoom is not the text-size mechanism.
-- The native host currently declares portrait only in `Info.plist`. The landscape video-player exception is a future implementation requirement, not completed acceptance.
+- The native root and app-delegate policy restrict ordinary UI to portrait. [Step99](99-private-video-playback.md) adds a dedicated landscape-video exception; the plist includes landscape only to support that player. Physical-device acceptance remains open.
 - Physical-iPhone acceptance must cover device rotation on ordinary screens, entering/exiting landscape video playback, background/foreground during playback, and large text without horizontal page overflow. These checks remain open.
 
 ```mermaid
