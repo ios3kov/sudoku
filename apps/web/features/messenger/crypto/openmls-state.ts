@@ -1,5 +1,4 @@
 import type { EncryptedEventRecord } from "@sudoku/domain";
-import { isEncryptedAttachmentMetadata } from "../attachment-metadata";
 import type {
   E2eeEnvelope,
   MlsControlBatchItem,
