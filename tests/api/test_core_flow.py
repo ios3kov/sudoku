@@ -312,6 +312,23 @@ async def test_e2ee_conversation_rejects_plaintext_and_stores_envelope_only() ->
         assert e2ee_complete.json()["filename"] == "encrypted.bin"
         assert e2ee_complete.json()["mime_type"] == "application/octet-stream"
 
+        # The signed creation condition prevents reuse from replacing ready bytes.
+        assert e2ee_intent_json["headers"]["If-None-Match"] == "*"
+        from urllib.parse import parse_qs, urlparse
+        signed_headers = parse_qs(urlparse(e2ee_intent_json["upload_url"]).query)["X-Amz-SignedHeaders"][0]
+        assert "if-none-match" in signed_headers.split(";")
+        async with httpx.AsyncClient() as storage_client:
+            repeated = await storage_client.put(
+                e2ee_intent_json["upload_url"],
+                content=b"changed-object",
+                headers=e2ee_intent_json["headers"],
+            )
+            assert repeated.status_code == 412, repeated.text
+        # Completion remains idempotent after an unsuccessful replacement.
+        assert (await client.post(
+            f"/v1/assets/{e2ee_intent_json['asset_id']}/complete"
+        )).status_code == 200
+
         encrypted_file = await client.post(
             f"/v1/conversations/{cid}/messages",
             json={

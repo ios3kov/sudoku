@@ -1,4 +1,3 @@
-import hashlib
 import re
 import uuid
 from datetime import UTC, datetime
@@ -11,6 +10,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..asset_integrity import read_asset_digest
 from ..db import get_db
 from ..deps import AuthContext, get_auth_context
 from ..metrics import record_asset_rejected, record_asset_verified
@@ -97,6 +97,7 @@ async def create_upload_intent(
         "Bucket": settings.s3_bucket,
         "Key": storage_key,
         "ContentType": payload.mime_type,
+        "IfNoneMatch": "*",
         "Metadata": {"sha256": payload.sha256_hex.lower()},
     }
     upload_url = s3_presign_client().generate_presigned_url(
@@ -110,6 +111,7 @@ async def create_upload_intent(
         upload_url=upload_url,
         headers={
             "Content-Type": payload.mime_type,
+            "If-None-Match": "*",
             "x-amz-meta-sha256": payload.sha256_hex.lower(),
         },
         expires_in=UPLOAD_TTL_SECONDS,
@@ -144,6 +146,7 @@ async def create_e2ee_upload_intent(
         "Bucket": settings.s3_bucket,
         "Key": storage_key,
         "ContentType": E2EE_CIPHERTEXT_MIME,
+        "IfNoneMatch": "*",
         "Metadata": {"sha256": digest, "e2ee": "1"},
     }
     upload_url = s3_presign_client().generate_presigned_url(
@@ -157,6 +160,7 @@ async def create_e2ee_upload_intent(
         upload_url=upload_url,
         headers={
             "Content-Type": E2EE_CIPHERTEXT_MIME,
+            "If-None-Match": "*",
             "x-amz-meta-sha256": digest,
             "x-amz-meta-e2ee": "1",
         },
@@ -187,22 +191,8 @@ async def complete_upload(
             raise ValueError("content-type")
 
         response = s3_client().get_object(Bucket=settings.s3_bucket, Key=asset.storage_key)
-        digest = hashlib.sha256()
-        prefix = bytearray()
-        total = 0
-        body = response["Body"]
-        try:
-            while True:
-                chunk = body.read(1024 * 1024)
-                if not chunk:
-                    break
-                total += len(chunk)
-                digest.update(chunk)
-                if len(prefix) < 4096:
-                    prefix.extend(chunk[: 4096 - len(prefix)])
-        finally:
-            body.close()
-        if total != asset.size_bytes or digest.digest() != asset.sha256:
+        digest, prefix = read_asset_digest(response["Body"], asset.size_bytes)
+        if digest != asset.sha256:
             raise ValueError("digest")
 
         if asset.e2ee_ciphertext:

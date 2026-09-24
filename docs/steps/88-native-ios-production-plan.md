@@ -423,4 +423,6 @@ Do not claim the native iOS release production-ready while any of these are true
 
 ## Definition of done
 
+The final audit and polish sequence is specified in [Step103](103-release-audit-program.md), approved 2026-09-24. It requires physical two-device evidence, technical/security and UX/UI reviews, measured profiling, targeted corrections and exact-candidate verification. Further maximum-text work is closed by operator decision; this does not close VoiceOver or broader physical acceptance. Earlier pending Dynamic Type entries are superseded for that limited scope.
+
 The program is complete when a user can install Sudoku from the App Store, use the real Sudoku shell, reveal the messenger, sign in by phone, unlock locally with PIN/biometrics, explicitly select iPhone contacts, communicate only with authorized registered contacts using MLS E2EE, send encrypted media/voice reliably, recover from network/background/reload events without duplicates, and keep private content out of the app switcher — while only the singleton administrator can issue account invitations.

@@ -1,5 +1,9 @@
 # Progress
 
+## Current program — release audit and polish
+
+2026-09-24: PR #83 and icon PR #84 are merged; current baseline is `a8001ceb4bb292a334e0359c78bb6fa624687b83`. The operator approved [Step103](steps/103-release-audit-program.md): physical two-device acceptance, technical/security audit, UX/UI audit, measured performance profiling, targeted fixes/refactoring and final candidate verification. [Initial findings](audits/release-baseline-2026-09-24.md) identify the offline-QA versus real-messaging environment boundary. Maximum-text work is closed by operator decision. VoiceOver, broader physical acceptance and release gates remain open. This checkpoint supersedes pending statuses below; those entries describe historical checkpoints.
+
 ## Working-tree checkpoint — application icon
 
 2026-09-24: The operator-selected CC0 Sudoku line-art mark is prepared as the shared native iPhone and web/PWA application icon. The packaging uses the existing warm surface and dark ink colors, keeps the artwork geometry unchanged, and generates opaque raster sizes from one SVG master. See [Step102](steps/102-app-icon.md). All raster dimensions and opacity checks, JSON parsing, zero-warning web lint, web type checking and the unsigned native iPhone build pass locally. Exact-head CI and final review remain pending; no production, TestFlight or App Store release was performed.

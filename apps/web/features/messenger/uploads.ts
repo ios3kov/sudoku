@@ -1,4 +1,5 @@
 import { privateFetch as fetch } from "./device-access";
+import { readBoundedDownload } from "./bounded-download";
 
 import type {
   AssetSummary,
@@ -223,7 +224,7 @@ export async function downloadEncryptedAsset(
   });
   if (!response.ok) throw new Error("Unable to download encrypted attachment");
 
-  const ciphertext = new Uint8Array(await response.arrayBuffer());
+  const ciphertext = await readBoundedDownload(response, metadata.plaintextSize + 16);
   if (await sha256Hex(ciphertext) !== metadata.ciphertextSha256Hex.toLowerCase()) {
     throw new Error("Encrypted attachment ciphertext digest mismatch");
   }

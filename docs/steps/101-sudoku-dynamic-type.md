@@ -1,5 +1,7 @@
 # Step 101 — Sudoku maximum Dynamic Type correction
 
+Superseding status, 2026-09-24: PR #83 merged as `6ed009061ebf571c8078875ea230caee30fff33d` after all applicable CI checks passed. The operator closed further large-text work. The remaining maximum-text confirmation below is historical and is no longer requested. This is a scope decision, not full accessibility/VoiceOver or physical-device acceptance.
+
 Date: 2026-09-24. Repository fix prepared after physical-iPhone evidence. Production remains unchanged.
 
 ## Physical finding
