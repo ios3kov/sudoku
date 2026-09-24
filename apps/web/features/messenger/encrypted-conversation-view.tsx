@@ -398,6 +398,7 @@ export function EncryptedConversationView({
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
       setRetryTick((value) => value + 1);
+      if (navigator.onLine) await refreshProjection();
     } catch {
       setError("Unable to remove queued encrypted message");
     }
