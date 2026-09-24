@@ -1,5 +1,7 @@
 import { chromium } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import { execFileSync } from "node:child_process";
 import buildFixture from "../apps/web/tests/browser/support/build-ux-fixture.mjs";
 const output = process.argv[2];
 const bundle = await buildFixture();
@@ -13,7 +15,10 @@ try {
   const metrics = async () => Object.fromEntries((await cdp.send("Performance.getMetrics")).metrics.map(m => [m.name,m.value]));
   await page.setContent('<div id="root"></div>'); await page.addStyleTag({content:styles}); await page.addScriptTag({content:bundle});
   await page.locator('[data-message-id="m140"]').waitFor();
-  const result = {engine:await browser.version(),cpuThrottle:4,viewport:[390,844],samples:[],heap:{}};
+  const result = {sourceSha:process.env.AUDIT_SOURCE_SHA || execFileSync("git", ["rev-parse", "HEAD"], {encoding:"utf8"}).trim(),
+    measuredAt:new Date().toISOString(),platform:process.platform,architecture:process.arch,
+    cpu:os.cpus()[0]?.model,node:process.version,fixtureMode:"production, unminified controlled components",
+    engine:await browser.version(),cpuThrottle:4,viewport:[390,844],samples:[],heap:{}};
   for (const count of [140,5000]) {
     await page.evaluate(count => window.__uxFixture.load(count),count);
     await page.locator(`[data-message-id="m${count}"]`).waitFor();
@@ -36,6 +41,7 @@ try {
       inputToTwoFramesMedianMs:frames[15],inputToTwoFramesP95Ms:frames[28],
       layoutCount:after.LayoutCount-before.LayoutCount,heapUsed:after.JSHeapUsedSize});
   }
+  if(output) await page.screenshot({path:output.replace(/\.json$/, ".png"), fullPage:true});
   await page.getByRole("button",{name:"Hide",exact:true}).click(); await cdp.send("HeapProfiler.collectGarbage");
   result.heap.hiddenBeforeCycles=(await metrics()).JSHeapUsedSize;
   for(let i=0;i<12;i++) {await page.getByRole("button",{name:"Show",exact:true}).click(); await page.getByLabel("Message",{exact:true}).fill("private draft");await page.getByRole("button",{name:"Hide",exact:true}).click();}

@@ -18,6 +18,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from sqlalchemy.engine import Engine
 
 from .config import get_settings
+from .trace_privacy import PrivateSpanExporter
 
 _config_lock = Lock()
 _telemetry_configured = False
@@ -137,7 +138,7 @@ def configure_telemetry(service_name: str, sqlalchemy_engine: Engine | None = No
         endpoint = settings.otel_exporter_otlp_endpoint
         if endpoint:
             tracer_provider.add_span_processor(
-                BatchSpanProcessor(OTLPSpanExporter(endpoint=_signal_endpoint(endpoint, "traces")))
+                BatchSpanProcessor(PrivateSpanExporter(OTLPSpanExporter(endpoint=_signal_endpoint(endpoint, "traces"))))
             )
             readers.append(
                 PeriodicExportingMetricReader(

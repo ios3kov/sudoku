@@ -2,6 +2,8 @@
 
 ## Current program — release audit and polish
 
+Consolidated audit: [release-audit-final-2026-09-24](audits/release-audit-final-2026-09-24.md) maps every Step103 area to reviewed evidence and remaining release gates. The current audit candidate fixes an experimentally confirmed trace-export privacy issue and adds three-run CI component profiling with retained raw evidence. Candidate CI is pending; physical acceptance, VoiceOver, device profiling and a real isolated restore drill are not closed.
+
 2026-09-24 latest checkpoint: PRs #86 and #87 are merged; baseline is `f7ba8fc`. Upload deadlines and encrypted-screen cancellation passed all applicable exact-head CI checks. Request-log privacy now has four local ASGI regression checks covering normalized access events and metric labels; complete logging-pipeline and exporter verification remains open. See the [audit register](audits/release-baseline-2026-09-24.md). No new physical acceptance or performance measurements are claimed; production remains unchanged.
 
 2026-09-24 audit checkpoint: PR #85 merged as `a3892f1` after all five exact-head checks passed, including real pinned MinIO conditional uploads. Bounded media reads and the OpenMLS artifact gate are verified automatically. Follow-up REL-009 bounds stalled upload PUTs to five minutes and handles interruption; eight transport regressions, web typecheck and zero-warning lint pass locally. Full follow-up CI is pending. See the [audit register](audits/release-baseline-2026-09-24.md). Physical acceptance, VoiceOver and measured performance remain open; no production deployment occurred.

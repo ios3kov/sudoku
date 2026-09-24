@@ -161,6 +161,25 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+      - name: Measure controlled messenger performance
+        env:
+          AUDIT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          mkdir -p audit-performance
+          for sample in 1 2 3; do
+            node scripts/profile-messenger.mjs "audit-performance/profile-${sample}.json"
+          done
+          node scripts/check-web-bundle-budget.mjs > audit-performance/bundle.json
+
+      - name: Retain performance measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: audit-performance/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Validate production operations scripts
         run: |
           bash -n \
