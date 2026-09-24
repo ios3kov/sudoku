@@ -45,6 +45,7 @@ code{overflow-wrap:anywhere}
 .private-reveal-layer.is-active{position:absolute;z-index:2;pointer-events:auto;transform:none;opacity:1;will-change:auto}
 .sudoku-reveal-screen{position:relative;z-index:3;min-height:100dvh;background:var(--bg);transform:translate3d(0,0,0);backface-visibility:hidden}
 .sudoku-reveal-screen::after{content:"";position:absolute;left:0;right:0;bottom:-20px;height:20px;pointer-events:none;box-shadow:0 18px 34px rgba(24,33,38,.22)}
+.sudoku-reveal-screen:not(.is-dragging):not(.is-returning):not(.is-unlocking)::after{box-shadow:none}
 .sudoku-reveal-screen.is-dragging,.sudoku-reveal-screen.is-returning,.sudoku-reveal-screen.is-unlocking{will-change:transform}
 .primary-button,.secondary-button,.text-button,.new-chat-button,.create-group-button,.action,.digit,.back-button,.attach-button,.voice-button,.hide-chat-button{
   border:0;border-radius:12px;padding:0 14px;font-weight:650;cursor:pointer

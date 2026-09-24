@@ -4,6 +4,7 @@ import UIKit
 import WebKit
 
 final class SudokuViewController: UIViewController {
+    private static let canvasColor = UIColor(red: 244 / 255.0, green: 241 / 255.0, blue: 232 / 255.0, alpha: 1)
     private static let appURL = URL(string: "https://sudoku.moscow/")!
     private static let trustedHost = "sudoku.moscow"
     private static let contactHandlerName = "sudokuContacts"
@@ -28,6 +29,23 @@ final class SudokuViewController: UIViewController {
                 forMainFrameOnly: true
             )
         )
+        // Compatibility with the currently hosted web release. New web styles
+        // retain these rules; this can be removed after their production release.
+        controller.addUserScript(WKUserScript(
+            source: """
+            if (location.protocol === "https:" && location.hostname === "sudoku.moscow") {
+              const style = document.createElement("style");
+              style.id = "sudoku-native-canvas";
+              style.textContent = `
+                .sudoku-reveal-screen:not(.is-dragging):not(.is-returning):not(.is-unlocking)::after { box-shadow:none !important; }
+                .page,.shell { padding-bottom:max(10px,env(safe-area-inset-bottom)) !important; }
+              `;
+              document.head.appendChild(style);
+            }
+            """,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -38,6 +56,24 @@ final class SudokuViewController: UIViewController {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsLinkPreview = false
+        // Prevent browser-style rubber banding without disabling nested chat
+        // scrolling or the web app's deliberate hold-5 reveal gesture.
+        if #available(iOS 26.0, *) {
+            // This full-screen canvas has no overlaid native bars to separate
+            // with UIKit's automatic scroll-edge shadows.
+            webView.scrollView.topEdgeEffect.isHidden = true
+            webView.scrollView.bottomEdgeEffect.isHidden = true
+            webView.scrollView.leftEdgeEffect.isHidden = true
+            webView.scrollView.rightEdgeEffect.isHidden = true
+        }
+        webView.scrollView.bounces = false
+        webView.scrollView.alwaysBounceVertical = false
+        webView.scrollView.alwaysBounceHorizontal = false
+        webView.scrollView.showsVerticalScrollIndicator = false
+        webView.scrollView.showsHorizontalScrollIndicator = false
+        webView.isOpaque = false
+        webView.backgroundColor = Self.canvasColor
+        webView.scrollView.backgroundColor = Self.canvasColor
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         return webView
     }()
@@ -63,17 +99,21 @@ final class SudokuViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        view.backgroundColor = UIColor(red: 0.969, green: 0.961, blue: 0.937, alpha: 1)
+        view.backgroundColor = Self.canvasColor
 
         privacyCover.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(webView)
         view.addSubview(privacyCover)
 
+        // Keep controls below the notch. Extend the web canvas under the home
+        // indicator so each screen paints its own background without a seam.
+        // Bottom control padding is supplied by CSS safe-area insets.
+        let contentArea = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.leadingAnchor.constraint(equalTo: contentArea.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: contentArea.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: contentArea.topAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             privacyCover.leadingAnchor.constraint(equalTo: view.leadingAnchor),
