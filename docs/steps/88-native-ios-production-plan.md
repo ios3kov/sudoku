@@ -357,6 +357,14 @@ Still open:
 - destructive restore drill;
 - native iOS implementation and physical-device acceptance.
 
+## Implementation status — 2026-09-24
+
+- PR #65 merged the first-party Swift/UIKit host and native Contacts bridge.
+- PR #67 merged Secure Enclave biometric challenge-response as `301ee0cc0719fac44d37c2c633734849b013a5da`; the four-digit PIN is not stored by native code.
+- [Step89](89-ios-biometric-media.md) tracks the native Photos/Files picker follow-up and privacy-manifest gate.
+- Android remains Web/PWA.
+- Production still runs the earlier server release and has not received migrations `0017_single_admin` or `0018_session_biometrics`.
+
 ## Stop conditions
 
 Do not claim the native iOS release production-ready while any of these are true:

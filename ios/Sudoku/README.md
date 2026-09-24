@@ -12,10 +12,12 @@ The native binary is intentionally small:
 - synchronous native privacy cover for app-switcher/background snapshots;
 - explicit system contact selection through `CNContactPickerViewController`;
 - Face ID / Touch ID unlock through a Secure Enclave P-256 key and LocalAuthentication;
-- no broad Contacts permission and no full address-book import;
-- no native plaintext messaging or attachment path.
+- native Photos selection through `PHPickerViewController`;
+- native Files selection through `UIDocumentPickerViewController`;
+- no broad Contacts or Photo Library permission;
+- no native plaintext upload path: selected files return to the existing web encryption/upload pipeline.
 
-The existing web client remains responsible for auth, PIN, MLS state, E2EE, contacts sync, conversations and encrypted attachments. Native biometrics never store the four-digit PIN: the Secure Enclave signs a one-time server challenge, and the server returns the same bounded unlock capability used by PIN unlock.
+The existing web client remains responsible for auth, PIN, MLS state, E2EE, contacts sync, conversations and encrypted attachments. Native biometrics never store the four-digit PIN: the Secure Enclave signs a one-time server challenge, and the server returns the same bounded unlock capability used by PIN unlock. Native media selection only supplies an explicitly selected browser `File`; encrypted conversations still encrypt bytes before object-store upload.
 
 ## Generate the Xcode project
 
