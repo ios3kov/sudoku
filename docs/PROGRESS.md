@@ -104,3 +104,5 @@ PR #72 is merged as `22e94a87bfbc3b1b40b54f381c263db412b38537`. PR #73 is merged
 [Step95](steps/95-media-storage-and-compression.md) adds the Russian private-S3, sender-side compression and non-destructive archive workstream to the production plan. The first repository slice is JPEG Standard/Original preparation before E2EE; voice/video preparation is now integrated through PR #78, while device quality acceptance, provider selection, tiering and production migration remain open.
 
 [Step96](steps/96-voice-recording-compression.md) is the voice-encoding follow-up: mono preference and a 32 kbit/s recording target, with platform fallback and real-encoder regression coverage. Physical-iPhone speech quality remains unverified.
+
+2026-09-24 follow-up: PR #80 (native layout) and #81 (offline Sudoku engine) merged after exact-head CI passed. The operator confirmed the lower strip is gone after the final reveal-shadow removal included in #82. Full game UI/startup PR #82 awaits its final CI; broader physical-device and accessibility acceptance remain open.

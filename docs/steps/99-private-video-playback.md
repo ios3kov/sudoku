@@ -51,3 +51,5 @@ Further on-device inspection identified two causes: the idle Sudoku `::after` re
 The first PR #80 general CI run exposed an ambiguous browser assertion: the invite error and Next.js route announcer both have `role=alert`. The assertion now targets the visible form error specifically. This was a test-selector failure, not an authentication bypass. Exact-head CI must be repeated after this change.
 
 The operator then reported the residual strip only under the Sudoku screen while sliding it upward. PR #82 removes the reveal pseudo-element entirely (including the gesture-time shadow) in web CSS and the native compatibility stylesheet. Static-screen improvement is distinguished from the final animation check, which remains pending.
+
+After the final PR #82 native compatibility change was installed, the operator explicitly confirmed the strip disappeared and the result is correct. Close only this visual defect; the broader physical-device acceptance checklist remains open.
