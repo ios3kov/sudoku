@@ -190,6 +190,10 @@ UX:
 - better media viewer;
 - accessibility labels, Dynamic Type and VoiceOver pass.
 
+### Mobile viewport and text sizing
+
+Per [ADR-020](../DECISIONS.md#adr-020--scale-text-inside-the-mobile-viewport-not-the-whole-messenger), the messenger stays within the phone viewport. Manual page zoom remains restricted. iOS Dynamic Type enlarges text, and the UI reflows within the screen width without horizontal page/history scrolling. Headers and controls may wrap; history and long input scroll vertically. Validate enlarged text together with the software keyboard and preserve access to essential controls. Physical-iPhone VoiceOver and Dynamic Type acceptance remain separate from automated tests.
+
 ## P2 — Native reliability
 
 ### Native APNs
