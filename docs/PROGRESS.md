@@ -1,5 +1,13 @@
 # Progress
 
+## Repository checkpoint — integrated accessibility, media and video playback
+
+2026-09-24: PR #78 merged PRs #74–77 and lifecycle/lint corrections as `6d0124162be0bc934d04a2591d307194be30774a`. Reviewed head `5cc2fd5cfa04b246940679ddd8e8eb8b5737a057` passed all five workflows. PRs #76/#77 were closed as incorporated; their commits are reachable from main.
+
+PR #79 merged the private video viewer as `06f188cfbf28f094e064c3aa5c6ce578d3f3c5d4`. Reviewed head `f093d2ce125cfdfbf56a8fe2d7f5a0dc20c2c9c8` passed all five workflows, with 82 browser tests, 59 API tests, 6 OpenMLS tests and 8 native simulator tests. The merge tree exactly matches the reviewed head (`41e4d70eec393cdc07a5b8ef4213f3e125722046`). Web lint passes with zero warnings; reviewed narrow exceptions are documented in [Step98](steps/98-media-accessibility-integration.md).
+
+The native application is portrait-only except for landscape video playback. [Step99](steps/99-private-video-playback.md) records viewer cleanup, origin checks, browser fallback and orientation policy. Physical-iPhone, VoiceOver/Dynamic Type and audiovisual-quality acceptance remain open. The operator Mac has Command Line Tools but no full Xcode installation, so physical-device acceptance was not performed. Russian storage provisioning/migration and production/store release remain separately gated. Production was not changed.
+
 ## Current milestone — native iOS production program
 
 Date: 2026-09-24.
@@ -12,7 +20,7 @@ The next product track is a native iOS client shell rather than further PWA-only
 
 PR #62 is merged to `main` as `571ce04ad3903f76f7fbdbc1aa607acb767b9095`; exact post-merge CI, device-access, beat-runtime and api-shutdown are green. PR #65 is merged as `cd0d91657e0654a91c2e70f9c1400dd60b602059`, adding the first-party Swift/UIKit + WKWebView host, app-bound navigation, privacy cover, system Contacts picker bridge, XcodeGen project source and macOS/Xcode build gate. PR #67 is merged as `301ee0cc0719fac44d37c2c633734849b013a5da`, adding Secure Enclave P-256 Face ID / Touch ID challenge-response and migration `0018_session_biometrics`; it deliberately does not store the four-digit PIN. PR #69 is merged as `b6f7ac9cc185bb55a8ec476ec2daed9f204f198c`, adding system Photos/Files selection, the trusted native media bridge and `PrivacyInfo.xcprivacy`; exact post-merge `ci`, `ios-native`, `device-access`, `beat-runtime` and `api-shutdown` are green. Migration `0017_single_admin` and `0018_session_biometrics` remain repository-only until a separate production deployment gate. See [Step89](steps/89-ios-biometric-media.md) for the completed native media block and [Step90](steps/90-e2ee-send-state-reliability.md) for the merged durable send-state work.
 
-PR #70 is merged as `32e869e10f8c14ae1caabda89e9d20c19e45200c`, adding explicit durable E2EE send states plus Retry/Remove and preserving one persisted ciphertext/client ID across recovery. PR #71 is merged as `8c57dc1942420a84147f742fa44a62dc36eab133`, adding bounded automatic transient retry while reusing the same durable ciphertext and `client_id`; reviewed exact head `7501cb7c0de15daef0b9b824bb5d905d5b34d9b0` passed CI `35979002030`, ios-native `35979002023`, api-shutdown `35979002060`, device-access `35979002048` and beat-runtime `35979002032`. PR #72 merged the voice polish as `22e94a87bfbc3b1b40b54f381c263db412b38537`; PR #73 merged [Step93](steps/93-typing-read-polish.md) as `ceccb776a645fec5ca671491f9eeb9d0a3648a07`, completing shared bounded typing presence and truthful Sent/Read semantics. [Step94](steps/94-accessibility-dynamic-type.md) is the active Accessibility/Dynamic Type/VoiceOver follow-up; acceptance remains open.
+PR #70 is merged as `32e869e10f8c14ae1caabda89e9d20c19e45200c`, adding explicit durable E2EE send states plus Retry/Remove and preserving one persisted ciphertext/client ID across recovery. PR #71 is merged as `8c57dc1942420a84147f742fa44a62dc36eab133`, adding bounded automatic transient retry while reusing the same durable ciphertext and `client_id`; reviewed exact head `7501cb7c0de15daef0b9b824bb5d905d5b34d9b0` passed CI `35979002030`, ios-native `35979002023`, api-shutdown `35979002060`, device-access `35979002048` and beat-runtime `35979002032`. PR #72 merged the voice polish as `22e94a87bfbc3b1b40b54f381c263db412b38537`; PR #73 merged [Step93](steps/93-typing-read-polish.md) as `ceccb776a645fec5ca671491f9eeb9d0a3648a07`, completing shared bounded typing presence and truthful Sent/Read semantics. [Step94](steps/94-accessibility-dynamic-type.md) repository work is integrated through PR #78; Accessibility/Dynamic Type/VoiceOver acceptance remains open.
 
 The global administration model is also being tightened: production remains invite-only and the database will enforce at most one global administrator. Only that singleton administrator may create or revoke account invitations. Conversation-local owner roles do not grant global invite rights.
 
@@ -87,6 +95,6 @@ PR #72 is merged as `22e94a87bfbc3b1b40b54f381c263db412b38537`. PR #73 is merged
 
 ## Media storage follow-up — 2026-09-24
 
-[Step95](steps/95-media-storage-and-compression.md) adds the Russian private-S3, sender-side compression and non-destructive archive workstream to the production plan. The first repository slice is JPEG Standard/Original preparation before E2EE; voice/video optimization, provider selection, tiering and production migration remain open.
+[Step95](steps/95-media-storage-and-compression.md) adds the Russian private-S3, sender-side compression and non-destructive archive workstream to the production plan. The first repository slice is JPEG Standard/Original preparation before E2EE; voice/video preparation is now integrated through PR #78, while device quality acceptance, provider selection, tiering and production migration remain open.
 
 [Step96](steps/96-voice-recording-compression.md) is the voice-encoding follow-up: mono preference and a 32 kbit/s recording target, with platform fallback and real-encoder regression coverage. Physical-iPhone speech quality remains unverified.

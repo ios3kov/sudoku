@@ -15,3 +15,7 @@ Narrow documented lint exceptions remain for deliberate synchronization with ext
 The integrated head must pass all five CI workflows, including the browser accessibility and media suites and native video simulator tests, before merging. A regression verifies that solving the last Sudoku cell records a stable completion timestamp across reload. Local full typecheck requires the CI-generated OpenMLS browser package.
 
 No production deployment, migration, paid storage provisioning or store release is part of this integration. The landscape-video playback exception is the next implementation step. Device acceptance still needs full Xcode and a physical iPhone.
+
+## Merge evidence
+
+Reviewed head `5cc2fd5cfa04b246940679ddd8e8eb8b5737a057` passed all five workflows and merged as `6d0124162be0bc934d04a2591d307194be30774a`. Verification includes 78 browser tests and 4 native exporter tests. Physical-device and full accessibility acceptance remain open; no production change was performed.

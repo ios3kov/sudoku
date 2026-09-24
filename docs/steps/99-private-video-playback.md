@@ -24,3 +24,7 @@ Physical iPhone: play portrait/landscape/square MP4/MOV, HEVC/HDR/unsupported co
 - [WKScriptMessageHandlerWithReply](https://developer.apple.com/documentation/webkit/wkscriptmessagehandlerwithreply)
 
 No production deployment, migrations, TestFlight or App Store release is part of this change.
+
+## Merge evidence
+
+Reviewed head `f093d2ce125cfdfbf56a8fe2d7f5a0dc20c2c9c8` passed all five workflows and merged as `06f188cfbf28f094e064c3aa5c6ce578d3f3c5d4`. Verification includes 82 browser tests and 8 native exporter/playback-policy tests. Physical-device and full accessibility acceptance remain open; no production change was performed.
