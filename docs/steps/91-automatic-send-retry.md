@@ -109,3 +109,20 @@ Required before merge:
 Repository work only.
 
 No production deployment, migration, TestFlight upload or App Store submission is authorized by this step.
+
+
+## Merge verification — 2026-09-24
+
+PR #71 merged to `main` as `8c57dc1942420a84147f742fa44a62dc36eab133`.
+
+Reviewed exact head `7501cb7c0de15daef0b9b824bb5d905d5b34d9b0` passed:
+
+- ci `35979002030`, including domain retry-policy tests, browser E2E, performance and production application image build;
+- ios-native `35979002023`;
+- api-shutdown `35979002060`;
+- device-access `35979002048`;
+- beat-runtime `35979002032`.
+
+At the time this record was written, GitHub had not exposed post-merge workflow runs for the squash SHA, so this section intentionally records the exact reviewed PR head rather than inventing post-merge evidence.
+
+No production deployment, migration, TestFlight upload or App Store submission occurred.
