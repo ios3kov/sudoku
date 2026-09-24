@@ -101,3 +101,15 @@ Required before merge:
 Repository work only.
 
 No production deployment, migration, TestFlight upload or App Store submission is authorized by this step.
+
+## Merge verification — 2026-09-24
+
+PR #73 merged as `ceccb776a645fec5ca671491f9eeb9d0a3648a07` after final diff/code review and successful checks on exact head `ad9d711c117951b814396eb84d202702b36390e9`:
+
+- ci: [35990476692](https://github.com/ios3kov/sudoku/actions/runs/35990476692)
+- device-access: [35990476663](https://github.com/ios3kov/sudoku/actions/runs/35990476663)
+- ios-native: [35990476686](https://github.com/ios3kov/sudoku/actions/runs/35990476686)
+- beat-runtime: [35990476613](https://github.com/ios3kov/sudoku/actions/runs/35990476613)
+- api-shutdown: [35990476606](https://github.com/ios3kov/sudoku/actions/runs/35990476606)
+
+CI fixes register fixture realtime callbacks in an effect, give browser fixtures a trustworthy origin and fresh projection snapshots, and wait for logout completion before navigation. Final review found no blocking issues. Only Typing/read-state polish is complete in issue #63; accessibility and physical-iPhone acceptance remain open. No production deployment or release was performed.
