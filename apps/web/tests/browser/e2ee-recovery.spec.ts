@@ -217,15 +217,53 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       timeout: 60_000,
     });
 
-    // A transient online failure remains a durable local ciphertext and exposes
-    // an explicit manual Retry action. Retrying must reuse the existing client
-    // id/ciphertext rather than create a second visible message.
+    // A transient online failure must retry automatically after backoff using
+    // the already persisted ciphertext/client id. There must be one accepted
+    // visible message even though the first POST never reaches the server.
     const messagePattern = "**/v1/conversations/**/messages";
-    let blockedMessagePost = false;
+    let automaticRetryPosts = 0;
     await owner.route(messagePattern, async (route) => {
-      if (!blockedMessagePost && route.request().method() === "POST") {
-        blockedMessagePost = true;
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      automaticRetryPosts += 1;
+      if (automaticRetryPosts === 1) {
         await route.abort();
+        return;
+      }
+      await route.continue();
+    });
+
+    await sendText(owner, "automatic retry state");
+    const autoRetryQueued = owner.locator(".message-bubble.pending").filter({
+      hasText: "automatic retry state",
+    });
+    await expect(autoRetryQueued.getByText("Retrying…", { exact: true })).toBeVisible();
+    await expect(acceptedMessage(owner, "automatic retry state")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect.poll(() => automaticRetryPosts).toBe(2);
+    await expect(acceptedMessage(owner, "automatic retry state")).toHaveCount(1);
+    await owner.unroute(messagePattern);
+
+    await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(acceptedMessage(peer, "automatic retry state")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(acceptedMessage(peer, "automatic retry state")).toHaveCount(1);
+
+    // A permanent 422 must remain Failed without automatic retry. Manual Retry
+    // still reuses the durable client id/ciphertext once the server accepts it.
+    let permanentPosts = 0;
+    await owner.route(messagePattern, async (route) => {
+      if (route.request().method() === "POST") {
+        permanentPosts += 1;
+        await route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Permanent test rejection" }),
+        });
         return;
       }
       await route.continue();
@@ -235,9 +273,10 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     const failedQueued = owner.locator(".message-bubble.pending").filter({
       hasText: "manual retry state",
     });
-    await expect.poll(() => blockedMessagePost).toBe(true);
     await expect(failedQueued.getByText("Failed", { exact: true })).toBeVisible();
     await expect(failedQueued.getByRole("button", { name: "Retry failed message" })).toBeVisible();
+    await owner.waitForTimeout(1_300);
+    expect(permanentPosts).toBe(1);
 
     await owner.unroute(messagePattern);
     await failedQueued.getByRole("button", { name: "Retry failed message" }).click();
