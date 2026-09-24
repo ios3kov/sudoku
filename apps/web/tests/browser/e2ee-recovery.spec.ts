@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ensureSudokuGame } from "./support/sudoku-start";
 import { acceptedMessage } from "./support/accepted-message";
 import { observeRealtimeSocket, verifyActiveComposition } from "./support/active-composition";
 
@@ -9,6 +10,7 @@ const PASSWORD = "browser acceptance password";
 
 async function unlockPrivate(page: Page) {
   await page.goto("/");
+  await ensureSudokuGame(page);
   const five = page.getByRole("button", { name: "5", exact: true });
   await expect(five).toBeVisible();
 

@@ -1,5 +1,11 @@
 # Progress
 
+## Working-tree checkpoint — full Sudoku game
+
+2026-09-24: The full offline game is implemented for review: 4×4/6×6/9×9 unique puzzles, three clue-density difficulty targets, menu, saved continuation, notes, hints, undo/redo, pause and completion. First-time devices open the menu; after actual authenticated messenger entry, cold launches open a new quick 9×9 game while retaining the separate saved game. The startup preference never authorizes access. See [Step100](steps/100-full-sudoku-game.md).
+
+Local validation: 40 domain tests, 11 device-access tests, 5 saved-game migration tests, zero-warning web lint, web/domain type checking and CSS class contract passed. Browser CI and final exact-head review are pending. Valid legacy single-puzzle saves are migrated without deleting their original bytes; a valid new-format save takes precedence. PR #80 (`0ed946e`) contains native frame corrections and PR #81 (`dbcde73`) the engine; `feat/full-sudoku-game` contains the integrated UI/startup work, awaiting its PR. The bottom-edge correction has been launched on the physical iPhone, but operator confirmation remains pending. Physical-iPhone and Accessibility/Dynamic Type/VoiceOver acceptance remain open; production, migrations, media storage provisioning and store releases were not performed.
+
 ## Repository checkpoint — integrated accessibility, media and video playback
 
 2026-09-24: PR #78 merged PRs #74–77 and lifecycle/lint corrections as `6d0124162be0bc934d04a2591d307194be30774a`. Reviewed head `5cc2fd5cfa04b246940679ddd8e8eb8b5737a057` passed all five workflows. PRs #76/#77 were closed as incorporated; their commits are reachable from main.

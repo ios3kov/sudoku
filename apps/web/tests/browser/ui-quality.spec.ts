@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ensureSudokuGame } from "./support/sudoku-start";
 
 async function dragFive(page: Page, progress: number, pointerId: number) {
   const five = page.getByRole("button", { name: "5", exact: true });
@@ -38,10 +39,11 @@ async function unlockPrivate(page: Page) {
 test("mobile Sudoku stays compact and unlock slides the whole screen over chat", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await ensureSudokuGame(page);
 
   await expect(page.getByRole("grid", { name: "Sudoku board" })).toBeVisible();
   await expect(page.locator(".sudoku-logo")).toBeVisible();
-  await expect(page.getByText(/Puzzle #\d{4}/)).toBeVisible();
+  await expect(page.locator(".sudoku-brand")).toContainText("9×9");
   await expect(page.getByText("Time", { exact: true })).toBeVisible();
   await expect(page.getByText("Mistakes", { exact: true })).toBeVisible();
   await expect(page.getByText("Progress", { exact: true })).toBeVisible();
@@ -80,14 +82,16 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
 
   // The cover is a real Sudoku, not a decorative unlock screen. Every keypad
   // digit, including 5, must remain usable for ordinary play.
-  const editableCell = page.getByRole("gridcell").nth(2);
+  const editableCell = page.locator('[role="gridcell"]:not(.given)').first();
+  let checkedInvalidGeometry = false;
   await editableCell.click();
   for (const digit of ["1", "2", "3", "4", "5", "6", "7", "8", "9"]) {
     await page.getByRole("button", { name: digit, exact: true }).click();
     await expect(editableCell).toHaveText(digit);
     await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
 
-    if (digit === "1") {
+    if (!checkedInvalidGeometry && /invalid/.test(await editableCell.getAttribute("class") ?? "")) {
+      checkedInvalidGeometry = true;
       await expect(editableCell).toHaveClass(/invalid/);
       const invalidGeometry = await editableCell.evaluate((element) => {
         const style = getComputedStyle(element);
@@ -115,6 +119,7 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
     }
   }
 
+  expect(checkedInvalidGeometry).toBe(true);
   await page.getByRole("button", { name: "Erase", exact: true }).click();
   await expect(editableCell).toHaveText("");
 
@@ -127,13 +132,15 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await page.getByRole("button", { name: "2", exact: true }).click();
   await expect(editableCell).toContainText("2");
   await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(editableCell).toHaveText("");
 
-  const givenCell = page.getByRole("gridcell").nth(0);
+  const givenCell = page.locator('[role="gridcell"].given').first();
+  const givenValue = await givenCell.textContent();
   await givenCell.click();
   await page.getByRole("button", { name: "1", exact: true }).click();
-  await expect(givenCell).toHaveText("5");
+  await expect(givenCell).toHaveText(givenValue!);
 
   // 49% is deliberately below the unlock threshold. The entire Sudoku screen
   // must still follow the finger, then return instead of opening the messenger.
@@ -197,30 +204,36 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
 });
 
 
-test("solving the last Sudoku cell persists one completion time across reload", async ({ page }) => {
-  // Fixed near-complete board for the shipped level-1 puzzle.
+test("solving the last Sudoku cell freezes the saved timer across reload", async ({ page }) => {
+  // A valid unique near-complete puzzle gives this regression a deterministic
+  // last move without coupling ordinary play to one shipped puzzle.
   const solution = "534678912672195348198342567859761423426853791713924856961537284287419635345286179".split("").map(Number);
   const index = 2;
-  const grid = [...solution];
-  grid[index] = 0;
-  await page.addInitScript(value => {
+  const givens = [...solution];
+  givens[index] = 0;
+  await page.addInitScript(({ solution, givens }) => {
     if (sessionStorage.getItem("completion-fixture-seeded")) return;
     sessionStorage.setItem("completion-fixture-seeded", "1");
-    localStorage.setItem("sudoku:level-1:v2", JSON.stringify({
-      grid: value, notes: {}, mistakes: 0, startedAt: Date.now() - 60_000, completedAt: null,
+    localStorage.setItem("sudoku:game:v3", JSON.stringify({
+      version: 1,
+      puzzle: { size: 9, difficulty: "easy", seed: 1171, givens, solution },
+      values: givens, notes: givens.map(() => []), mistakes: 0, hints: 0,
+      elapsedSeconds: 60, paused: false, history: [], future: [],
     }));
-  }, grid);
+  }, { solution, givens });
   await page.goto("/");
+  await page.getByRole("button", { name: "Continue saved game · 9×9", exact: true }).click();
   const board = page.getByRole("grid", { name: "Sudoku board" });
-  // Wait for storage hydration, not an empty cell that also exists in SSR markup.
-  await expect(board.locator("button").nth(3)).toHaveText("6");
   await expect(board.locator("button").nth(index)).toHaveText("");
   await board.locator("button").nth(index).click();
   await page.locator(".digits").getByRole("button", { name: String(solution[index]), exact: true }).click();
-  const completed = () => page.evaluate(() => JSON.parse(localStorage.getItem("sudoku:level-1:v2")!).completedAt as number | null);
-  await expect.poll(completed).toBeGreaterThan(0);
-  const first = await completed();
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem("sudoku:game:v3")!) as { values: number[]; elapsedSeconds: number });
+  await expect.poll(async () => (await saved()).values).toEqual(solution);
+  const elapsed = (await saved()).elapsedSeconds;
   await page.reload();
+  await page.getByRole("button", { name: "Continue saved game · 9×9", exact: true }).click();
   await expect(board.locator("button").nth(index)).toHaveText(String(solution[index]));
-  await expect.poll(completed).toBe(first);
+  // Cross two timer ticks: a completed board must not resume timing on reload.
+  await page.waitForTimeout(2200);
+  expect((await saved()).elapsedSeconds).toBe(elapsed);
 });

@@ -199,6 +199,14 @@ UX:
 - better media viewer;
 - accessibility labels, Dynamic Type and VoiceOver pass.
 
+## Full Sudoku game — repository workstream
+
+[Step100](100-full-sudoku-game.md) records the implemented game and startup contract. All users can play 4×4, 6×6 or 9×9 Sudoku with menus, difficulty selection, notes, hints, history, pause and a saved game. Generated puzzles have one verified solution; difficulty currently describes clue density. The game needs no messenger login.
+
+A fresh device starts at the game menu. Only entering the authenticated messenger changes future cold launches to a random 9×9 game, with the original hold-5 upward gesture immediately available. This device-local preference is not an authentication credential. Menus remain accessible; quick-start games do not overwrite the separately saved game without an explicit save. The native portrait and enlarged-text contracts remain unchanged.
+
+Implementation is prepared for repository review. Local checks include 40 domain tests, 11 device-access tests, 5 saved-game migration tests, lint, type checking and CSS class validation. Browser CI and final exact-head review remain pending. Valid legacy single-puzzle saves are imported when no valid new-format save exists; original legacy data is retained. Physical-iPhone layout, the reported bottom seam and VoiceOver/Dynamic Type acceptance remain open. No production or store gate is closed by this game workstream.
+
 ## Media storage and compression — production workstream
 
 Product direction confirmed on 2026-09-24. Implementation is tracked in [Step95](95-media-storage-and-compression.md).

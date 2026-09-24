@@ -8,6 +8,7 @@ import { DevicePinUnlock } from "./device-pin-unlock";
 import { DevicePinOnboarding } from "./device-pin-onboarding";
 import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import type { CurrentUser } from "./types";
+import { rememberMessengerEntry } from "../sudoku/startup-preference";
 import "./device-access.css";
 
 type AuthView = "login" | "invite";
@@ -102,6 +103,12 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       document.removeEventListener("visibilitychange", background);
     };
   }, [checkSession, hide]);
+
+  useEffect(() => {
+    // AuthGate also lives beneath the game as a reveal preview. A background
+    // session check or PIN onboarding is not a successful messenger entry.
+    if (active && user && !loading && !pinRequired && !pendingLogin) rememberMessengerEntry();
+  }, [active, user, loading, pinRequired, pendingLogin]);
 
   if (loading) return <main className="page" aria-label="Private area">
     <section className="messenger-lock"><p>Checking…</p><button type="button" onClick={hide}>Return to Sudoku</button></section>

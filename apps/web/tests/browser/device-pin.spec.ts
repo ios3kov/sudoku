@@ -1,9 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ensureSudokuGame } from "./support/sudoku-start";
 
 const PASSWORD = "browser acceptance password";
 const testPhone = (index: number) => "+" + String(70000000000 + index);
 
 async function revealCurrentPage(page: Page) {
+  await ensureSudokuGame(page);
   const five = page.getByRole("button", { name: "5", exact: true });
   await expect(five).toBeVisible();
   const box = await five.boundingBox();
@@ -36,12 +38,16 @@ for (const role of ["member", "admin"]) {
     const phone = testPhone(role === "admin" ? 4 : 3);
 
     await passwordLogin(page, phone);
+    // A valid password response still awaiting onboarding has not entered the
+    // messenger. It must not switch future game launches to quick play yet.
+    expect(await page.evaluate(() => localStorage.getItem("sudoku.startup.v1"))).toBeNull();
     await page.getByRole("button", { name: "Set PIN", exact: true }).click();
     await page.getByLabel("Four-digit PIN", { exact: true }).fill("0123");
     await page.getByLabel("Confirm PIN", { exact: true }).fill("0123");
     await page.getByRole("button", { name: "Save PIN", exact: true }).click();
 
     await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("sudoku.startup.v1"))).toBe("quick-play");
     await expect(page.getByRole("button", { name: "Invite", exact: true })).toHaveCount(role === "admin" ? 1 : 0);
 
     const storage = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } }));

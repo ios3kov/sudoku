@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ensureSudokuGame } from "./support/sudoku-start";
 
 const PASSWORD = "browser acceptance password";
 const testPhone = (index: number) => "+" + String(70000000000 + index);
 
 async function reveal(page: Page) {
   await page.goto("/");
+  await ensureSudokuGame(page);
   const five = page.getByRole("button", { name: "5", exact: true });
   await expect(five).toBeVisible();
   const box = await five.boundingBox();
