@@ -28,3 +28,9 @@ No production deployment, migrations, TestFlight or App Store release is part of
 ## Merge evidence
 
 Reviewed head `f093d2ce125cfdfbf56a8fe2d7f5a0dc20c2c9c8` passed all five workflows and merged as `06f188cfbf28f094e064c3aa5c6ce578d3f3c5d4`. Verification includes 82 browser tests and 8 native exporter/playback-policy tests. Physical-device and full accessibility acceptance remain open; no production change was performed.
+
+## Local Xcode verification — 2026-09-24
+
+Source `3c016d025418d21701bb9af8c1aa6065a78c907b` builds successfully with Xcode 27.0 (27A266a), XcodeGen 2.46.0 and the iOS 27.0 simulator SDK. All eight exporter and playback-policy tests passed locally in Xcode on the dedicated Sudoku QA iPhone simulator. Shell access to CoreSimulator is restricted in the agent environment, so tests were run through Xcode. An earlier run selected the physical device without development signing and did not execute tests; the successful run explicitly targeted the simulator.
+
+The connected physical iPhone 12 mini runs iOS 26.0 and has Developer Mode enabled. Apple Account sign-in/development signing is still pending; no physical-device acceptance is claimed. The native host loads the production web origin, so testing unreleased web features requires a separate authorized test-environment plan or production release. No deployment, migration or store release was performed.
