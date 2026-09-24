@@ -42,6 +42,14 @@ export function decryptApplicationEvent(
     ) {
       throw new Error("Invalid decrypted MLS message event");
     }
+    if (
+      decoded.messageType !== "voice"
+      && decoded.attachments.some(
+        (item) => (item as { voice?: unknown }).voice !== undefined,
+      )
+    ) {
+      throw new Error("Voice presentation metadata requires a voice message");
+    }
     return {
       body: decoded.body,
       event: {
