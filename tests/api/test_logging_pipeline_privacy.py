@@ -15,6 +15,7 @@ from app.observability import configure_structured_logging
 configure_structured_logging("audit")
 details = {"pin": "PRIVATE_PIN", "nested": [{"access_token": "PRIVATE_TOKEN", "safe": "visible"}]}
 structlog.get_logger("audit").info("audit.fields", details=details)
+structlog.get_logger("audit").info("audit.count %s %s", 1, 2)
 assert details["pin"] == "PRIVATE_PIN"
 try:
     raise ValueError("PRIVATE_EXCEPTION")
@@ -31,3 +32,4 @@ except ValueError:
         fields = next(item for item in entries if item.get("event") == "audit.fields")
         self.assertEqual(fields["details"]["nested"][0]["safe"], "visible")
         self.assertEqual(sum(item.get("error_type") == "ValueError" for item in entries), 2)
+        self.assertTrue(any(item.get("event") == "audit.count 1 2" for item in entries))

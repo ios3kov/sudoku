@@ -46,8 +46,10 @@ def _redact_sensitive(_: object, __: str, event_dict: dict) -> dict:
             return {key: "[REDACTED]" if str(key).lower().replace("_", "-") in _SENSITIVE_KEYS
                     or any(marker in str(key).lower() for marker in ("password", "secret", "token"))
                     else redact(item) for key, item in value.items()}
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, list):
             return [redact(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(redact(item) for item in value)
         return value
 
     # Exception strings can include SQL parameters, URLs or request values.
