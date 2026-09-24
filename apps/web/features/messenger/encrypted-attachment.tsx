@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
-import { isEncryptedAttachmentMetadata } from "./attachment-metadata";
 import type { EncryptedAttachmentMetadata } from "./types";
 import { downloadEncryptedAsset } from "./uploads";
 import { formatBytes } from "./chat-utils";
