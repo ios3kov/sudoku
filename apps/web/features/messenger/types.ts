@@ -42,6 +42,11 @@ export interface AssetSummary {
 }
 
 
+export interface VoiceAttachmentPresentation {
+  durationMs: number;
+  waveform: number[];
+}
+
 export interface EncryptedAttachmentMetadata {
   version: 1;
   algorithm: "AES-256-GCM";
@@ -53,6 +58,8 @@ export interface EncryptedAttachmentMetadata {
   plaintextSize: number;
   plaintextSha256Hex: string;
   ciphertextSha256Hex: string;
+  /** Encrypted inside the MLS application event; never plaintext server metadata. */
+  voice?: VoiceAttachmentPresentation;
 }
 
 export interface ReactionSummary {
