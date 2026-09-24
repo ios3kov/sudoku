@@ -25,6 +25,17 @@ Production enforces a partial unique index on `is_admin = true`, so at most one 
 - `expires_at timestamptz`
 - `revoked_at timestamptz null`
 
+## `session_biometric_credentials`
+
+- `session_id uuid pk fk sessions`
+- `public_key_x963 bytea(65)`
+- `challenge_hash bytea(32) null`
+- `challenge_expires_at timestamptz null`
+- `created_at timestamptz`
+- `last_used_at timestamptz null`
+
+This table stores only a P-256 public key and ephemeral challenge state for optional native biometric unlock. The Secure Enclave private key never reaches the server. Deleting/revoking the parent session cascades to this row.
+
 ## `invites`
 
 - `id uuid pk`

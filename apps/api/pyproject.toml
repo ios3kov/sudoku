@@ -14,6 +14,7 @@ dependencies = [
   "alembic>=1.16,<2",
   "pydantic-settings>=2.10,<3",
   "argon2-cffi>=25,<26",
+  "cryptography>=46,<51",
   "redis>=6,<7",
   "celery>=5.5,<6",
   "psycopg[binary]>=3.2,<4",

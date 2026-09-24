@@ -73,6 +73,10 @@ The native iOS client is a capability host around the existing authenticated/E2E
 - Native contacts use explicit user selection; do not silently enumerate/upload the entire address book.
 - Only selected phone numbers cross the native bridge and then flow through the existing contact-sync API.
 - Face ID / Touch ID is a local quick-unlock/privacy control only. It must not mint sessions, bypass expired/revoked sessions or replace password recovery.
+- Native biometric unlock uses a Secure Enclave P-256 private key protected by `biometryCurrentSet`; the server stores only the public key.
+- Enrollment/removal requires the current PIN-unlocked session plus account password.
+- Unlock uses a fresh 90-second one-time server challenge bound to the session; a valid signature only issues the existing bounded `X-Sudoku-Unlock` capability.
+- PIN lockout also blocks biometric unlock, and changing/removing the PIN invalidates the biometric binding.
 - Native media/file pickers may supply local bytes to the existing client-side encryption pipeline, but native code must not upload plaintext directly to object storage.
 - The app must synchronously hide private UI before iOS can snapshot it for the app switcher.
 - The WebView may load only approved application origins and must not expose arbitrary navigation or arbitrary native execution.

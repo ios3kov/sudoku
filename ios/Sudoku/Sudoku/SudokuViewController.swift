@@ -16,6 +16,7 @@ final class SudokuViewController: UIViewController {
 
         let controller = WKUserContentController()
         controller.add(self, name: Self.contactHandlerName)
+        biometricBridge.install(into: controller)
         controller.addUserScript(
             WKUserScript(
                 source: Self.contactBridgeScript,
@@ -26,6 +27,7 @@ final class SudokuViewController: UIViewController {
         configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        biometricBridge.webView = webView
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -35,6 +37,7 @@ final class SudokuViewController: UIViewController {
     }()
 
     private let privacyCover = PrivacyCoverView()
+    private let biometricBridge = BiometricBridge()
     private var pendingContactRequestID: String?
     private var webContentLoaded = false
 
@@ -71,6 +74,9 @@ final class SudokuViewController: UIViewController {
     deinit {
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.contactHandlerName
+        )
+        biometricBridge.uninstall(
+            from: webView.configuration.userContentController
         )
     }
 

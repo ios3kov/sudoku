@@ -70,8 +70,10 @@ The first iOS candidate uses a small first-party Swift host with a persistent `W
 Expose only narrow, auditable capabilities to the web UI:
 
 - `contacts.select()` -> selected names/phone numbers only;
-- `localAuth.canEvaluate()`;
-- `localAuth.evaluate(reason)`;
+- `biometrics.availability()`;
+- `biometrics.enroll()` -> Secure Enclave P-256 public key only;
+- `biometrics.sign(payload)` -> signature after Face ID / Touch ID approval;
+- `biometrics.remove()`;
 - `privacy.cover()/uncover()`;
 - `media.pickPhotos()`;
 - `media.pickFiles()`;
@@ -117,12 +119,19 @@ Acceptance:
 
 ### P0.4 Biometric privacy gate
 
-- add Face ID / Touch ID through LocalAuthentication;
-- preserve current server-backed four-digit PIN;
-- biometric success may satisfy the local quick-unlock step;
-- biometric failure/cancel never logs the user out or damages MLS state;
-- password remains the recovery path;
-- changing biometric enrollment must force a safe re-authentication path where the platform allows detection.
+Implementation target:
+
+- Face ID / Touch ID uses LocalAuthentication plus a Secure Enclave P-256 private key;
+- the private key is non-exportable and protected with `biometryCurrentSet`;
+- the server stores only the public key in a session-bound biometric row;
+- enable/disable requires both an already PIN-unlocked session and the account password;
+- unlock uses a fresh 90-second one-time challenge bound to the current session;
+- after native biometric approval, the Secure Enclave key signs the canonical challenge payload;
+- only a valid signature may issue the existing bounded RAM-only `X-Sudoku-Unlock` capability;
+- the biometric path never creates a login session and never stores/replays the four-digit PIN;
+- five failed PIN attempts also block biometric unlock until account-password recovery;
+- changing/removing the PIN invalidates the biometric binding;
+- biometric cancellation is a no-op and falls back to PIN/password without touching MLS state.
 
 ### P0.5 App-switcher privacy
 
@@ -335,7 +344,9 @@ As of 2026-09-23:
 - four-digit PIN + reload returns to secure messaging without the previous restart-required failure;
 - iPhone Safari cannot provide the desired system phone-book picker, which is the immediate reason for the native iOS track.
 - singleton-admin foundation PR #62 is merged to `main` as `571ce04ad3903f76f7fbdbc1aa607acb767b9095`; exact post-merge CI, device-access, beat-runtime and api-shutdown workflows are green;
-- migration `0017_single_admin` is merged but is **not** deployed to production yet; production remains on `0016_phone_contacts` until the next exact-SHA backend deployment gate.
+- first-party iOS host PR #65 is merged to `main` as `cd0d91657e0654a91c2e70f9c1400dd60b602059`; exact post-merge CI, device-access, beat-runtime, api-shutdown and ios-native workflows are green;
+- migration `0017_single_admin` is merged but is **not** deployed to production yet; production remains on `0016_phone_contacts` until the next exact-SHA backend deployment gate;
+- the active biometric follow-up adds migration `0018_session_biometrics`; it is repository-only until a separate exact-SHA production deployment is explicitly approved.
 
 Still open:
 
