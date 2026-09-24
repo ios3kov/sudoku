@@ -514,6 +514,20 @@
   pointer-events:none;
 }
 
+.voice-draft-preparing{
+  position:sticky;
+  bottom:0;
+  z-index:22;
+  min-height:62px;
+  display:grid;
+  place-items:center;
+  padding:9px 12px max(9px,env(safe-area-inset-bottom));
+  background:linear-gradient(to top,#fafafc 72%,rgba(250,250,252,.9));
+  color:#64748b;
+  font-size:12px;
+  font-weight:650;
+}
+
 .voice-draft-preview{
   position:sticky;
   bottom:0;
