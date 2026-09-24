@@ -158,7 +158,7 @@ Patterns are informed by mature open-source clients such as Signal iOS, Element 
 
 Replace ambiguous optimistic state with explicit:
 
-`queued -> encrypting -> sending -> sent -> delivered/read`
+`queued -> encrypting -> sending -> sent -> read`
 
 and terminal/transient failure states:
 
@@ -169,7 +169,9 @@ UX:
 - transient failures retry automatically with backoff;
 - permanent failures show **Retry** and **Remove**;
 - one client message produces one visible server message through existing `client_id` idempotency;
-- reload/reconnect must not duplicate sends.
+- reload/reconnect must not duplicate sends;
+- `Sent` means accepted by the server and `Read` requires a peer read watermark;
+- do not show `Delivered` until a real recipient-device delivery acknowledgement exists.
 
 ### Voice messages
 
