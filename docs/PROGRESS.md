@@ -1,5 +1,9 @@
 # Progress
 
+## Working-tree checkpoint — application icon
+
+2026-09-24: The operator-selected CC0 Sudoku line-art mark is prepared as the shared native iPhone and web/PWA application icon. The packaging uses the existing warm surface and dark ink colors, keeps the artwork geometry unchanged, and generates opaque raster sizes from one SVG master. See [Step102](steps/102-app-icon.md). All raster dimensions and opacity checks, JSON parsing, zero-warning web lint, web type checking and the unsigned native iPhone build pass locally. Exact-head CI and final review remain pending; no production, TestFlight or App Store release was performed.
+
 ## Working-tree checkpoint — full Sudoku game
 
 2026-09-24: The full offline game is implemented for review: 4×4/6×6/9×9 unique puzzles, three clue-density difficulty targets, menu, saved continuation, notes, hints, undo/redo, pause and completion. First-time devices open the menu; after actual authenticated messenger entry, cold launches open a new quick 9×9 game while retaining the separate saved game. The startup preference never authorizes access. See [Step100](steps/100-full-sudoku-game.md).
