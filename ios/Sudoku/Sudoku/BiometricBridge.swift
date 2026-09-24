@@ -5,7 +5,31 @@ final class BiometricBridge: NSObject {
     static let handlerName = "sudokuBiometrics"
     static let readyEvent = "sudoku:native-biometrics-ready"
 
+    private static let signedPayloadPrefix = "sudoku-biometric-unlock:v1:"
+    private static let maximumSignedPayloadBytes = 512
+    private static let challengeCharacters = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+    )
+
     weak var webView: WKWebView?
+
+    private static func isAllowedSignedPayload(_ payload: String) -> Bool {
+        guard payload.hasPrefix(signedPayloadPrefix),
+              payload.utf8.count <= maximumSignedPayloadBytes else {
+            return false
+        }
+
+        let remainder = String(payload.dropFirst(signedPayloadPrefix.count))
+        let parts = remainder.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              UUID(uuidString: String(parts[0])) != nil else {
+            return false
+        }
+
+        let challenge = String(parts[1])
+        return challenge.utf8.count == 43
+            && challenge.unicodeScalars.allSatisfy { challengeCharacters.contains($0) }
+    }
 
     func install(into controller: WKUserContentController) {
         controller.add(self, name: Self.handlerName)
@@ -178,8 +202,7 @@ extension BiometricBridge: WKScriptMessageHandler {
 
         case "sign":
             guard let payload = body["payload"] as? String,
-                  !payload.isEmpty,
-                  payload.utf8.count <= 512 else {
+                  Self.isAllowedSignedPayload(payload) else {
                 reject(
                     requestID: requestID,
                     name: "DataError",
