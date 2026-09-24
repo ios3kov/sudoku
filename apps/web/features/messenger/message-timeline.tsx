@@ -181,7 +181,7 @@ export function MessageTimeline<T extends TimelineMessage>({ items, currentUserI
 
   return (
     <div className="timeline-frame">
-      <div className="message-list" ref={viewport} onScroll={handleScroll} aria-label="Message history">
+      <div className="message-list" ref={viewport} onScroll={handleScroll} role="region" tabIndex={0} aria-label="Message history">
         <div className="timeline-content" ref={content}>
           {childrenBefore}
           {renderedItems.map((message) => {

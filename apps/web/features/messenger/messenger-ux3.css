@@ -9,21 +9,44 @@
 .messenger-runtime-shell .timeline-item.group-continues .message-bubble{border-bottom-left-radius:7px}
 .messenger-runtime-shell .timeline-item.grouped .own .message-bubble{border-top-left-radius:18px;border-top-right-radius:7px}
 .messenger-runtime-shell .timeline-item.group-continues .own .message-bubble{border-bottom-left-radius:18px;border-bottom-right-radius:7px}
-.messenger-runtime-shell .message-date-separator{display:flex;justify-content:center;margin:18px 0 10px;color:#64748b;font-size:11px;font-weight:600}
+.messenger-runtime-shell .message-date-separator{display:flex;justify-content:center;margin:18px 0 10px;color:#64748b;font-size:0.6875rem;font-weight:600}
 .messenger-runtime-shell .message-date-separator time{padding:5px 11px;border-radius:16px;background:#f1f5f9}
 .messenger-runtime-shell .message-interaction{min-width:0;touch-action:pan-y pinch-zoom;transition:transform 160ms ease-out;-webkit-touch-callout:none}
 .messenger-runtime-shell .message-interaction.is-reply-dragging{transition:none;will-change:transform;user-select:none;-webkit-user-select:none}
 .messenger-runtime-shell .message-interaction audio,.messenger-runtime-shell .message-interaction video{touch-action:auto}
-.messenger-runtime-shell .message-sender{display:block;font-size:12px;font-weight:650;margin-bottom:5px;color:#2563eb}
+.messenger-runtime-shell .message-sender{display:block;font-size:0.75rem;font-weight:650;margin-bottom:5px;color:#2563eb}
 .messenger-runtime-shell .message-delivery{white-space:nowrap}
 .messenger-runtime-shell .jump-to-latest{position:absolute;right:16px;bottom:16px;display:flex;align-items:center;justify-content:center;gap:5px;min-width:46px;min-height:46px;padding:8px 12px;border-radius:24px;border:1px solid #e2e8f0;background:#fff;color:#2563eb;box-shadow:0 3px 12px #0f172a1a;z-index:2}
-.messenger-runtime-shell .new-message-count{font-size:12px;font-weight:700}
+.messenger-runtime-shell .new-message-count{font-size:0.75rem;font-weight:700}
 .messenger-runtime-shell .message-action-sheet{position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,460px);max-width:460px;max-height:85dvh;border:0;border-radius:24px 24px 0 0;padding:0;overflow:auto;background:#fff;color:#0f172a;box-shadow:0 -12px 60px #0f172a26}
 .messenger-runtime-shell .message-action-sheet::backdrop{background:#0f172a59}
 .messenger-runtime-shell .message-action-content{display:grid;padding:16px 16px calc(16px + env(safe-area-inset-bottom));gap:6px}
 .messenger-runtime-shell .message-action-content>button{min-height:48px;text-align:left;padding:12px 16px;border:0;border-radius:12px;background:#f8fafc;color:#334155;font:inherit}
 .messenger-runtime-shell .message-action-content>.is-destructive{color:#b91c1c;background:#fff1f2}
 .messenger-runtime-shell .message-action-content>.message-action-cancel{text-align:center;color:#64748b;background:transparent}
-.messenger-runtime-shell .message-action-preview{margin:0 0 8px;padding:2px 10px;color:#64748b;font-size:13px;overflow-wrap:anywhere;white-space:pre-wrap;max-height:96px;overflow:auto}
+.messenger-runtime-shell .message-action-preview{margin:0 0 8px;padding:2px 10px;color:#64748b;font-size:0.8125rem;overflow-wrap:anywhere;white-space:pre-wrap;max-height:96px;overflow:auto}
 .messenger-runtime-shell .message-action-content>button:focus-visible,.messenger-runtime-shell .jump-to-latest:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.messenger-runtime-shell .message-interaction{transition:none}}
+
+/* Text scales with browser preferences and the native Dynamic Type root size. */
+.messenger-runtime-shell{font-size:1rem}
+.messenger-runtime-shell :is(input,textarea,select){font-size:1rem}
+.messenger-runtime-shell .messenger-topbar{flex-wrap:wrap;flex-shrink:0;gap:8px}
+.messenger-runtime-shell .conversation-header-copy{flex:1 1 12rem;min-width:0}
+.messenger-runtime-shell .conversation-header-copy>div{overflow-wrap:anywhere}
+.messenger-runtime-shell .chat-header-actions{flex-wrap:wrap}
+.messenger-runtime-shell .chat-header-actions button{height:auto;padding:8px 10px;white-space:normal}
+.messenger-runtime-shell .message-bubble p{font-size:1rem;overflow-wrap:anywhere}
+.messenger-runtime-shell .message-time{font-size:.75rem;line-height:1.4}
+.messenger-runtime-shell .message-delivery{white-space:normal;overflow-wrap:anywhere}
+.messenger-runtime-shell .typing-indicator{font-size:.8125rem;line-height:1.5}
+.messenger-runtime-shell .composer{flex-shrink:0}
+.messenger-runtime-shell .composer textarea{line-height:1.5}
+.messenger-runtime-shell .pending-message-actions{flex-wrap:wrap}
+.messenger-runtime-shell .pending-message-actions button{min-height:44px;min-width:44px}
+.messenger-runtime-shell .voice-waveform{min-height:44px}
+.messenger-runtime-shell :is(button,a,input,textarea,select,[tabindex]):focus-visible{outline:3px solid #1d4ed8;outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+@media (prefers-reduced-motion:reduce){
+  .messenger-runtime-shell *,.messenger-runtime-shell *::before,.messenger-runtime-shell *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}

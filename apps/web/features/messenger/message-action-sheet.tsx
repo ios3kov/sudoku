@@ -32,7 +32,7 @@ export function MessageActionSheet({ preview, actions, onClose }: {
   }
 
   useEffect(() => {
-    if (confirmId) dialogRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    if (confirmId) dialogRef.current?.querySelector<HTMLButtonElement>(".message-action-cancel")?.focus();
   }, [confirmId]);
 
   function choose(action: MessageAction) {
