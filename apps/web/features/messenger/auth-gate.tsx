@@ -7,6 +7,7 @@ import { ConversationDraftProvider } from "./conversation-drafts";
 import { DevicePinUnlock } from "./device-pin-unlock";
 import { DevicePinOnboarding } from "./device-pin-onboarding";
 import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
+import { clearNativeBiometricPin, enrollNativeBiometricPin } from "./native-biometric-access";
 import type { CurrentUser } from "./types";
 import "./device-access.css";
 
@@ -28,6 +29,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   const signedOut = useCallback(() => {
     loginPasswordRef.current = null;
     setPendingLogin(null);
+    void clearNativeBiometricPin().catch(() => undefined);
     forgetUnlock(); setUser(null); setPinRequired(false); setError(null); setLoading(false);
   }, []);
   const hide = useCallback(() => { lockDevice(); hideRef.current(); }, []);
@@ -39,7 +41,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
     setUser(pendingLogin);
   }, [pendingLogin]);
 
-  const configurePendingPin = useCallback(async (pin: string) => {
+  const configurePendingPin = useCallback(async (pin: string, enableBiometric: boolean) => {
     const password = loginPasswordRef.current;
     if (!pendingLogin || !password) throw new Error("Sign in again to set a PIN.");
     const started = accessEpoch();
@@ -55,7 +57,16 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       if (response.status === 429) throw new Error("Too many attempts. Try later.");
       throw new Error("Unable to save PIN. Try again.");
     }
+
     const result = await response.json() as { unlock_token?: unknown };
+
+    try {
+      if (enableBiometric) await enrollNativeBiometricPin(pin);
+      else await clearNativeBiometricPin();
+    } catch {
+      throw new Error("PIN was saved, but biometric quick unlock could not be enabled. Try again or continue with PIN only.");
+    }
+
     if (!acceptUnlock(result.unlock_token, started)) {
       throw new Error("Device state changed. Try again.");
     }
@@ -123,6 +134,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       <div className="private-header"><div><h2>{view === "login" ? "Sign in" : "Join"}</h2><p>{view === "login" ? "Private access" : "Invite-only access"}</p></div>
         <button className="text-button" type="button" onClick={hide}>Hide</button></div>
       {view === "login" ? <LoginForm onSuccess={(current, password) => {
+        void clearNativeBiometricPin().catch(() => undefined);
         loginPasswordRef.current = password;
         setPendingLogin(current);
       }} onError={setError} /> : <InviteForm onSuccess={setUser} onError={setError} />}
