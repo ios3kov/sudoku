@@ -483,7 +483,7 @@ export function EncryptedConversationView({
     let clientId: string | null = null;
     try {
       const extension = voiceFileExtension(mimeType);
-      const file = new File(chunks, `voice-${Date.now()}.${extension}`, {
+      const file = new File(chunks, `voice-message.${extension}`, {
         type: mimeType,
       });
       const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
