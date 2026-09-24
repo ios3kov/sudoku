@@ -641,7 +641,7 @@ export function EncryptedConversationView({
 
 
   function beginReply(message: ProjectedEncryptedMessage) {
-    if (busy || syncBlocked || recording || message.deleted) return;
+    if (busy || syncBlocked || recording || voiceDraft || message.deleted) return;
     setReplyingToId(message.id);
     setEditingId(null);
     setActionMessageId(null);
@@ -726,7 +726,7 @@ export function EncryptedConversationView({
           return (
             <div className={`message-row ${own ? "own" : ""}`}>
               <div className="message-bubble-wrap">
-                <MessageInteraction disabled={busy || syncBlocked || recording || message.deleted} onActions={() => setActionMessageId(message.id)} onReply={() => beginReply(message)}>
+                <MessageInteraction disabled={busy || syncBlocked || recording || voiceDraft !== null || message.deleted} onActions={() => setActionMessageId(message.id)} onReply={() => beginReply(message)}>
                   <div className={`message-bubble ${message.deleted ? "deleted" : ""}`}>
                     {conversation.type === "group" && !own ? <strong className="message-sender">{conversation.members.find((member) => member.id === message.senderId)?.display_name ?? "Member"}</strong> : null}
                     {reply ? <div className="reply-preview">{encryptedPreview(reply)}</div> : null}
@@ -804,7 +804,7 @@ export function EncryptedConversationView({
         onClose={() => setActionMessageId(null)}
         actions={[
           ...(actionMessage.body ? [{ id: "copy", label: "Copy", run: () => { void copyMessage(actionMessage.body!); } }] : []),
-          { id: "reply", label: "Reply", disabled: busy || syncBlocked || recording, run: () => beginReply(actionMessage) },
+          { id: "reply", label: "Reply", disabled: busy || syncBlocked || recording || voiceDraft !== null, run: () => beginReply(actionMessage) },
           ...(actionMessage.senderId === user.id && actionMessage.messageType === "text" ? [{ id: "edit", label: "Edit", disabled: busy || syncBlocked || recording || voiceDraft !== null, run: () => beginEdit(actionMessage) }] : []),
           { id: "👍", label: "👍", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "👍"); } },
           { id: "❤️", label: "❤️", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "❤️"); } },
