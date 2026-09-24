@@ -16,6 +16,8 @@ targets:
     platform: iOS
     sources:
       - path: Sudoku
+    resources:
+      - path: Sudoku/PrivacyInfo.xcprivacy
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: moscow.sudoku.app
@@ -29,6 +31,10 @@ targets:
       - sdk: WebKit.framework
       - sdk: Contacts.framework
       - sdk: ContactsUI.framework
+      - sdk: LocalAuthentication.framework
+      - sdk: Security.framework
+      - sdk: PhotosUI.framework
+      - sdk: UniformTypeIdentifiers.framework
 
 schemes:
   Sudoku:
