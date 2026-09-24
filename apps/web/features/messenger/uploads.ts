@@ -70,6 +70,8 @@ function putBlob(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url, true);
+    // Bound the entire PUT, including waiting for the storage response.
+    xhr.timeout = 5 * 60 * 1000;
     for (const [key, value] of Object.entries(headers)) {
       xhr.setRequestHeader(key, value);
     }
@@ -83,6 +85,8 @@ function putBlob(
       else reject(new Error(`Upload failed: ${xhr.status}`));
     };
     xhr.onerror = () => reject(new Error("Upload network error"));
+    xhr.ontimeout = () => reject(new Error("Upload timed out. Please retry."));
+    xhr.onabort = () => reject(new Error("Upload was interrupted. Please retry."));
     xhr.send(blob);
   });
 }
