@@ -5,14 +5,17 @@ import { buildTimeline, countNewIncoming, dayLabel, type TimelineMessage } from 
 
 export interface MessageTimelineHandle { toLatest: () => void; toSequence: (sequence: number) => void; }
 
-export function MessageTimeline<T extends TimelineMessage>({ items, currentUserId, childrenBefore, childrenAfter, renderMessage, onReadLatest, readSequence, visibleCount = 120, ref }: {
+export function MessageTimeline<T extends TimelineMessage>({ items, currentUserId, childrenBefore, childrenAfter, renderMessage, onReadLatest, readSequence, knownReadSequence = 0, visibleCount = 120, ref }: {
   items: readonly T[];
   currentUserId: string;
   childrenBefore?: ReactNode;
   childrenAfter?: ReactNode;
   renderMessage: (message: T) => ReactNode;
   onReadLatest?: (sequence: number) => Promise<void>;
+  /** Latest visible/decrypted sequence eligible to acknowledge. */
   readSequence?: number;
+  /** Monotonic server-known watermark for the current user. */
+  knownReadSequence?: number;
   visibleCount?: number;
   ref?: Ref<MessageTimelineHandle>;
 }) {
@@ -39,6 +42,9 @@ export function MessageTimeline<T extends TimelineMessage>({ items, currentUserI
   const decorations = useMemo(() => buildTimeline(renderedItems), [renderedItems]);
   const newest = items.reduce((max, item) => Math.max(max, item.sequence), 0);
   const acknowledgedSequence = readSequence ?? newest;
+  const knownServerRead = Number.isSafeInteger(knownReadSequence) && knownReadSequence > 0
+    ? knownReadSequence
+    : 0;
 
   const rememberAnchor = useCallback(() => {
     const node = viewport.current;
@@ -122,8 +128,14 @@ export function MessageTimeline<T extends TimelineMessage>({ items, currentUserI
   }, [restorePosition]);
 
   useEffect(() => {
-    if (!onReadLatest || away || !pinned.current || acknowledgedSequence <= readSent.current || readInFlight.current
-      || document.visibilityState !== "visible") return;
+    if (
+      !onReadLatest
+      || away
+      || !pinned.current
+      || acknowledgedSequence <= Math.max(readSent.current, knownServerRead)
+      || readInFlight.current
+      || document.visibilityState !== "visible"
+    ) return;
     readInFlight.current = true;
     let acknowledged = false;
     void onReadLatest(acknowledgedSequence).then(() => {
@@ -137,7 +149,7 @@ export function MessageTimeline<T extends TimelineMessage>({ items, currentUserI
       // was in flight. Drain that newer watermark only after success.
       if (acknowledged) setReceiptVersion((version) => version + 1);
     });
-  }, [acknowledgedSequence, away, onReadLatest, receiptVersion]);
+  }, [acknowledgedSequence, away, knownServerRead, onReadLatest, receiptVersion]);
 
   useEffect(() => {
     const retryReceipt = () => setReceiptVersion((value) => value + 1);
