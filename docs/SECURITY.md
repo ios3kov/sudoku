@@ -73,14 +73,17 @@ The native iOS client is a capability host around the existing authenticated/E2E
 - Native contacts use explicit user selection; do not silently enumerate/upload the entire address book.
 - Only selected phone numbers cross the native bridge and then flow through the existing contact-sync API.
 - Face ID / Touch ID is a local quick-unlock/privacy control only. It must not mint sessions, bypass expired/revoked sessions or replace password recovery.
-- Native media/file pickers may supply local bytes to the existing client-side encryption pipeline, but native code must not upload plaintext directly to object storage.
+- Biometric quick unlock is opt-in. The four-digit device PIN is stored only in an iOS Keychain item using `WhenUnlockedThisDeviceOnly` plus `biometryCurrentSet`; after biometric success the PIN is submitted to the existing server PIN-unlock endpoint, which remains the authorization gate.
+- The biometric Keychain item is cleared on explicit sign-out, PIN removal and biometric-disable. A changed biometric enrollment invalidates the protected item.
+- The account password, session cookie, unlock capability and MLS private state are never placed in the biometric vault.
+- Native Photos/Files selection is explicit, single-item and bounded by the existing 25 MB/MIME policy. Selected plaintext bytes may cross the trusted native-to-main-frame bridge only to enter the existing client-side encryption pipeline; native code must not upload plaintext directly to object storage.
 - The app must synchronously hide private UI before iOS can snapshot it for the app switcher.
 - The WebView may load only approved application origins and must not expose arbitrary navigation or arbitrary native execution.
 - Native bridge payloads must be narrow, typed and validated on both sides.
 - Crash reports/native logs must not contain message plaintext, attachment plaintext, phone-book dumps, session tokens or MLS secrets.
 - APNs, when added, must use the same generic Sudoku-only notification policy as Web Push.
 
-The native shell does not change the core threat model: endpoint compromise, malicious injected JavaScript or a compromised unlocked device can still observe plaintext after local decryption.
+The native shell does not change the core threat model: endpoint compromise, malicious injected JavaScript on the trusted application origin, or a compromised unlocked device can still observe plaintext after local decryption and may invoke trusted native bridges. App-bound navigation, main-frame/origin checks, CSP and dependency hygiene therefore remain mandatory.
 
 ## Production runtime hardening
 
