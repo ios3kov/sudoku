@@ -4,6 +4,7 @@ import UIKit
 import WebKit
 
 final class SudokuViewController: UIViewController {
+    private static let canvasColor = UIColor(red: 244 / 255.0, green: 241 / 255.0, blue: 232 / 255.0, alpha: 1)
     private static let appURL = URL(string: "https://sudoku.moscow/")!
     private static let trustedHost = "sudoku.moscow"
     private static let contactHandlerName = "sudokuContacts"
@@ -38,6 +39,16 @@ final class SudokuViewController: UIViewController {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsLinkPreview = false
+        // Prevent browser-style rubber banding without disabling nested chat
+        // scrolling or the web app's deliberate hold-5 reveal gesture.
+        webView.scrollView.bounces = false
+        webView.scrollView.alwaysBounceVertical = false
+        webView.scrollView.alwaysBounceHorizontal = false
+        webView.scrollView.showsVerticalScrollIndicator = false
+        webView.scrollView.showsHorizontalScrollIndicator = false
+        webView.isOpaque = false
+        webView.backgroundColor = Self.canvasColor
+        webView.scrollView.backgroundColor = Self.canvasColor
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         return webView
     }()
@@ -63,7 +74,7 @@ final class SudokuViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        view.backgroundColor = UIColor(red: 0.969, green: 0.961, blue: 0.937, alpha: 1)
+        view.backgroundColor = Self.canvasColor
 
         privacyCover.translatesAutoresizingMaskIntoConstraints = false
 
