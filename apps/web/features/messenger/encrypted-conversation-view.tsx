@@ -287,7 +287,6 @@ export function EncryptedConversationView({
     try {
       const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
       const messageType = file.type.startsWith("image/") ? "image" : "file";
-      clientId = crypto.randomUUID();
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
         messageType,
@@ -295,19 +294,22 @@ export function EncryptedConversationView({
         replyTo: replyingTo?.id ?? null,
         assetIds: [uploaded.asset.id],
         attachments: [uploaded.metadata],
-      }, clientId);
+      }, undefined, (preparedClientId) => {
+        clientId = preparedClientId;
+      });
       setReplyingToId(null);
       await refreshProjection();
     } catch (uploadError) {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      const queuedClientId = clientId;
       if (
-        clientId
+        queuedClientId
         && navigator.onLine
-        && pendingMessages.some((message) => message.id === clientId)
+        && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
-        setFailedQueuedIds((current) => [...new Set([...current, clientId!])]);
+        setFailedQueuedIds((current) => [...new Set([...current, queuedClientId])]);
         setError(null);
       } else {
         setError(
@@ -353,7 +355,6 @@ export function EncryptedConversationView({
         type: mimeType,
       });
       const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
-      clientId = crypto.randomUUID();
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
         messageType: "voice",
@@ -361,19 +362,22 @@ export function EncryptedConversationView({
         replyTo: replyingTo?.id ?? null,
         assetIds: [uploaded.asset.id],
         attachments: [uploaded.metadata],
-      }, clientId);
+      }, undefined, (preparedClientId) => {
+        clientId = preparedClientId;
+      });
       setReplyingToId(null);
       await refreshProjection();
     } catch (voiceError) {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      const queuedClientId = clientId;
       if (
-        clientId
+        queuedClientId
         && navigator.onLine
-        && pendingMessages.some((message) => message.id === clientId)
+        && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
-        setFailedQueuedIds((current) => [...new Set([...current, clientId!])]);
+        setFailedQueuedIds((current) => [...new Set([...current, queuedClientId])]);
         setError(null);
       } else {
         setError(
