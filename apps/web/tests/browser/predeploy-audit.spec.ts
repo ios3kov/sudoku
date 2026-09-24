@@ -59,6 +59,20 @@ test("encrypted typing coalesces keystrokes, refreshes while active and stops cl
   expect(activeCount).toBeLessThan(4);
   expect(activeFrames.some((frame) => !frame.active)).toBe(false);
 
+  // Inactivity must stop presence before the remote fail-safe expiry.
+  await page.waitForTimeout(1_700);
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
+
+  // A successful send must stop typing immediately.
+  await input.fill("send now");
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(true);
+  await page.getByRole("button",{name:"Send",exact:true}).click();
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.sends)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
+
+  // Empty composer also stops an active typing session.
+  await input.fill("again");
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(true);
   await input.fill("");
   await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
 });
