@@ -453,6 +453,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               conversation={selected}
               user={user}
               adapter={e2eeAdapter}
+              realtime={realtimeClient}
               realtimeEvent={latestEvent}
               reconnectTick={reconnectTick}
               onBack={() => setSelectedId(null)}
