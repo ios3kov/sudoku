@@ -21,8 +21,12 @@ function waveformFromAudioBuffer(buffer: AudioBuffer): number[] {
     let peak = 0;
     for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
       const data = buffer.getChannelData(channel);
-      for (let index = start; index < end && index < data.length; index += 1) {
+      const stride = Math.max(1, Math.floor((end - start) / 256));
+      for (let index = start; index < end && index < data.length; index += stride) {
         peak = Math.max(peak, Math.abs(data[index]));
+      }
+      if (end > start && end - 1 < data.length) {
+        peak = Math.max(peak, Math.abs(data[end - 1]));
       }
     }
     raw.push(peak);
