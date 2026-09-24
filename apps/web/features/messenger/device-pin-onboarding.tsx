@@ -1,13 +1,19 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import {
+  NATIVE_BIOMETRIC_READY_EVENT,
+  nativeBiometricLabel,
+  nativeBiometricStatus,
+  type NativeBiometricStatus,
+} from "./native-biometric-access";
 
 export function DevicePinOnboarding({
   onSetPin,
   onSkip,
   onHide,
 }: {
-  onSetPin: (pin: string) => Promise<void>;
+  onSetPin: (pin: string, enableBiometric: boolean) => Promise<void>;
   onSkip: () => void;
   onHide: () => void;
 }) {
@@ -16,6 +22,32 @@ export function DevicePinOnboarding({
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [biometric, setBiometric] = useState<NativeBiometricStatus | null>(null);
+  const [enableBiometric, setEnableBiometric] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      void nativeBiometricStatus()
+        .then((status) => {
+          if (!alive) return;
+          setBiometric(status);
+          if (!status.available) setEnableBiometric(false);
+        })
+        .catch(() => {
+          if (alive) {
+            setBiometric(null);
+            setEnableBiometric(false);
+          }
+        });
+    };
+    refresh();
+    window.addEventListener(NATIVE_BIOMETRIC_READY_EVENT, refresh);
+    return () => {
+      alive = false;
+      window.removeEventListener(NATIVE_BIOMETRIC_READY_EVENT, refresh);
+    };
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,7 +60,7 @@ export function DevicePinOnboarding({
 
     setBusy(true);
     try {
-      await onSetPin(pin);
+      await onSetPin(pin, enableBiometric);
       setPin("");
       setConfirm("");
     } catch (reason) {
@@ -37,6 +69,8 @@ export function DevicePinOnboarding({
       setBusy(false);
     }
   }
+
+  const biometricLabel = nativeBiometricLabel(biometric?.type ?? "unknown");
 
   return (
     <main className="page" aria-label="Quick PIN setup">
@@ -93,7 +127,21 @@ export function DevicePinOnboarding({
                 disabled={busy}
               />
             </label>
-            <p className="device-access-help">Five incorrect PIN attempts require your account password.</p>
+            {biometric?.available ? (
+              <label className="device-access-choice">
+                <input
+                  type="checkbox"
+                  checked={enableBiometric}
+                  onChange={(event) => setEnableBiometric(event.target.checked)}
+                  disabled={busy}
+                />
+                Use {biometricLabel} for quick unlock
+              </label>
+            ) : null}
+            <p className="device-access-help">
+              Five incorrect PIN attempts require your account password.
+              {biometric?.available ? ` ${biometricLabel} stays on this iPhone and never replaces your account password.` : ""}
+            </p>
             {error ? <p className="form-error" role="alert">{error}</p> : null}
             <button className="primary-button" type="submit" disabled={busy}>
               {busy ? "Saving…" : "Save PIN"}
