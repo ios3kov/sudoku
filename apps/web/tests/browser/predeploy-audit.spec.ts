@@ -146,6 +146,21 @@ test("deleting a voice draft never uploads or sends and revokes its preview URL"
   expect(await page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(0);
   expect(await page.evaluate((url)=>window.__predeployAudit.urls.revoked.includes(url!), created)).toBe(true);
 });
+test("hiding an unsent voice draft revokes its preview URL without upload", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  await page.locator(".voice-button").click();
+  await page.evaluate(()=>window.__predeployAudit.resolveMedia());
+  await page.locator(".voice-button").click();
+  await expect(page.getByRole("group",{name:"Voice message preview"})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.urls.created.length)).toBeGreaterThan(0);
+  const created = await page.evaluate(()=>window.__predeployAudit.urls.created.at(-1));
+
+  await page.getByRole("button",{name:"Hide",exact:true}).click();
+  expect(await page.evaluate(()=>window.__predeployAudit.io.uploads)).toBe(0);
+  expect(await page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(0);
+  expect(await page.evaluate((url)=>window.__predeployAudit.urls.revoked.includes(url!), created)).toBe(true);
+});
+
 test("hiding an active recording discards it and releases all tracks", async ({page}) => {
   await page.evaluate(()=>window.__predeployAudit.mount("chat"));await page.locator(".voice-button").click();
   await page.evaluate(()=>window.__predeployAudit.resolveMedia());await expect(page.locator(".voice-button")).toContainText("Stop");
