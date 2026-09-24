@@ -335,6 +335,28 @@
 .own .message-time{
   color:#fff;
 }
+.message-bubble.pending.failed{
+  border-color:rgba(220,38,38,.35);
+}
+.pending-message-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:6px;
+  margin-top:7px;
+}
+.pending-message-actions button{
+  min-height:30px;
+  padding:4px 9px;
+  border:1px solid rgba(255,255,255,.35);
+  border-radius:999px;
+  background:rgba(255,255,255,.12);
+  color:inherit;
+  font-size:11px;
+  font-weight:650;
+}
+.pending-message-actions button:disabled{
+  opacity:.55;
+}
 .message-more-button{
   width:44px;
   min-width:44px;

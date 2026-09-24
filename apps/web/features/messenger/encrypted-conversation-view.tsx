@@ -61,8 +61,10 @@ export function EncryptedConversationView({
   const [messages, setMessages] = useState<ProjectedEncryptedMessage[]>([]);
   const [draft, setDraft] = useConversationDraft(conversation.id);
   const [editBody, setEditBody] = useState("");
-  const [sendingText, setSendingText] = useState<string | null>(null);
+  const [sendingPreview, setSendingPreview] = useState<{ id: string; body: string; phase: "encrypting" | "sending" } | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<ReturnType<OpenMlsProtocolAdapter["pendingApplicationMessages"]>>([]);
+  const [failedQueuedIds, setFailedQueuedIds] = useState<string[]>([]);
+  const [retryingQueuedId, setRetryingQueuedId] = useState<string | null>(null);
   const [readSequence, setReadSequence] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -95,23 +97,29 @@ export function EncryptedConversationView({
       try {
         await adapter.syncTransport(conversation.id);
         const projection = adapter.projectConversation(conversation.id);
+        const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
         setMessages(projection.messages);
         setReadSequence(projection.latestSequence);
-        setQueuedMessages(adapter.pendingApplicationMessages(conversation.id));
+        setQueuedMessages(pendingMessages);
+        setFailedQueuedIds((current) =>
+          current.filter((id) => pendingMessages.some((message) => message.id === id))
+        );
         setSyncBlocked(false);
         setQueuedCount(adapter.pendingApplicationCount(conversation.id));
         if (projection.rejectedEventIds.length > 0) {
           setError("Some encrypted updates were rejected");
         } else {
-          const hasPending = adapter.pendingApplicationCount(conversation.id) > 0;
-          setError((current) => current === "Secure sync is blocked"
-            || (!hasPending && current === "Encrypted message queued for retry") ? null : current);
+          setError((current) => current === "Secure sync is blocked" ? null : current);
         }
       } catch {
+        const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
         setSyncBlocked(true);
         setError("Secure sync is blocked");
         setQueuedCount(adapter.pendingApplicationCount(conversation.id));
-        setQueuedMessages(adapter.pendingApplicationMessages(conversation.id));
+        setQueuedMessages(pendingMessages);
+        setFailedQueuedIds((current) =>
+          current.filter((id) => pendingMessages.some((message) => message.id === id))
+        );
       } finally {
         setLoading(false);
       }
@@ -178,8 +186,10 @@ export function EncryptedConversationView({
     setBusy(true);
     setError(null);
     timelineRef.current?.toLatest();
-    if (!editing) setSendingText(text);
     const clientId = crypto.randomUUID();
+    if (!editing) {
+      setSendingPreview({ id: clientId, body: text, phase: "encrypting" });
+    }
 
     try {
       if (editing) {
@@ -192,28 +202,73 @@ export function EncryptedConversationView({
           replyTo: replyingTo?.id ?? null,
           assetIds: [],
           attachments: [],
-        }, clientId);
+        }, clientId, () => {
+          setSendingPreview((current) =>
+            current?.id === clientId ? { ...current, phase: "sending" } : current
+          );
+        });
       }
       if (editing) setEditBody(""); else setDraft("");
-      setSendingText(null);
+      setSendingPreview(null);
       setEditingId(null);
       setReplyingToId(null);
       await refreshProjection();
     } catch {
-      const pending = adapter.pendingApplicationCount(conversation.id);
-      setQueuedCount(pending);
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       setQueuedMessages(pendingMessages);
       if (!editing && pendingMessages.some((message) => message.id === clientId)) {
         setBody("");
         setReplyingToId(null);
-        setError("Encrypted message queued for retry");
+        setFailedQueuedIds((current) =>
+          navigator.onLine
+            ? [...new Set([...current, clientId])]
+            : current.filter((id) => id !== clientId)
+        );
+        setError(null);
       } else {
         setError("Unable to send encrypted update");
       }
     } finally {
-      setSendingText(null);
+      setSendingPreview(null);
       setBusy(false);
+    }
+  }
+
+  async function retryQueuedMessage(clientId: string) {
+    if (!navigator.onLine) {
+      setError("Retry requires a connection");
+      return;
+    }
+    setError(null);
+    setRetryingQueuedId(clientId);
+    setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+    try {
+      await adapter.retryPendingApplicationSend(clientId);
+      await refreshProjection();
+    } catch {
+      const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+      setQueuedMessages(pendingMessages);
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      if (pendingMessages.some((message) => message.id === clientId)) {
+        setFailedQueuedIds((current) => [...new Set([...current, clientId])]);
+      }
+      setError("Encrypted message retry failed");
+    } finally {
+      setRetryingQueuedId(null);
+    }
+  }
+
+  async function removeQueuedMessage(clientId: string) {
+    setError(null);
+    try {
+      await adapter.discardPendingApplicationSend(clientId);
+      const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+      setQueuedMessages(pendingMessages);
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+    } catch {
+      setError("Unable to remove queued encrypted message");
     }
   }
 
@@ -228,6 +283,7 @@ export function EncryptedConversationView({
 
     setBusy(true);
     setUploadProgress(0);
+    let clientId: string | null = null;
     try {
       const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
       const messageType = file.type.startsWith("image/") ? "image" : "file";
@@ -238,16 +294,30 @@ export function EncryptedConversationView({
         replyTo: replyingTo?.id ?? null,
         assetIds: [uploaded.asset.id],
         attachments: [uploaded.metadata],
+      }, undefined, (preparedClientId) => {
+        clientId = preparedClientId;
       });
       setReplyingToId(null);
       await refreshProjection();
     } catch (uploadError) {
-      setError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Encrypted attachment failed",
-      );
+      const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+      setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      const queuedClientId = clientId;
+      if (
+        queuedClientId
+        && navigator.onLine
+        && pendingMessages.some((message) => message.id === queuedClientId)
+      ) {
+        setFailedQueuedIds((current) => [...new Set([...current, queuedClientId])]);
+        setError(null);
+      } else {
+        setError(
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Encrypted attachment failed",
+        );
+      }
     } finally {
       setUploadProgress(null);
       setBusy(false);
@@ -278,6 +348,7 @@ export function EncryptedConversationView({
     if (syncBlocked) { setError("Voice note was not sent: Secure sync is blocked"); return; }
     setBusy(true);
     setUploadProgress(0);
+    let clientId: string | null = null;
     try {
       const extension = voiceFileExtension(mimeType);
       const file = new File(chunks, `voice-${Date.now()}.${extension}`, {
@@ -291,16 +362,30 @@ export function EncryptedConversationView({
         replyTo: replyingTo?.id ?? null,
         assetIds: [uploaded.asset.id],
         attachments: [uploaded.metadata],
+      }, undefined, (preparedClientId) => {
+        clientId = preparedClientId;
       });
       setReplyingToId(null);
       await refreshProjection();
     } catch (voiceError) {
-      setError(
-        voiceError instanceof Error
-          ? voiceError.message
-          : "Encrypted voice note failed",
-      );
+      const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+      setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      const queuedClientId = clientId;
+      if (
+        queuedClientId
+        && navigator.onLine
+        && pendingMessages.some((message) => message.id === queuedClientId)
+      ) {
+        setFailedQueuedIds((current) => [...new Set([...current, queuedClientId])]);
+        setError(null);
+      } else {
+        setError(
+          voiceError instanceof Error
+            ? voiceError.message
+            : "Encrypted voice note failed",
+        );
+      }
     } finally {
       setUploadProgress(null);
       setBusy(false);
@@ -488,8 +573,46 @@ export function EncryptedConversationView({
           );
         }}
         childrenAfter={<>
-          {queuedMessages.map((message) => <div className="message-row own" key={message.id}><div className="message-bubble pending"><p>{message.body ?? (message.messageType === "voice" ? "Voice message" : "Attachment")}</p><small>Queued</small></div></div>)}
-          {sendingText ? <div className="message-row own"><div className="message-bubble pending"><p>{sendingText}</p><small role="status">Sending…</small></div></div> : null}
+          {queuedMessages.map((message) => {
+            const failed = failedQueuedIds.includes(message.id);
+            const retrying = retryingQueuedId === message.id;
+            return (
+              <div className="message-row own" key={message.id}>
+                <div className={`message-bubble pending ${failed ? "failed" : ""}`}>
+                  <p>{message.body ?? (message.messageType === "voice" ? "Voice message" : "Attachment")}</p>
+                  <small role={failed ? "alert" : "status"}>{retrying ? "Sending…" : failed ? "Failed" : "Queued"}</small>
+                  <div className="pending-message-actions">
+                    {failed ? (
+                      <button
+                        type="button"
+                        aria-label="Retry failed message"
+                        disabled={retrying}
+                        onClick={() => void retryQueuedMessage(message.id)}
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      aria-label="Remove queued message"
+                      disabled={retrying}
+                      onClick={() => void removeQueuedMessage(message.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {sendingPreview ? (
+            <div className="message-row own">
+              <div className="message-bubble pending">
+                <p>{sendingPreview.body}</p>
+                <small role="status">{sendingPreview.phase === "encrypting" ? "Encrypting…" : "Sending…"}</small>
+              </div>
+            </div>
+          ) : null}
         </>}
       />
       {actionMessage && !actionMessage.deleted ? <MessageActionSheet

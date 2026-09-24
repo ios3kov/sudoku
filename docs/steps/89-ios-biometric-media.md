@@ -140,3 +140,18 @@ Do not release if:
 - Desktop/browser: existing web client.
 
 Native Android remains out of scope for this production cycle.
+
+
+## Merge verification — 2026-09-24
+
+PR #69 merged to `main` as `b6f7ac9cc185bb55a8ec476ec2daed9f204f198c`.
+
+Exact post-merge push verification is green:
+
+- ci `35971848950`;
+- ios-native `35971848942`;
+- device-access `35971848935`;
+- beat-runtime `35971848965`;
+- api-shutdown `35971849241`.
+
+This merge did not deploy production or upload a TestFlight build.
