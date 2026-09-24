@@ -42,7 +42,9 @@ These are behavioral references, not source-code imports. No Signal/Element GPL/
 
 Run the existing UX, typing/read-state, voice and predeployment lifecycle suites too. Full CI includes web lint/typecheck/build/budget and browser acceptance; `ios-native` compiles the changed UIKit implementation.
 
-Local browser execution on the operator Mac is constrained by the Codex sandbox (Chromium MachPortRendezvous permission denied). GitHub CI is the browser execution gate. Local typecheck also requires the generated OpenMLS package; do not replace it with a stub to claim a passing production build.
+The bundled conversation was also checked through the desktop app browser at 320px / 300%: history scroll width equals client width (320px); deletion confirmation focuses Cancel and Escape restores the action button. This is browser evidence, not physical-iPhone VoiceOver acceptance.
+
+Local Playwright browser execution on the operator Mac is constrained by the Codex sandbox (Chromium MachPortRendezvous permission denied). GitHub CI is the browser execution gate. Local typecheck also requires the generated OpenMLS package; do not replace it with a stub to claim a passing production build.
 
 ## Manual acceptance — remains open
 

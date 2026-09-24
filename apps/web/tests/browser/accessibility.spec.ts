@@ -14,7 +14,9 @@ test.beforeAll(async () => {
 });
 test.beforeEach(async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
-  await page.setContent('<html lang="en"><body><div id="root"></div></body></html>');
+  const fixtureURL = "http://127.0.0.1:3000/__accessibility_fixture";
+  await page.route(fixtureURL, route => route.fulfill({contentType: "text/html", body: '<html lang="en"><body><div id="root"></div></body></html>'}));
+  await page.goto(fixtureURL);
   await page.addStyleTag({content: styles});
   await page.addScriptTag({content: bundle});
   await page.evaluate(() => {
@@ -57,7 +59,7 @@ test("history supports keyboard scrolling and read details are accessible text",
   await page.keyboard.press("PageUp");
   await expect.poll(() => history.evaluate(node => node.scrollTop)).toBeLessThan(before);
   const receipt = page.locator('[data-message-id="seed-19"] .message-delivery');
-  await expect(receipt).toMatchAriaSnapshot('- text: /Read by Alice/');
+  await expect(receipt.locator('.sr-only')).toMatchAriaSnapshot('- text: Read by Alice');
 });
 
 test("message actions keep focus, default deletion to Cancel and restore the opener", async ({page}) => {
