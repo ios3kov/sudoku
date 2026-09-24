@@ -60,3 +60,15 @@ Added a real loopback HTTP regression: a server begins a response and stalls; ab
 Source review of encrypted attachment teardown confirms it aborts the current request, invalidates the generation, releases object URLs and clears file references. Completion also checks generation after WebCrypto, which cannot itself be aborted. This observation plus the loopback regression does not replace real background/memory-pressure testing on iPhone.
 
 For head `9c2bb7e`, GitHub API integration tests passed; the full workflow was still building OpenMLS when inspected. Do not treat this intermediate checkpoint as full green or as a MinIO runtime result.
+
+## Verified checkpoint — PR #85 merged
+
+PR #85 merged as `a3892f1100c1270f255b864db4019d837a2eb5a3` after all five checks passed on exact head `8e350116cffd97468db93bdf78d2b010f743e39e`. [CI run](https://github.com/ios3kov/sudoku/actions/runs/36052862125) passed API integration, browser E2E, Linux operations regressions, pinned MinIO conditional uploads and production image builds. This supersedes the awaiting-CI notes above: REL-005/006/007 have automated verification, and REL-008 has real pinned-provider HTTP verification. Release-environment browser CORS and physical acceptance remain open. No deployment occurred.
+
+## Technical audit pass 5 — upload transport recovery
+
+**REL-009 — Medium, fixed locally:** both legacy and encrypted upload PUTs used XHR without a deadline or abort handler. A stalled transfer could retain the caller's pending promise and keep the composer busy indefinitely. Set a five-minute total PUT deadline (including waiting for the storage response), and reject on timeout or abort so existing caller error/finally paths can recover. Slow transfers exceeding this deadline require a manual retry; no automatic retry or reuse of conditional PUT URLs is introduced.
+
+Eight controlled transport regressions exercise both public upload functions for timeout, abort, network error and HTTP 412, then a successful fresh attempt. They verify failure does not invoke completion, required conditional headers are forwarded, retry obtains another intent, and successful progress finishes at 100. These simulate XHR events and do not prove real iPhone network behavior or elapsed browser timeout accuracy. Cancellation when leaving a conversation and end-to-end request deadlines remain separate follow-up review items.
+
+Source inspection also confirmed both repository CORS templates allow request headers via `AllowedHeader: *`; this is configuration evidence only, not proof of the live bucket's applied policy.
