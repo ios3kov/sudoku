@@ -129,7 +129,7 @@ export function VoiceDraftPreview({
       />
       <button
         type="button"
-        className="voice-preview-play"
+        className={`voice-preview-play ${playing ? "is-playing" : ""}`}
         aria-label={playing ? "Pause voice preview" : "Play voice preview"}
         disabled={busy || !source}
         onClick={() => void togglePlayback()}
@@ -157,12 +157,13 @@ export function VoiceDraftPreview({
       </button>
       <button
         type="button"
-        className="voice-preview-send"
-        aria-label="Send voice message"
+        className={`voice-preview-send ${uploadProgress !== null ? "is-uploading" : ""}`}
+        aria-label={uploadProgress === null ? "Send voice message" : `Sending voice message ${uploadProgress}%`}
+        data-progress={uploadProgress === null ? undefined : `${uploadProgress}%`}
         disabled={busy || sendDisabled}
         onClick={onSend}
       >
-        {uploadProgress === null ? "Send" : `${uploadProgress}%`}
+        Send
       </button>
     </div>
   );
@@ -257,7 +258,7 @@ export function VoiceMessagePlayback({
       />
       <button
         type="button"
-        className="voice-message-play"
+        className={`voice-message-play ${playing ? "is-playing" : ""}`}
         aria-label={playing ? "Pause voice message" : "Play voice message"}
         disabled={loading}
         onClick={() => void togglePlayback()}
