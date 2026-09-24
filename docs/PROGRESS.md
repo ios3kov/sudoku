@@ -2,7 +2,7 @@
 
 ## Current milestone — native iOS production program
 
-Date: 2026-09-23.
+Date: 2026-09-24.
 
 The phone/contact release is now live on production commit `c0f71313b92aaa8206eda036ecb819f796854f30`. Database migration `0016_phone_contacts` is applied, readiness is healthy, the live smoke passes, phone login works for the migrated administrator, and the four-digit PIN + reload path returns to secure messaging without the previous restart-required failure.
 
@@ -10,7 +10,11 @@ A consistent production backup `20260923T160722Z` was created with the maintenan
 
 The next product track is a native iOS client shell rather than further PWA-only work. The target keeps the existing Next.js UI, FastAPI backend and MLS protocol while adding a narrow native capability layer for explicit iPhone contact selection, biometric unlock, app-switcher privacy and native media/file pickers. See [Step88](steps/88-native-ios-production-plan.md).
 
-PR #62 is merged to `main` as `571ce04ad3903f76f7fbdbc1aa607acb767b9095`; exact post-merge CI, device-access, beat-runtime and api-shutdown are green. Migration `0017_single_admin` is now in the repository but has not yet been deployed to production. The active implementation branch `feat/ios-native-host` adds the first-party Swift/UIKit host, app-bound `WKWebView`, synchronous native privacy cover, explicit Contacts UI picker bridge, XcodeGen project spec and a macOS/Xcode CI build gate.
+PR #62 is merged to `main` as `571ce04ad3903f76f7fbdbc1aa607acb767b9095`; exact post-merge CI, device-access, beat-runtime and api-shutdown are green. Migration `0017_single_admin` is now in the repository but has not yet been deployed to production.
+
+PR #65 is merged to `main` as `cd0d91657e0654a91c2e70f9c1400dd60b602059`. Exact post-merge CI `35909765615`, device-access `35909765584`, beat-runtime `35909765596`, ios-native `35909765676` and api-shutdown `35909765652` are green. That establishes the first-party Swift/UIKit iOS host, app-bound `WKWebView`, synchronous native privacy cover, explicit Contacts UI picker bridge, XcodeGen project spec and macOS/Xcode build gate as the current repository baseline.
+
+The active implementation branch `feat/ios-biometric-media` is the next P0 block: Face ID/Touch ID quick unlock backed by a `biometryCurrentSet` Keychain item, native Photos/Files selection that feeds the existing E2EE upload pipeline, privacy manifest work, and browser/native regressions. See [Step89](steps/89-ios-biometric-media.md). No production server deployment, TestFlight upload or App Store submission is performed by this branch.
 
 The global administration model is also being tightened: production remains invite-only and the database will enforce at most one global administrator. Only that singleton administrator may create or revoke account invitations. Conversation-local owner roles do not grant global invite rights.
 
