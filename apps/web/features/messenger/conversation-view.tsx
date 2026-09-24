@@ -60,6 +60,12 @@ export function ConversationView({
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const uploadLifetime = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const lifetime = new AbortController();
+    uploadLifetime.current = lifetime;
+    return () => lifetime.abort();
+  }, []);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [actionMessageId, setActionMessageId] = useState<string | null>(null);
@@ -324,11 +330,15 @@ export function ConversationView({
 
     setUploadProgress(0);
     try {
-      const asset = await uploadAsset(file, setUploadProgress);
+      const lifetime = uploadLifetime.current;
+      if (!lifetime || lifetime.signal.aborted) return;
+      const asset = await uploadAsset(file, setUploadProgress, lifetime.signal);
+      if (lifetime.signal.aborted) return;
       const type = asset.mime_type.startsWith("image/") ? "image" : "file";
       const sent = await messengerApi.sendMessage(conversation.id, crypto.randomUUID(), file.name, type, [asset.id]);
       setMessages((current) => mergeMessages(current, [sent]));
     } catch (uploadError) {
+      if (uploadLifetime.current?.signal.aborted) return;
       setError(uploadError instanceof Error ? uploadError.message : "Attachment failed");
     } finally {
       setUploadProgress(null);
@@ -411,7 +421,10 @@ export function ConversationView({
     try {
       const extension = voiceFileExtension(mimeType);
       const file = new File(chunks, `voice-${Date.now()}.${extension}`, { type: mimeType });
-      const asset = await uploadAsset(file, setUploadProgress);
+      const lifetime = uploadLifetime.current;
+      if (!lifetime || lifetime.signal.aborted) return;
+      const asset = await uploadAsset(file, setUploadProgress, lifetime.signal);
+      if (lifetime.signal.aborted) return;
       const sent = await messengerApi.sendMessage(
         conversation.id,
         crypto.randomUUID(),
@@ -421,6 +434,7 @@ export function ConversationView({
       );
       setMessages((current) => mergeMessages(current, [sent]));
     } catch (voiceError) {
+      if (uploadLifetime.current?.signal.aborted) return;
       setError(voiceError instanceof Error ? voiceError.message : "Voice note failed");
     } finally {
       setUploadProgress(null);
