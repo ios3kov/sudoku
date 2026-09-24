@@ -115,7 +115,14 @@ for (const role of ["member", "admin"]) {
     await devices.getByRole("button", { name: "Close", exact: true }).click();
     await expect(devices).toHaveCount(0);
 
+    const signedOut = page.waitForResponse(response =>
+      response.url().endsWith("/v1/auth/logout") && response.request().method() === "POST"
+    );
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    expect((await signedOut).ok()).toBe(true);
+    // Logout also clears local encrypted state before concealing the surface.
+    // Navigating immediately after click can abort the request and retain PIN.
+    await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
     await reveal(page);
     await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue(phone);
     await page.getByLabel("Remember phone on this device").uncheck();
