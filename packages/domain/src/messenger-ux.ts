@@ -84,3 +84,25 @@ export class SessionDrafts {
   }
   clear(): void { this.entries.clear(); }
 }
+
+
+export type SendFailureKind = "transient" | "permanent";
+export const MAX_AUTO_SEND_RETRY_ATTEMPTS = 5;
+
+export function sendFailureKind(status: number | null): SendFailureKind {
+  if (status === null) return "transient";
+  if (!Number.isInteger(status) || status < 100 || status > 599) {
+    throw new Error("Invalid HTTP status");
+  }
+  if (status === 408 || status === 409 || status === 425 || status === 429 || status >= 500) {
+    return "transient";
+  }
+  return "permanent";
+}
+
+export function sendRetryDelayMs(attempt: number): number {
+  if (!Number.isInteger(attempt) || attempt < 1) {
+    throw new Error("Invalid retry attempt");
+  }
+  return Math.min(1000 * 2 ** (attempt - 1), 16000);
+}
