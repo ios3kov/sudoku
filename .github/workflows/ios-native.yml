@@ -7,6 +7,7 @@ on:
       - "scripts/generate-ios-project.sh"
       - ".github/workflows/ios-native.yml"
       - "docs/steps/88-native-ios-production-plan.md"
+      - "docs/steps/89-ios-biometric-media.md"
   push:
     branches: [main]
     paths:
@@ -14,6 +15,7 @@ on:
       - "scripts/generate-ios-project.sh"
       - ".github/workflows/ios-native.yml"
       - "docs/steps/88-native-ios-production-plan.md"
+      - "docs/steps/89-ios-biometric-media.md"
 
 permissions:
   contents: read
@@ -33,8 +35,10 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Validate plist
-        run: plutil -lint ios/Sudoku/Sudoku/Info.plist
+      - name: Validate Apple plists
+        run: |
+          plutil -lint ios/Sudoku/Sudoku/Info.plist
+          plutil -lint ios/Sudoku/Sudoku/PrivacyInfo.xcprivacy
 
       - name: Generate Xcode project
         run: bash scripts/generate-ios-project.sh
