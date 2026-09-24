@@ -5,6 +5,7 @@
 .device-access-panel p { overflow-wrap: anywhere; }
 .device-pin-input { letter-spacing: .35em; font-size: 20px !important; }
 .device-access-panel button { min-height: 44px; }
+.device-access-biometric { display: grid; gap: 8px; margin: 8px 0 12px; }
 .device-access-help { font-size: 14px; line-height: 1.5; color: #475569; }
 
 .device-pin-onboarding .device-access-prompt { margin: 10px 0 4px; font-size: 18px; line-height: 1.35; font-weight: 600; }
