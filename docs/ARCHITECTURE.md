@@ -94,7 +94,9 @@ The initial native host intentionally has no third-party runtime SDK dependency.
 
 - Server authorization remains authoritative for sessions, invites, contacts and membership.
 - MLS remains authoritative for private message/group cryptography.
-- Native biometrics only unlock local UI state; they do not create or extend a server session.
+- Native biometrics do **not** create or extend a server session. When explicitly enabled, iOS releases the current four-digit device PIN from a `biometryCurrentSet` Keychain item only after Face ID / Touch ID succeeds; the web client then submits that PIN to the existing server `/v1/auth/device-access/unlock` endpoint and receives the normal RAM-only unlock capability.
+- The biometric Keychain item is device-only, is cleared on explicit sign-out/PIN removal/biometric disable, and becomes unusable when the enrolled biometric set changes.
+- Native Photos/Files pickers are selection-only. Selected bytes are converted into the same browser `File` abstraction and continue through the existing client-side E2EE attachment pipeline; native code has no plaintext object-store upload path.
 - Sudoku concealment remains presentation privacy, not authentication.
 
 ## Identity and administration
@@ -125,6 +127,14 @@ Client behavior:
 - unsupported browsers/PWA: manual E.164 entry.
 
 All three paths converge on the same `/v1/contacts/sync` API and therefore share the same authorization semantics.
+
+## Native attachment architecture
+
+The iOS host may source one explicitly selected local file through the system Photos or Files picker, but ownership of attachment security remains in the shared web client:
+
+`system picker -> trusted native bridge -> browser File -> client-side encryption -> ciphertext upload`
+
+The native host enforces the existing attachment size/MIME boundary before crossing the bridge. The shared encrypted conversation code performs the authoritative encryption, metadata construction and upload. Web/PWA retains its ordinary file-input fallback.
 
 ## Reliability defaults
 
