@@ -49,9 +49,10 @@ const conversation = {
   id: "chat",
   type: "direct",
   title: null,
-  latest_sequence: 0,
+  latest_sequence: 20,
+  last_read_sequence: 20,
   members: [
-    { id: "me", display_name: "Test owner", phone_e164: null, email: "owner@example.test", role: "owner", last_read_sequence: 0 },
+    { id: "me", display_name: "Test owner", phone_e164: null, email: "owner@example.test", role: "owner", last_read_sequence: 20 },
     { id: "peer", display_name: "Alice", phone_e164: null, email: "peer@example.test", role: "member", last_read_sequence: 20 },
   ],
   encryption_required: true,
@@ -62,6 +63,7 @@ const protocol = {
   sends: 0,
   lastSend: null as unknown,
   typing: [] as Array<{conversationId: string; active: boolean}>,
+  reads: [] as number[],
   messages: [] as ProjectedEncryptedMessage[],
 };
 const realtime = {
@@ -80,7 +82,9 @@ const adapter = {
   },
 } as unknown as OpenMlsProtocolAdapter;
 messengerApi.asset = async () => ({id: "asset", e2ee_ciphertext: true}) as Awaited<ReturnType<typeof messengerApi.asset>>;
-messengerApi.markRead = async () => undefined;
+messengerApi.markRead = async (_conversationId: string, sequence: number) => {
+  protocol.reads.push(sequence);
+};
 const root = createRoot(document.getElementById("root")!);
 let emitRealtime: ((event: RealtimeEvent) => void) | null = null;
 function Fixture({kind}: {kind: "voice" | "image" | "file" | "chat"}) {
