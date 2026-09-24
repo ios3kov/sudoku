@@ -8,6 +8,7 @@ type RecordingSession = {
   stream: MediaStream | null;
   recorder: MediaRecorder | null;
   chunks: Blob[];
+  elapsedSeconds: number;
   tick: number | null;
   deadline: number | null;
 };
@@ -31,7 +32,7 @@ function disposeSession(session: RecordingSession) {
 }
 
 export function useVoiceRecorder({ onReady, onError }: {
-  onReady: (chunks: Blob[], mimeType: string) => Promise<void>;
+  onReady: (chunks: Blob[], mimeType: string, fallbackDurationMs: number) => Promise<void>;
   onError: (message: string) => void;
 }) {
   const [phase, setPhase] = useState<"idle" | "requesting" | "recording">("idle");
@@ -61,7 +62,7 @@ export function useVoiceRecorder({ onReady, onError }: {
       callbacks.current.onError("Voice recording is not supported on this device");
       return;
     }
-    const session: RecordingSession = {cancelled: false, stream: null, recorder: null, chunks: [], tick: null, deadline: null};
+    const session: RecordingSession = {cancelled: false, stream: null, recorder: null, chunks: [], elapsedSeconds: 0, tick: null, deadline: null};
     active.current = session;
     setPhase("requesting");
     setSeconds(0);
@@ -94,16 +95,24 @@ export function useVoiceRecorder({ onReady, onError }: {
       recorder.onstop = () => {
         if (!isCurrent()) return;
         const chunks = [...session.chunks];
+        const fallbackDurationMs = Math.max(
+          1_000,
+          Math.min(MAX_VOICE_SECONDS * 1_000, session.elapsedSeconds * 1_000),
+        );
         finish();
         if (chunks.length > 0) {
-          void callbacks.current.onReady(chunks, baseMime).catch(() => {
+          void callbacks.current.onReady(chunks, baseMime, fallbackDurationMs).catch(() => {
             if (mounted.current) callbacks.current.onError("Voice note failed");
           });
         }
       };
       recorder.start(250);
       setPhase("recording");
-      session.tick = window.setInterval(() => { if (isCurrent()) setSeconds((value) => value + 1); }, 1_000);
+      session.tick = window.setInterval(() => {
+        if (!isCurrent()) return;
+        session.elapsedSeconds = Math.min(MAX_VOICE_SECONDS, session.elapsedSeconds + 1);
+        setSeconds(session.elapsedSeconds);
+      }, 1_000);
       session.deadline = window.setTimeout(() => { if (isCurrent() && recorder.state === "recording") recorder.stop(); }, MAX_VOICE_SECONDS * 1_000);
     } catch {
       const report = isCurrent();
