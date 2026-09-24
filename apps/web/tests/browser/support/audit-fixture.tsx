@@ -1,5 +1,5 @@
 import type { ProjectedEncryptedMessage } from "@sudoku/domain";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { EncryptedAttachment } from "../../../features/messenger/encrypted-attachment";
 import { EncryptedConversationView } from "../../../features/messenger/encrypted-conversation-view";
@@ -90,7 +90,10 @@ let emitRealtime: ((event: RealtimeEvent) => void) | null = null;
 function Fixture({kind}: {kind: "voice" | "image" | "file" | "chat"}) {
   const [visible, setVisible] = useState(true);
   const [event, setEvent] = useState<RealtimeEvent | null>(null);
-  emitRealtime = setEvent;
+  useEffect(() => {
+    emitRealtime = setEvent;
+    return () => { emitRealtime = null; };
+  }, []);
   return <main>{kind !== "chat" ? <button onClick={() => setVisible(false)}>Unmount private surface</button> : null}<div className={kind === "chat" ? "messenger-page" : ""}><section className={kind === "chat" ? "messenger-shell minimal-messenger-frame messenger-runtime-shell" : ""}>{visible ?
     kind === "chat" ? <ConversationDraftProvider><EncryptedConversationView
       conversation={conversation} user={user} adapter={adapter} realtime={realtime} realtimeEvent={event} reconnectTick={0}
