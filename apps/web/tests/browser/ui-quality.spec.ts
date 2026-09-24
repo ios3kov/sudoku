@@ -173,8 +173,11 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await expect(phone).toBeVisible({ timeout: 30_000 });
   await expect(phone).toHaveCSS("font-size", "16px");
   const viewportMeta = await page.locator('meta[name="viewport"]').getAttribute("content");
-  expect(viewportMeta).toContain("maximum-scale=1");
-  expect(viewportMeta).toContain("user-scalable=no");
+  // Users must retain browser zoom for accessible text enlargement.
+  expect(viewportMeta).toContain("width=device-width");
+  expect(viewportMeta).toContain("initial-scale=1");
+  expect(viewportMeta).not.toMatch(/maximum-scale\s*=/);
+  expect(viewportMeta).not.toMatch(/user-scalable\s*=\s*(?:no|0)/);
 
   const privateOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

@@ -47,6 +47,8 @@ The bundled conversation was also checked through the desktop app browser at 320
 
 Local Playwright browser execution on the operator Mac is constrained by the Codex sandbox (Chromium MachPortRendezvous permission denied). GitHub CI is the browser execution gate. Local typecheck also requires the generated OpenMLS package; do not replace it with a stub to claim a passing production build.
 
+Initial CI on `fbbb671ea076bca6132c7a136f9bc2a8ca407669` passed all five new accessibility tests, 66 browser tests overall, web build/typecheck and the native iOS workflow. One legacy UI assertion still required disabled zoom; it now verifies that zoom is unrestricted. The updated head requires a fresh full CI run.
+
 ## Manual acceptance — remains open
 
 - [ ] Physical iPhone: default, XL, AX1 and AX5; change text size while chat is open and after background/resume, without losing draft or scroll context.
