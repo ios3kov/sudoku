@@ -287,6 +287,20 @@ export function EncryptedConversationView({
     [messageById, editingId],
   );
 
+  function classifyPendingFailure(clientId: string, sendError: unknown) {
+    if (!navigator.onLine) {
+      setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+      return;
+    }
+    if (sendFailureForError(sendError) === "permanent") {
+      retryAttemptsRef.current.delete(clientId);
+      setFailedQueuedIds((current) => [...new Set([...current, clientId])]);
+      return;
+    }
+    setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+    setRetryTick((value) => value + 1);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = body.trim();
@@ -321,18 +335,14 @@ export function EncryptedConversationView({
       setEditingId(null);
       setReplyingToId(null);
       await refreshProjection();
-    } catch {
+    } catch (sendError) {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       setQueuedMessages(pendingMessages);
       if (!editing && pendingMessages.some((message) => message.id === clientId)) {
         setBody("");
         setReplyingToId(null);
-        setFailedQueuedIds((current) =>
-          navigator.onLine
-            ? [...new Set([...current, clientId])]
-            : current.filter((id) => id !== clientId)
-        );
+        classifyPendingFailure(clientId, sendError);
         setError(null);
       } else {
         setError("Unable to send encrypted update");
@@ -353,15 +363,17 @@ export function EncryptedConversationView({
     setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
     try {
       await adapter.retryPendingApplicationSend(clientId);
+      retryAttemptsRef.current.delete(clientId);
       await refreshProjection();
-    } catch {
+    } catch (retryError) {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
-      if (pendingMessages.some((message) => message.id === clientId)) {
-        setFailedQueuedIds((current) => [...new Set([...current, clientId])]);
+      const next = pendingMessages[0];
+      if (next) {
+        classifyPendingFailure(next.id, retryError);
+        setError(sendFailureForError(retryError) === "permanent" ? "Encrypted message retry failed" : null);
       }
-      setError("Encrypted message retry failed");
     } finally {
       setRetryingQueuedId(null);
     }
@@ -369,12 +381,19 @@ export function EncryptedConversationView({
 
   async function removeQueuedMessage(clientId: string) {
     setError(null);
+    if (retryTimerRef.current?.clientId === clientId) {
+      window.clearTimeout(retryTimerRef.current.timer);
+      retryTimerRef.current = null;
+      setAutoRetryQueuedId(null);
+    }
+    retryAttemptsRef.current.delete(clientId);
     try {
       await adapter.discardPendingApplicationSend(clientId);
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+      setRetryTick((value) => value + 1);
     } catch {
       setError("Unable to remove queued encrypted message");
     }
