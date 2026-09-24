@@ -433,10 +433,9 @@ export function EncryptedConversationView({
       const queuedClientId = clientId;
       if (
         queuedClientId
-        && navigator.onLine
         && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
-        setFailedQueuedIds((current) => [...new Set([...current, queuedClientId])]);
+        classifyPendingFailure(queuedClientId, uploadError);
         setError(null);
       } else {
         setError(
@@ -501,10 +500,9 @@ export function EncryptedConversationView({
       const queuedClientId = clientId;
       if (
         queuedClientId
-        && navigator.onLine
         && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
-        setFailedQueuedIds((current) => [...new Set([...current, queuedClientId])]);
+        classifyPendingFailure(queuedClientId, voiceError);
         setError(null);
       } else {
         setError(
@@ -703,11 +701,12 @@ export function EncryptedConversationView({
           {queuedMessages.map((message) => {
             const failed = failedQueuedIds.includes(message.id);
             const retrying = retryingQueuedId === message.id;
+            const autoRetrying = autoRetryQueuedId === message.id;
             return (
               <div className="message-row own" key={message.id}>
                 <div className={`message-bubble pending ${failed ? "failed" : ""}`}>
                   <p>{message.body ?? (message.messageType === "voice" ? "Voice message" : "Attachment")}</p>
-                  <small role={failed ? "alert" : "status"}>{retrying ? "Sending…" : failed ? "Failed" : "Queued"}</small>
+                  <small role={failed ? "alert" : "status"}>{retrying ? "Sending…" : failed ? "Failed" : autoRetrying ? "Retrying…" : "Queued"}</small>
                   <div className="pending-message-actions">
                     {failed ? (
                       <button
