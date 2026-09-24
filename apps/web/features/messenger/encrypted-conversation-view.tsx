@@ -340,7 +340,8 @@ export function EncryptedConversationView({
       if (!editing && pendingMessages.some((message) => message.id === clientId)) {
         setBody("");
         setReplyingToId(null);
-        classifyPendingFailure(clientId, sendError);
+        const blocked = pendingMessages[0];
+        if (blocked) classifyPendingFailure(blocked.id, sendError);
         setError(null);
       } else {
         setError("Unable to send encrypted update");
@@ -433,7 +434,8 @@ export function EncryptedConversationView({
         queuedClientId
         && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
-        classifyPendingFailure(queuedClientId, uploadError);
+        const blocked = pendingMessages[0];
+        if (blocked) classifyPendingFailure(blocked.id, uploadError);
         setError(null);
       } else {
         setError(
@@ -500,7 +502,8 @@ export function EncryptedConversationView({
         queuedClientId
         && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
-        classifyPendingFailure(queuedClientId, voiceError);
+        const blocked = pendingMessages[0];
+        if (blocked) classifyPendingFailure(blocked.id, voiceError);
         setError(null);
       } else {
         setError(
