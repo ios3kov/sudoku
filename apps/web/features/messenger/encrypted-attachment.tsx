@@ -6,6 +6,7 @@ import { isEncryptedAttachmentMetadata } from "./attachment-metadata";
 import type { EncryptedAttachmentMetadata } from "./types";
 import { downloadEncryptedAsset } from "./uploads";
 import { formatBytes } from "./chat-utils";
+import { VoiceMessagePlayback } from "./voice-waveform";
 
 export { isEncryptedAttachmentMetadata } from "./attachment-metadata";
 export function EncryptedAttachment({
@@ -147,13 +148,14 @@ export function EncryptedAttachment({
   if (messageType === "voice") {
     return (
       <div className="voice-attachment">
-        {objectUrl ? (
-          <audio controls preload="metadata" src={objectUrl} />
-        ) : (
-          <button type="button" onClick={() => void decrypt().catch(() => undefined)} disabled={state === "loading"}>
-            {state === "loading" ? "Decrypting voice…" : "Load encrypted voice"}
-          </button>
-        )}
+        <VoiceMessagePlayback
+          source={objectUrl}
+          presentation={metadata.voice}
+          loading={state === "loading"}
+          onLoad={async () => {
+            await decrypt();
+          }}
+        />
       </div>
     );
   }
