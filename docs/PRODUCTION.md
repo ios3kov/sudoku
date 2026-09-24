@@ -81,6 +81,19 @@ docker compose --env-file .env.production -f compose.yaml -f compose.production.
 
 Changing a phone clears verification and inbound contact edges. Contact discovery therefore resumes only after verification and resync. Prefer a forward fix after `0016`; never automatically downgrade the database.
 
+### Pending security migrations after the live phone rollout
+
+Production is currently at `0016_phone_contacts`.
+
+Repository work after that live release introduces:
+
+- `0017_single_admin` — database-enforced singleton global administrator;
+- `0018_session_biometrics` — per-session native biometric public key plus one-time challenge state.
+
+Neither migration is live yet. Do not apply them piecemeal from a moving branch. The next backend rollout must use an exact fully-green merged SHA, a fresh consistent off-host backup, production preflight, normal migration/API/web restart, smoke, and explicit post-migration checks. Prefer a forward fix rather than automatic downgrade.
+
+`0018_session_biometrics` stores no private biometric key, PIN or biometric template. It stores only the iOS P-256 public key and ephemeral challenge state. Changing/removing the PIN deletes the credential. The native private key remains Secure-Enclave-only and must be re-enrolled after PIN changes.
+
 ### Native iOS release boundary
 
 The native iOS client is an additional release artifact, not a replacement for the production backend.
