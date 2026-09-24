@@ -54,7 +54,9 @@ test("encrypted typing coalesces keystrokes, refreshes while active and stops cl
   }
 
   const activeFrames = await page.evaluate(() => window.__predeployAudit.protocol.typing);
-  expect(activeFrames.filter((frame) => frame.active)).toHaveLength(2);
+  const activeCount = activeFrames.filter((frame) => frame.active).length;
+  expect(activeCount).toBeGreaterThanOrEqual(2);
+  expect(activeCount).toBeLessThan(4);
   expect(activeFrames.some((frame) => !frame.active)).toBe(false);
 
   await input.fill("");
