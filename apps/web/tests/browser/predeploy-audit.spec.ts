@@ -43,6 +43,85 @@ test("voice download failure is handled and can be retried", async ({page}) => {
   await expect(page.getByRole("button",{name:"Play voice message"})).toBeVisible();
 });
 
+test("encrypted typing coalesces keystrokes, refreshes while active and stops cleanly", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  const input = page.getByRole("textbox",{name:"Message"});
+  await expect(input).toBeEnabled();
+
+  for (const value of ["h", "he", "hel", "hell"]) {
+    await input.fill(value);
+    await page.waitForTimeout(600);
+  }
+
+  const activeFrames = await page.evaluate(() => window.__predeployAudit.protocol.typing);
+  expect(activeFrames.filter((frame) => frame.active)).toHaveLength(2);
+  expect(activeFrames.some((frame) => !frame.active)).toBe(false);
+
+  await input.fill("");
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
+});
+
+test("encrypted typing stops on hide and remote presence has names plus fail-safe expiry", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  const input = page.getByRole("textbox",{name:"Message"});
+  await expect(input).toBeEnabled();
+  await input.fill("draft");
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(true);
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "typing.started",
+    conversation_id: "chat",
+    payload: { user_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "typing.stopped",
+    conversation_id: "chat",
+    payload: { user_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toHaveCount(0);
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "typing.started",
+    conversation_id: "chat",
+    payload: { user_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
+  await page.waitForTimeout(3_700);
+  await expect(page.getByText("Alice is typing…",{exact:true})).toHaveCount(0);
+
+  await input.fill("still typing");
+  await page.getByRole("button",{name:"Hide",exact:true}).click();
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
+});
+
+test("encrypted incoming message clears stale typing and read detail names the reader", async ({page}) => {
+  await page.evaluate(()=>{
+    window.__predeployAudit.seedHistory();
+    window.__predeployAudit.mount("chat");
+  });
+  await expect(page.locator('[data-message-id="seed-19"]')).toBeVisible();
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "typing.started",
+    conversation_id: "chat",
+    payload: { user_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "message.created",
+    conversation_id: "chat",
+    payload: { sender_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toHaveCount(0);
+
+  await expect(
+    page.locator('[data-message-id="seed-19"] .message-delivery')
+  ).toHaveAttribute("title","Read by Alice");
+});
+
 test("late microphone permission after hiding stops the newly acquired track", async ({page}) => {
   await page.evaluate(()=>window.__predeployAudit.mount("chat"));
   await page.locator(".voice-button").click();
