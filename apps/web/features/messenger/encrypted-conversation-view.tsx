@@ -126,10 +126,11 @@ export function EncryptedConversationView({
     members: conversation.members,
     realtime,
     realtimeEvent,
+    clearOnMessageCreated: false,
   });
   useAutosizeTextarea(textareaRef, body);
 
-  const refreshProjection = useCallback((): Promise<void> => {
+  const refreshProjection = useCallback((messageEvent?: RealtimeEvent): Promise<void> => {
     return queueRefresh(async () => {
       try {
         await adapter.syncTransport(conversation.id);
@@ -137,6 +138,33 @@ export function EncryptedConversationView({
         const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
         setMessages(projection.messages);
         setReadSequence(projection.latestSequence);
+        if (messageEvent?.type === "message.created" && messageEvent.payload) {
+          const payload = messageEvent.payload as {
+            id?: unknown;
+            message_id?: unknown;
+            sender_id?: unknown;
+            sender_user_id?: unknown;
+          };
+          const messageId =
+            typeof payload.id === "string"
+              ? payload.id
+              : typeof payload.message_id === "string"
+                ? payload.message_id
+                : null;
+          const senderId =
+            typeof payload.sender_id === "string"
+              ? payload.sender_id
+              : typeof payload.sender_user_id === "string"
+                ? payload.sender_user_id
+                : null;
+          if (
+            messageId
+            && senderId
+            && projection.messages.some((message) => message.id === messageId)
+          ) {
+            typing.clearRemoteTyping(senderId);
+          }
+        }
         setQueuedMessages(pendingMessages);
         setFailedQueuedIds((current) =>
           current.filter((id) => pendingMessages.some((message) => message.id === id))
@@ -161,7 +189,7 @@ export function EncryptedConversationView({
         setLoading(false);
       }
     });
-  }, [adapter, conversation.id, queueRefresh]);
+  }, [adapter, conversation.id, queueRefresh, typing.clearRemoteTyping]);
 
   const scheduleAutoRetry = useCallback((clientId: string) => {
     if (
@@ -275,10 +303,9 @@ export function EncryptedConversationView({
     if (!realtimeEvent || realtimeEvent === lastEventRef.current) return;
     lastEventRef.current = realtimeEvent;
     if (realtimeEvent.conversation_id !== conversation.id) return;
-    if (
-      realtimeEvent.type === "message.created"
-      || realtimeEvent.type === "mls.control.created"
-    ) {
+    if (realtimeEvent.type === "message.created") {
+      void refreshProjection(realtimeEvent);
+    } else if (realtimeEvent.type === "mls.control.created") {
       void refreshProjection();
     }
   }, [conversation.id, realtimeEvent, refreshProjection]);
