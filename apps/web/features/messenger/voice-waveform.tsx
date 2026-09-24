@@ -167,3 +167,113 @@ export function VoiceDraftPreview({
     </div>
   );
 }
+
+
+export function VoiceMessagePlayback({
+  source,
+  presentation,
+  loading,
+  onLoad,
+}: {
+  source: string | null;
+  presentation?: VoiceAttachmentPresentation;
+  loading: boolean;
+  onLoad: () => Promise<void>;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playWhenReadyRef = useRef(false);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!source || !playWhenReadyRef.current) return;
+    playWhenReadyRef.current = false;
+    const audio = audioRef.current;
+    if (audio) void audio.play().catch(() => undefined);
+  }, [source]);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+  }, []);
+
+  const durationSeconds =
+    presentation?.durationMs
+      ? presentation.durationMs / 1_000
+      : mediaDuration ?? 0;
+  const progress = durationSeconds > 0 ? currentTime / durationSeconds : 0;
+  const remaining = Math.max(0, Math.ceil(durationSeconds - currentTime));
+
+  async function togglePlayback() {
+    const audio = audioRef.current;
+    if (audio && source && !audio.paused) {
+      audio.pause();
+      return;
+    }
+    if (!source) {
+      playWhenReadyRef.current = true;
+      try {
+        await onLoad();
+      } catch {
+        playWhenReadyRef.current = false;
+      }
+      return;
+    }
+    if (audio) {
+      try {
+        await audio.play();
+      } catch {
+        setPlaying(false);
+      }
+    }
+  }
+
+  function seek(nextProgress: number) {
+    const audio = audioRef.current;
+    if (!audio || !source || durationSeconds <= 0) return;
+    const next = Math.max(0, Math.min(1, nextProgress)) * durationSeconds;
+    audio.currentTime = next;
+    setCurrentTime(next);
+  }
+
+  return (
+    <div className="voice-message-player">
+      <audio
+        ref={audioRef}
+        className="voice-audio-engine"
+        preload="metadata"
+        src={source ?? undefined}
+        onLoadedMetadata={(event) => {
+          const value = event.currentTarget.duration;
+          if (Number.isFinite(value) && value > 0) setMediaDuration(value);
+        }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+        onEnded={() => {
+          setPlaying(false);
+          setCurrentTime(0);
+        }}
+      />
+      <button
+        type="button"
+        className="voice-message-play"
+        aria-label={playing ? "Pause voice message" : "Play voice message"}
+        disabled={loading}
+        onClick={() => void togglePlayback()}
+      >
+        {loading ? "…" : playing ? "Pause" : "Play"}
+      </button>
+      <div className="voice-message-track">
+        <VoiceWaveform
+          waveform={presentation?.waveform ?? []}
+          progress={progress}
+          onSeek={seek}
+          disabled={!source || durationSeconds <= 0}
+          label="Voice message position"
+        />
+        <small>{durationSeconds > 0 ? formatDuration(remaining) : "Voice"}</small>
+      </div>
+    </div>
+  );
+}
