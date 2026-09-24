@@ -88,3 +88,5 @@ PR #72 is merged as `22e94a87bfbc3b1b40b54f381c263db412b38537`. PR #73 is merged
 ## Media storage follow-up — 2026-09-24
 
 [Step95](steps/95-media-storage-and-compression.md) adds the Russian private-S3, sender-side compression and non-destructive archive workstream to the production plan. The first repository slice is JPEG Standard/Original preparation before E2EE; voice/video optimization, provider selection, tiering and production migration remain open.
+
+[Step96](steps/96-voice-recording-compression.md) is the voice-encoding follow-up: mono preference and a 32 kbit/s recording target, with platform fallback and real-encoder regression coverage. Physical-iPhone speech quality remains unverified.

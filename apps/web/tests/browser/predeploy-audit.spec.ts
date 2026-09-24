@@ -238,6 +238,44 @@ test("recorder construction failure releases an acquired microphone", async ({pa
   await page.evaluate(()=>window.__predeployAudit.resolveMedia());
   await expect(page.getByRole("alert")).toBeVisible();
   expect(await page.evaluate(()=>window.__predeployAudit.media.activeTracks)).toBe(0);
+  expect(await page.evaluate(()=>window.__predeployAudit.media.recorderOptions.length)).toBe(1);
+});
+
+test("voice recording requests mono speech bitrate and stays local until Send", async ({page}) => {
+  await page.evaluate(() => window.__predeployAudit.mount("chat"));
+  await page.locator(".voice-button").click();
+  await page.evaluate(() => window.__predeployAudit.resolveMedia());
+  await expect(page.locator(".voice-button")).toContainText("Stop");
+  expect(await page.evaluate(() => window.__predeployAudit.media.constraints)).toEqual([{audio: {channelCount: {ideal: 1}}}]);
+  expect(await page.evaluate(() => window.__predeployAudit.media.recorderOptions)).toEqual([{mimeType: "audio/mp4", audioBitsPerSecond: 32_000}]);
+  await page.locator(".voice-button").click();
+  await expect(page.getByRole("button", {name: "Send voice message"})).toBeEnabled();
+  expect(await page.evaluate(() => window.__predeployAudit.io.uploads)).toBe(0);
+});
+
+test("unsupported bitrate falls back on the same microphone and releases it on Hide", async ({page}) => {
+  await page.evaluate(() => { window.__predeployAudit.media.rejectBitrate = true; window.__predeployAudit.mount("chat"); });
+  await page.locator(".voice-button").click();
+  await page.evaluate(() => window.__predeployAudit.resolveMedia());
+  await expect(page.locator(".voice-button")).toContainText("Stop");
+  expect(await page.evaluate(() => window.__predeployAudit.media.recorderOptions)).toEqual([
+    {mimeType: "audio/mp4", audioBitsPerSecond: 32_000}, {mimeType: "audio/mp4"},
+  ]);
+  expect(await page.evaluate(() => window.__predeployAudit.media.requests.length)).toBe(1);
+  await page.getByRole("button", {name: "Hide", exact: true}).click();
+  expect(await page.evaluate(() => window.__predeployAudit.media.activeTracks)).toBe(0);
+  expect(await page.evaluate(() => window.__predeployAudit.io.uploads)).toBe(0);
+});
+
+test("failed platform fallback releases the microphone and never uploads", async ({page}) => {
+  await page.evaluate(() => { window.__predeployAudit.media.rejectFormat = true; window.__predeployAudit.mount("chat"); });
+  await page.locator(".voice-button").click();
+  await page.evaluate(() => window.__predeployAudit.resolveMedia());
+  await expect(page.getByRole("alert")).toBeVisible();
+  expect(await page.evaluate(() => window.__predeployAudit.media.recorderOptions.length)).toBe(2);
+  expect(await page.evaluate(() => window.__predeployAudit.media.requests.length)).toBe(1);
+  expect(await page.evaluate(() => window.__predeployAudit.media.activeTracks)).toBe(0);
+  expect(await page.evaluate(() => window.__predeployAudit.io.uploads)).toBe(0);
 });
 
 test("recording errors discard partial audio rather than send it", async ({page}) => {

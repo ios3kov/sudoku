@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MAX_VOICE_SECONDS, findSupportedVoiceMime, normalizeVoiceMime } from "./chat-utils";
+import { createVoiceRecorder } from "./voice-recording";
 
 type RecordingSession = {
   cancelled: boolean;
@@ -74,11 +75,11 @@ export function useVoiceRecorder({ onReady, onError }: {
       if (wasActive && mounted.current) setPhase("idle");
     };
     try {
-      session.stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      session.stream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: {ideal: 1}}});
       // getUserMedia has no abort API and can resolve long after unmount.
       if (!isCurrent()) { disposeSession(session); return; }
       const mime = findSupportedVoiceMime();
-      const recorder = mime ? new MediaRecorder(session.stream, {mimeType: mime}) : new MediaRecorder(session.stream);
+      const recorder = createVoiceRecorder(session.stream, mime);
       session.recorder = recorder;
       const baseMime = normalizeVoiceMime(recorder.mimeType || mime || "");
       if (!baseMime || !["audio/mp4", "audio/webm"].includes(baseMime)) {
