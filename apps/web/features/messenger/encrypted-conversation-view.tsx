@@ -13,13 +13,15 @@ import {
 import { messengerApi } from "./api";
 import { EncryptedAttachment, isEncryptedAttachmentMetadata } from "./encrypted-attachment";
 import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
-import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
+import type { Conversation, CurrentUser, RealtimeEvent, VoiceAttachmentPresentation } from "./types";
 import { uploadEncryptedAsset } from "./uploads";
 import { NATIVE_MEDIA_READY_EVENT, nativeMediaAvailable, pickNativeAttachment } from "./native-media-access";
 import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
 import { useVoiceRecorder } from "./use-voice-recorder";
+import { analyzeVoiceBlob } from "./voice-waveform";
+import { VoiceDraftPreview } from "./voice-waveform";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
 import { createRefreshQueue } from "./refresh-queue";
 import { useConversationDraft } from "./conversation-drafts";
@@ -87,6 +89,11 @@ export function EncryptedConversationView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionMessageId, setActionMessageId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [voiceDraft, setVoiceDraft] = useState<{
+    blob: Blob;
+    mimeType: string;
+    presentation: VoiceAttachmentPresentation;
+  } | null>(null);
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MESSAGES);
@@ -476,27 +483,61 @@ export function EncryptedConversationView({
     }
   }
 
-  async function uploadVoice(chunks: Blob[], mimeType: string) {
-    if (syncBlocked) { setError("Voice note was not sent: Secure sync is blocked"); return; }
+  async function prepareVoiceDraft(
+    chunks: Blob[],
+    mimeType: string,
+    fallbackDurationMs: number,
+  ) {
+    const blob = new Blob(chunks, { type: mimeType });
+    if (blob.size < 1) throw new Error("Voice recording is empty");
+    const presentation = await analyzeVoiceBlob(blob, fallbackDurationMs);
+    setVoiceDraft({ blob, mimeType, presentation });
+    setError(null);
+  }
+
+  function deleteVoiceDraft() {
+    if (busy) return;
+    setVoiceDraft(null);
+    setError(null);
+  }
+
+  async function sendVoiceDraft() {
+    const current = voiceDraft;
+    if (!current || busy) return;
+    if (syncBlocked) {
+      setError("Voice note was not sent: Secure sync is blocked");
+      return;
+    }
+    if (!navigator.onLine) {
+      setError("Encrypted voice notes require a connection");
+      return;
+    }
+
     setBusy(true);
+    setError(null);
     setUploadProgress(0);
     let clientId: string | null = null;
     try {
-      const extension = voiceFileExtension(mimeType);
-      const file = new File(chunks, `voice-message.${extension}`, {
-        type: mimeType,
+      const extension = voiceFileExtension(current.mimeType);
+      const file = new File([current.blob], `voice-message.${extension}`, {
+        type: current.mimeType,
       });
       const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
+      const metadata = {
+        ...uploaded.metadata,
+        voice: current.presentation,
+      };
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
         messageType: "voice",
         body: null,
         replyTo: replyingTo?.id ?? null,
         assetIds: [uploaded.asset.id],
-        attachments: [uploaded.metadata],
+        attachments: [metadata],
       }, undefined, (preparedClientId) => {
         clientId = preparedClientId;
       });
+      setVoiceDraft(null);
       setReplyingToId(null);
       await refreshProjection();
     } catch (voiceError) {
@@ -508,6 +549,7 @@ export function EncryptedConversationView({
         queuedClientId
         && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
+        setVoiceDraft(null);
         const blocked = pendingMessages[0];
         if (blocked) classifyPendingFailure(blocked.id, voiceError);
         setError(null);
@@ -523,12 +565,18 @@ export function EncryptedConversationView({
       setBusy(false);
     }
   }
-  const {recording, requesting: requestingMic, seconds: recordSeconds, toggle: toggleVoice} = useVoiceRecorder({onReady: uploadVoice, onError: setError});
+
+  const {
+    recording,
+    requesting: requestingMic,
+    seconds: recordSeconds,
+    toggle: toggleVoice,
+  } = useVoiceRecorder({ onReady: prepareVoiceDraft, onError: setError });
 
   async function toggleRecording() {
     // Stop is always available, even when secure authoring becomes blocked.
     if (recording) { await toggleVoice(); return; }
-    if (busy || syncBlocked || requestingMic) return;
+    if (busy || syncBlocked || requestingMic || voiceDraft) return;
     setError(null);
     if (!navigator.onLine) { setError("Encrypted voice notes require a connection"); return; }
     await toggleVoice();
@@ -580,7 +628,7 @@ export function EncryptedConversationView({
   }
 
   function beginEdit(message: ProjectedEncryptedMessage) {
-    if (syncBlocked || message.senderId !== user.id || message.deleted) return;
+    if (syncBlocked || voiceDraft || message.senderId !== user.id || message.deleted) return;
     setEditingId(message.id);
     setReplyingToId(null);
     setEditBody(message.body ?? "");
@@ -754,7 +802,7 @@ export function EncryptedConversationView({
         actions={[
           ...(actionMessage.body ? [{ id: "copy", label: "Copy", run: () => { void copyMessage(actionMessage.body!); } }] : []),
           { id: "reply", label: "Reply", disabled: busy || syncBlocked || recording, run: () => beginReply(actionMessage) },
-          ...(actionMessage.senderId === user.id && actionMessage.messageType === "text" ? [{ id: "edit", label: "Edit", disabled: busy || syncBlocked || recording, run: () => beginEdit(actionMessage) }] : []),
+          ...(actionMessage.senderId === user.id && actionMessage.messageType === "text" ? [{ id: "edit", label: "Edit", disabled: busy || syncBlocked || recording || voiceDraft !== null, run: () => beginEdit(actionMessage) }] : []),
           { id: "👍", label: "👍", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "👍"); } },
           { id: "❤️", label: "❤️", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "❤️"); } },
           { id: "😂", label: "😂", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "😂"); } },
@@ -778,50 +826,62 @@ export function EncryptedConversationView({
         </div>
       ) : null}
 
-      <form className="composer" onSubmit={submit}>
-        <input
-          ref={fileInputRef}
-          className="hidden-file-input"
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,audio/mpeg,audio/mp4,audio/webm,video/mp4,video/webm"
-          onChange={(event) => void attach(event)}
+      {voiceDraft ? (
+        <VoiceDraftPreview
+          blob={voiceDraft.blob}
+          presentation={voiceDraft.presentation}
+          busy={busy}
+          sendDisabled={syncBlocked}
+          uploadProgress={uploadProgress}
+          onDelete={deleteVoiceDraft}
+          onSend={() => void sendVoiceDraft()}
         />
-        <button
-          type="button"
-          className={`attach-button ${uploadProgress !== null ? "is-uploading" : ""}`}
-          aria-label="Attach encrypted file"
-          disabled={busy || syncBlocked || recording || uploadProgress !== null}
-          onClick={() => void chooseAttachment()}
-        >
-          {uploadProgress === null ? "+" : `${uploadProgress}%`}
-        </button>
-        <textarea
-          ref={textareaRef}
-          aria-label="Message"
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          rows={1}
-          maxLength={20000}
-          placeholder={recording ? `Recording ${formatDuration(recordSeconds)}` : editing ? "Edit encrypted message" : "Message"}
-          disabled={busy || syncBlocked || recording}
-        />
-        <button
-          type="button"
-          className={`voice-button ${recording ? "recording" : ""}`}
-          onClick={() => void toggleRecording()}
-          aria-label={recording ? "Stop recording" : requestingMic ? "Requesting microphone" : "Record voice message"}
-          disabled={!recording && (busy || syncBlocked || requestingMic || uploadProgress !== null)}
-        >
-          {recording ? "Stop" : requestingMic ? "…" : "Mic"}
-        </button>
-        <button
-          type="submit"
-          aria-label={editing ? "Save" : "Send"}
-          disabled={!body.trim() || busy || syncBlocked || recording || uploadProgress !== null}
-        >
-          {busy ? "…" : editing ? "Save" : "Send"}
-        </button>
-      </form>
+      ) : (
+              <form className="composer" onSubmit={submit}>
+                <input
+                  ref={fileInputRef}
+                  className="hidden-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,audio/mpeg,audio/mp4,audio/webm,video/mp4,video/webm"
+                  onChange={(event) => void attach(event)}
+                />
+                <button
+                  type="button"
+                  className={`attach-button ${uploadProgress !== null ? "is-uploading" : ""}`}
+                  aria-label="Attach encrypted file"
+                  disabled={busy || syncBlocked || recording || uploadProgress !== null}
+                  onClick={() => void chooseAttachment()}
+                >
+                  {uploadProgress === null ? "+" : `${uploadProgress}%`}
+                </button>
+                <textarea
+                  ref={textareaRef}
+                  aria-label="Message"
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
+                  rows={1}
+                  maxLength={20000}
+                  placeholder={recording ? `Recording ${formatDuration(recordSeconds)}` : editing ? "Edit encrypted message" : "Message"}
+                  disabled={busy || syncBlocked || recording}
+                />
+                <button
+                  type="button"
+                  className={`voice-button ${recording ? "recording" : ""}`}
+                  onClick={() => void toggleRecording()}
+                  aria-label={recording ? "Stop recording" : requestingMic ? "Requesting microphone" : "Record voice message"}
+                  disabled={!recording && (busy || syncBlocked || requestingMic || uploadProgress !== null)}
+                >
+                  {recording ? "Stop" : requestingMic ? "…" : "Mic"}
+                </button>
+                <button
+                  type="submit"
+                  aria-label={editing ? "Save" : "Send"}
+                  disabled={!body.trim() || busy || syncBlocked || recording || uploadProgress !== null}
+                >
+                  {busy ? "…" : editing ? "Save" : "Send"}
+                </button>
+              </form>
+      )}
     </section>
   );
 }
