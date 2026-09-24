@@ -104,6 +104,7 @@ export function EncryptedConversationView({
   const lastEventRef = useRef<RealtimeEvent | null>(null);
   const retryTimerRef = useRef<{ clientId: string; timer: number } | null>(null);
   const retryAttemptsRef = useRef(new Map<string, number>());
+  const voiceSendInFlightRef = useRef(false);
   const queueRefresh = useMemo(() => createRefreshQueue(), []);
 
   const body = editingId ? editBody : draft;
@@ -496,14 +497,14 @@ export function EncryptedConversationView({
   }
 
   function deleteVoiceDraft() {
-    if (busy) return;
+    if (busy || voiceSendInFlightRef.current) return;
     setVoiceDraft(null);
     setError(null);
   }
 
   async function sendVoiceDraft() {
     const current = voiceDraft;
-    if (!current || busy) return;
+    if (!current || busy || voiceSendInFlightRef.current) return;
     if (syncBlocked) {
       setError("Voice note was not sent: Secure sync is blocked");
       return;
@@ -513,6 +514,7 @@ export function EncryptedConversationView({
       return;
     }
 
+    voiceSendInFlightRef.current = true;
     setBusy(true);
     setError(null);
     setUploadProgress(0);
@@ -561,6 +563,7 @@ export function EncryptedConversationView({
         );
       }
     } finally {
+      voiceSendInFlightRef.current = false;
       setUploadProgress(null);
       setBusy(false);
     }
