@@ -568,6 +568,11 @@
   transform:none;
 }
 
+.voice-message-play.is-loading::after{
+  content:"…";
+  transform:none;
+}
+
 .voice-preview-delete::after{
   content:"×";
   font-size:22px;
