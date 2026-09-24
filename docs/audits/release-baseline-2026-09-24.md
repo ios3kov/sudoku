@@ -26,3 +26,9 @@ Executed six existing Node regression files covering device access, refresh queu
 The existing messenger profiling script was attempted with the downloaded Chromium runtime; browser startup terminated with SIGTRAP under the local sandbox. No performance measurements were produced or claimed. Physical and browser performance gates remain open.
 
 The operator requested independent work without interactive login assistance. Continue source review and automated checks; do not mark real-account or physical-device scenarios passed without evidence. iPhone plus desktop is the initial cross-client functional matrix; a second iPhone is reserved for later native behavior checks.
+
+## Technical audit pass 2 — bounded media verification
+
+**REL-006 — Medium, fixed awaiting CI:** upload completion checked object length with HEAD but read the subsequent GET to EOF without a byte bound. An object replaced between requests could consume more bandwidth and worker time than its declared size. Extracted bounded hashing now reads at most the declared size plus one byte, rejects excess/short streams and closes the response on success and failure. Four local unit tests pass: valid multi-chunk digest/prefix, truncated object, endless source bounded to size+1, and read failure cleanup. Tests are included in the existing API CI discovery. Full API/S3 integration remains for CI; this does not claim object immutability or eliminate signed-upload URL reuse.
+
+Reviewed orphan cleanup: pending/rejected and unlinked ready objects older than 24 hours are selected in bounded batches; object deletion precedes database deletion. No lifecycle-policy change was made in this pass.
