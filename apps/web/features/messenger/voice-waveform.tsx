@@ -108,8 +108,12 @@ export function VoiceDraftPreview({
     const audio = audioRef.current;
     if (!audio || durationSeconds <= 0) return;
     const next = Math.max(0, Math.min(1, nextProgress)) * durationSeconds;
-    audio.currentTime = next;
-    setCurrentTime(next);
+    try {
+      audio.currentTime = next;
+      setCurrentTime(next);
+    } catch {
+      // Media metadata may still be loading; keep the current playback position.
+    }
   }
 
   return (
@@ -233,8 +237,12 @@ export function VoiceMessagePlayback({
     const audio = audioRef.current;
     if (!audio || !source || durationSeconds <= 0) return;
     const next = Math.max(0, Math.min(1, nextProgress)) * durationSeconds;
-    audio.currentTime = next;
-    setCurrentTime(next);
+    try {
+      audio.currentTime = next;
+      setCurrentTime(next);
+    } catch {
+      // Media metadata may still be loading; keep the current playback position.
+    }
   }
 
   return (
