@@ -20,7 +20,7 @@ import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
 import { useVoiceRecorder } from "./use-voice-recorder";
-import { analyzeVoiceBlob } from "./voice-waveform";
+import { analyzeVoiceBlob } from "./voice-analysis";
 import { VoiceDraftPreview } from "./voice-waveform";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
 import { createRefreshQueue } from "./refresh-queue";
