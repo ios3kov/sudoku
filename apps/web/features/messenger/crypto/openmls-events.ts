@@ -1,9 +1,9 @@
 import type { EncryptedEventRecord } from "@sudoku/domain";
+import { isEncryptedAttachmentMetadata } from "../attachment-metadata";
 import type { E2eeEnvelope } from "../types";
 import type { DecryptedMessage } from "./protocol-adapter";
 import {
   envelopeBytes,
-  isEncryptedAttachmentMetadata,
   utf8,
   utf8String,
 } from "./openmls-state";
