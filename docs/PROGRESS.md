@@ -81,3 +81,6 @@ The PIN change adds migration `0015_session_pins`. Before exposing PIN-enabled c
 Physical iOS/Android installed-PWA acceptance, two-device encrypted direct/group/media/revocation flows, restart/reboot persistence and controlled restore remain open. Existing snapshot-write amplification, multi-tab behavior, CSP architecture and fixed-viewport accessibility tradeoffs are unchanged. Four-digit PIN is online-only, not MFA or an E2EE wrapping key.
 
 Earlier audit/progress evidence remains in [the historical index](audits/progress-before-pr35-merge-2026-09-22.md), [Step75](steps/75-audit-merge-verification.md), [Step76](steps/76-deployment-access.md), [Step77](steps/77-beat-state-directory.md) and their PRs. Documentation-only follow-ups do not change the immutable application candidate above.
+
+
+PR #72 is merged as `22e94a87bfbc3b1b40b54f381c263db412b38537`. Exact-head voice CI was green; [Step93](steps/93-typing-read-polish.md) is now active.
