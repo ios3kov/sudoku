@@ -107,7 +107,7 @@ export function VideoAttachment({ name, onLoad, onRelease }: {
   }
 
   return <div className="video-attachment">
-    <button ref={trigger} type="button" className="file-attachment" disabled={busy} onClick={() => void open()}>
+    <button ref={trigger} type="button" className="file-attachment" aria-label={`Play video ${name}`} disabled={busy} onClick={() => void open()}>
       <span>{busy ? "Opening video…" : "Play video"}</span><strong>{name}</strong>
     </button>
     {error ? <p role="alert">{error}</p> : null}
