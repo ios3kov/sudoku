@@ -117,7 +117,9 @@ export function EncryptedConversationView({
   const setBody = (value: string) => editingId ? setEditBody(value) : setDraft(value);
   const messageById = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
   const actionMessage = actionMessageId ? messageById.get(actionMessageId) : undefined;
-  const peerReads = conversation.members.filter((member) => member.id !== user.id).map((member) => member.last_read_sequence);
+  const peerMembers = conversation.members.filter((member) => member.id !== user.id);
+  const peerReads = peerMembers.map((member) => member.last_read_sequence);
+  const peerNames = peerMembers.map((member) => member.display_name);
   const typing = useTypingPresence({
     conversationId: conversation.id,
     currentUserId: user.id,
@@ -771,7 +773,7 @@ export function EncryptedConversationView({
                       </>
                     )}
                     {message.reactions.length > 0 ? <div className="reaction-row">{message.reactions.map((reaction) => <span key={reaction.emoji}>{reaction.emoji} {reaction.userIds.length}</span>)}</div> : null}
-                    <MessageMeta createdAt={message.createdAt} sequence={message.sequence} own={own} peerReads={peerReads} edited={message.edited} />
+                    <MessageMeta createdAt={message.createdAt} sequence={message.sequence} own={own} peerReads={peerReads} peerNames={peerNames} edited={message.edited} />
                   </div>
                 </MessageInteraction>
                 {!message.deleted ? <button className="message-more-button" type="button" aria-label="Encrypted message actions" aria-haspopup="dialog" onClick={() => setActionMessageId(message.id)}>•••</button> : null}
