@@ -15,6 +15,7 @@ import { EncryptedAttachment, isEncryptedAttachmentMetadata } from "./encrypted-
 import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 import { uploadEncryptedAsset } from "./uploads";
+import { NATIVE_MEDIA_READY_EVENT, nativeMediaAvailable, pickNativeAttachment } from "./native-media-access";
 import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
@@ -75,6 +76,7 @@ export function EncryptedConversationView({
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MESSAGES);
+  const [nativeAttachmentPicker, setNativeAttachmentPicker] = useState(false);
   const timelineRef = useRef<MessageTimelineHandle>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -145,6 +147,13 @@ export function EncryptedConversationView({
   }, [refreshProjection]);
 
   useEffect(() => {
+    const refreshNativeMedia = () => setNativeAttachmentPicker(nativeMediaAvailable());
+    refreshNativeMedia();
+    window.addEventListener(NATIVE_MEDIA_READY_EVENT, refreshNativeMedia);
+    return () => window.removeEventListener(NATIVE_MEDIA_READY_EVENT, refreshNativeMedia);
+  }, []);
+
+  useEffect(() => {
     if (!syncBlocked || loading) return;
     const timer = window.setInterval(() => {
       if (navigator.onLine) void refreshProjection();
@@ -209,10 +218,8 @@ export function EncryptedConversationView({
   }
 
 
-  async function attach(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || busy || syncBlocked) return;
+  async function attachFile(file: File) {
+    if (busy || syncBlocked) return;
     setError(null);
     if (!navigator.onLine) {
       setError("Encrypted attachments require a connection");
@@ -244,6 +251,26 @@ export function EncryptedConversationView({
     } finally {
       setUploadProgress(null);
       setBusy(false);
+    }
+  }
+
+  async function attach(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) await attachFile(file);
+  }
+
+  async function chooseAttachment() {
+    if (!nativeAttachmentPicker) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const file = await pickNativeAttachment();
+      await attachFile(file);
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setError(reason instanceof Error ? reason.message : "Unable to select attachment");
     }
   }
 
@@ -508,7 +535,7 @@ export function EncryptedConversationView({
           className={`attach-button ${uploadProgress !== null ? "is-uploading" : ""}`}
           aria-label="Attach encrypted file"
           disabled={busy || syncBlocked || recording || uploadProgress !== null}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => void chooseAttachment()}
         >
           {uploadProgress === null ? "+" : `${uploadProgress}%`}
         </button>
