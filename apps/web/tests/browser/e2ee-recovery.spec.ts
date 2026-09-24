@@ -275,21 +275,38 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     });
     await expect(failedQueued.getByText("Failed", { exact: true })).toBeVisible();
     await expect(failedQueued.getByRole("button", { name: "Retry failed message" })).toBeVisible();
+
+    // A later message can queue behind the permanent head. Its send attempt
+    // fails while flushing the head, so only the blocking head is Failed.
+    await sendText(owner, "queued behind permanent failure");
+    const queuedBehindFailure = owner.locator(".message-bubble.pending").filter({
+      hasText: "queued behind permanent failure",
+    });
+    await expect(queuedBehindFailure.getByText("Queued", { exact: true })).toBeVisible();
+    await expect(failedQueued.getByText("Failed", { exact: true })).toBeVisible();
     await owner.waitForTimeout(1_300);
-    expect(permanentPosts).toBe(1);
+    expect(permanentPosts).toBe(2);
 
     await owner.unroute(messagePattern);
     await failedQueued.getByRole("button", { name: "Retry failed message" }).click();
     await expect(acceptedMessage(owner, "manual retry state")).toBeVisible({
       timeout: 60_000,
     });
+    await expect(acceptedMessage(owner, "queued behind permanent failure")).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(acceptedMessage(owner, "manual retry state")).toHaveCount(1);
+    await expect(acceptedMessage(owner, "queued behind permanent failure")).toHaveCount(1);
 
     await peer.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect(acceptedMessage(peer, "manual retry state")).toBeVisible({
       timeout: 60_000,
     });
+    await expect(acceptedMessage(peer, "queued behind permanent failure")).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(acceptedMessage(peer, "manual retry state")).toHaveCount(1);
+    await expect(acceptedMessage(peer, "queued behind permanent failure")).toHaveCount(1);
 
     // Removing an offline queued text must not send it later and must not break
     // the MLS generation chain for a subsequent encrypted message.
