@@ -34,16 +34,34 @@ _SENSITIVE_KEYS = {
     "auth",
     "p256dh",
     "vapid-private-key",
+    "pin",
+    "x-sudoku-unlock",
 }
 
 
 def _redact_sensitive(_: object, __: str, event_dict: dict) -> dict:
     """Defensive log redaction. Request/message bodies are never logged at all."""
-    for key in list(event_dict):
-        if key.lower().replace("_", "-") in _SENSITIVE_KEYS or any(
-            marker in key.lower() for marker in ("password", "secret", "token")
-        ):
-            event_dict[key] = "[REDACTED]"
+    def redact(value):
+        if isinstance(value, dict):
+            return {key: "[REDACTED]" if str(key).lower().replace("_", "-") in _SENSITIVE_KEYS
+                    or any(marker in str(key).lower() for marker in ("password", "secret", "token"))
+                    else redact(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [redact(item) for item in value]
+        return value
+
+    # Exception strings can include SQL parameters, URLs or request values.
+    # Keep the class for diagnosis but never render the exception or traceback.
+    exc = event_dict.pop("exc_info", None)
+    if exc is True:
+        exc = sys.exc_info()
+    if isinstance(exc, BaseException):
+        event_dict["error_type"] = type(exc).__name__
+    elif isinstance(exc, tuple) and exc and exc[0] is not None:
+        event_dict["error_type"] = exc[0].__name__
+    for key in ("exception", "stack", "stack_info"):
+        event_dict.pop(key, None)
+    event_dict.update(redact(event_dict))
     return event_dict
 
 
