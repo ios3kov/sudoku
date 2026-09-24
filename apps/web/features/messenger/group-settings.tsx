@@ -34,17 +34,15 @@ export function GroupSettings({
   const isOwner = me?.role === "owner";
   const ownerCount = useMemo(() => conversation.members.filter((member) => member.role === "owner").length, [conversation.members]);
 
-  useEffect(() => {
+  const [previousTitle, setPreviousTitle] = useState(conversation.title);
+  if (previousTitle !== conversation.title) {
+    setPreviousTitle(conversation.title);
     setTitle(conversation.title ?? "");
-  }, [conversation.title]);
+  }
 
   useEffect(() => {
     const term = query.trim();
-    if (!isOwner) {
-      setDirectory([]);
-      setSearching(false);
-      return;
-    }
+    if (!isOwner) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setSearching(true);

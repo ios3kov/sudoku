@@ -80,6 +80,8 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   }, []);
 
   useEffect(() => {
+    // Synchronize with the remote conversation list, preserving the initial loading state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadConversations(true);
   }, [loadConversations]);
 

@@ -11,7 +11,8 @@ export interface MessageAction {
 }
 
 /** Native modality supplies an inert background; Tab wraps within the actions. */
-export function MessageActionSheet({ preview, actions, onClose }: {
+export function MessageActionSheet({ preview, actions, onClose, title = "Message actions" }: {
+  title?: string;
   preview: string;
   actions: MessageAction[];
   onClose: () => void;
@@ -32,7 +33,7 @@ export function MessageActionSheet({ preview, actions, onClose }: {
   }
 
   useEffect(() => {
-    if (confirmId) dialogRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    if (confirmId) dialogRef.current?.querySelector<HTMLButtonElement>(".message-action-cancel")?.focus();
   }, [confirmId]);
 
   function choose(action: MessageAction) {
@@ -52,7 +53,7 @@ export function MessageActionSheet({ preview, actions, onClose }: {
     <dialog
       ref={dialogRef}
       className="message-action-sheet"
-      aria-label={confirmation ? "Confirm message deletion" : "Message actions"}
+      aria-label={confirmation ? "Confirm message deletion" : title}
       aria-describedby={previewId}
       onKeyDown={(event) => {
         if (event.key !== "Tab") return;

@@ -12,6 +12,10 @@ import { io } from "./audit-media-services";
 
 const media = {
   requests: [] as Array<(stream: MediaStream) => void>,
+  constraints: [] as MediaStreamConstraints[],
+  recorderOptions: [] as MediaRecorderOptions[],
+  rejectBitrate: false,
+  rejectFormat: false,
   activeTracks: 0, starts: 0, stops: 0, throwOnConstruct: false, throwOnStart: false,
   recorders: [] as TestRecorder[],
 };
@@ -22,7 +26,13 @@ class TestRecorder {
   ondataavailable: ((event: {data: Blob}) => void) | null = null;
   onstop: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  constructor() { if (media.throwOnConstruct) throw new Error("recorder unavailable"); media.recorders.push(this); }
+  constructor(_stream: MediaStream, options: MediaRecorderOptions = {}) {
+    media.recorderOptions.push(options);
+    if (media.throwOnConstruct) throw new Error("recorder unavailable");
+    if (media.rejectFormat) throw new DOMException("format unavailable", "NotSupportedError");
+    if (media.rejectBitrate && options.audioBitsPerSecond !== undefined) throw new DOMException("bitrate unavailable", "NotSupportedError");
+    media.recorders.push(this);
+  }
   start() { if (media.throwOnStart) throw new Error("start failed"); this.state = "recording"; media.starts += 1; }
   stop() {
     if (this.state === "inactive") return;
@@ -32,7 +42,7 @@ class TestRecorder {
   fail() { this.ondataavailable?.({data: new Blob(["partial audio"])}); this.onerror?.(); this.stop(); }
 }
 Object.defineProperty(navigator, "mediaDevices", {configurable: true, value: {
-  getUserMedia: () => new Promise<MediaStream>((resolve) => { media.requests.push(resolve); }),
+  getUserMedia: (constraints: MediaStreamConstraints) => new Promise<MediaStream>((resolve) => { media.constraints.push(constraints); media.requests.push(resolve); }),
 }});
 Object.defineProperty(window, "MediaRecorder", {configurable: true, value: TestRecorder});
 const urls = { created: [] as string[], revoked: [] as string[] };

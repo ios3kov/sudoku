@@ -40,6 +40,15 @@ This is a product hardening program, not a rewrite. Native Android is explicitly
 
 ## Architecture target
 
+### Mobile orientation contract
+
+- The entire application uses portrait orientation: Sudoku, authentication, messenger, settings, attachment selection and media preparation.
+- Landscape is permitted only while playing a landscape video in the video player. Leaving playback must restore portrait orientation before returning to the application.
+- Portrait videos remain supported; this rule controls the application interface, not the orientation of files users may send.
+- Text can grow through iPhone accessibility settings while the interface remains within the mobile viewport; whole-page zoom is not the text-size mechanism.
+- The native host currently declares portrait only in `Info.plist`. The landscape video-player exception is a future implementation requirement, not completed acceptance.
+- Physical-iPhone acceptance must cover device rotation on ordinary screens, entering/exiting landscape video playback, background/foreground during playback, and large text without horizontal page overflow. These checks remain open.
+
 ```mermaid
 flowchart TB
     WEB[Web / PWA\nNext.js]
@@ -189,6 +198,25 @@ UX:
 - consistent long-press message actions;
 - better media viewer;
 - accessibility labels, Dynamic Type and VoiceOver pass.
+
+## Media storage and compression — production workstream
+
+Product direction confirmed on 2026-09-24. Implementation is tracked in [Step95](95-media-storage-and-compression.md).
+
+- [ ] Evaluate private S3 storage in a Russian region, starting with Selectel; verify region, access controls, availability, billing and costs for 100 GB / 1 TB including downloads and a separate backup.
+- [ ] Compress media on the sender device before E2EE encryption. Offer Standard / Original photo quality; tune voice recording next; implement video transcoding separately with device performance/quality acceptance.
+- [ ] Move encrypted objects off the application server disk while keeping application authorization, short-lived signed access and original metadata/keys inside MLS messages.
+- [ ] Evaluate cheaper storage for old media (90 days is a candidate threshold, not an enabled expiry rule). Compare total costs and retrieval latency before enabling tiering. Do not automatically delete linked media by age.
+- [ ] Introduce quotas, usage/budget alerts, failed-upload cleanup and explicit unavailable/restoring states where the storage class requires them.
+- [ ] Verify a consistent database/object backup and restoration, with bounded backup retention and replay of deletions after recovery.
+- [ ] Test migration by copying ciphertext, verifying object checksums and counts, switching reads with rollback available, and retaining the source until acceptance.
+
+Provider trust does not replace E2EE. No provider-side plaintext compression or thumbnails. No public bucket, user metadata in object keys, or permanent public object URLs. Original means the bytes selected by the client; native Photos already converts selected images to JPEG, which must not be described as an archival original.
+
+Paid provisioning, production credentials/configuration changes, migrations, data transfers and releases require explicit authorization after a concrete reviewed plan. Repository work does not authorize them.
+### Mobile viewport and text sizing
+
+Per [ADR-020](../DECISIONS.md#adr-020--scale-text-inside-the-mobile-viewport-not-the-whole-messenger), the messenger stays within the phone viewport. Manual page zoom remains restricted. iOS Dynamic Type enlarges text, and the UI reflows within the screen width without horizontal page/history scrolling. Headers and controls may wrap; history and long input scroll vertically. Validate enlarged text together with the software keyboard and preserve access to essential controls. Physical-iPhone VoiceOver and Dynamic Type acceptance remain separate from automated tests.
 
 ## P2 — Native reliability
 
@@ -367,7 +395,7 @@ Still open:
 - PR #70 merged [Step90](90-e2ee-send-state-reliability.md) as `32e869e10f8c14ae1caabda89e9d20c19e45200c`: durable send states plus manual Retry/Remove on the existing MLS outbox.
 - PR #71 merged [Step91](91-automatic-send-retry.md) as `8c57dc1942420a84147f742fa44a62dc36eab133`: bounded transient automatic retry with stable idempotency.
 - PR #72 merged [Step92](92-voice-message-polish.md) as `22e94a87bfbc3b1b40b54f381c263db412b38537`: local voice preview, waveform/scrub and custom encrypted playback.
-- [Step93](93-typing-read-polish.md) merged in PR #73 as `ceccb776a645fec5ca671491f9eeb9d0a3648a07`, completing bounded typing presence and truthful Sent/Read semantics. Accessibility/Dynamic Type/VoiceOver remains open.
+- [Step93](93-typing-read-polish.md) merged in PR #73 as `ceccb776a645fec5ca671491f9eeb9d0a3648a07`, completing bounded typing presence and truthful Sent/Read semantics. [Step94](94-accessibility-dynamic-type.md) is the active accessibility follow-up; Dynamic Type/VoiceOver acceptance remains open.
 - Android remains Web/PWA.
 - Production still runs the earlier server release and has not received migrations `0017_single_admin` or `0018_session_biometrics`.
 

@@ -92,6 +92,8 @@ export function useTypingPresence({
     if (!senderId || senderId === currentUserId) return;
 
     if (realtimeEvent.type === "typing.stopped") {
+      // Apply the external typing-stop event immediately; timers separately expire missing stop events.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       removeRemote(senderId);
       return;
     }

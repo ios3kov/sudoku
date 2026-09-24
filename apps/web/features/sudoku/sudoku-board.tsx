@@ -69,13 +69,15 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
       if (raw) {
         const parsed = JSON.parse(raw) as PersistedGame;
         if (Array.isArray(parsed.grid) && parsed.grid.length === 81) {
+          // Hydrate browser-only storage after SSR; initial server/client markup must match.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setGrid(parsed.grid as CellValue[]);
           setNotes(parsed.notes ?? {});
           setMistakes(Number.isFinite(parsed.mistakes) ? Math.max(0, Number(parsed.mistakes)) : 0);
           setStartedAt(parsed.startedAt && parsed.startedAt > 0 ? parsed.startedAt : now);
           setCompletedAt(
-            isSolved(parsed.grid, SOLUTION) && parsed.completedAt && parsed.completedAt > 0
-              ? parsed.completedAt
+            isSolved(parsed.grid, SOLUTION)
+              ? (parsed.completedAt && parsed.completedAt > 0 ? parsed.completedAt : now)
               : null,
           );
         } else {
@@ -102,13 +104,6 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [hydrated, solved, startedAt]);
-
-  useEffect(() => {
-    if (!hydrated || !solved || completedAt) return;
-    const now = Date.now();
-    setCompletedAt(now);
-    setClockNow(now);
-  }, [completedAt, hydrated, solved]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -139,7 +134,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
     setSelected(index);
   }
 
-  function enterDigit(value: CellValue) {
+  function enterDigit(value: CellValue, now: number) {
     if (selected === null || givens[selected] || solved) return;
 
     if (notesMode) {
@@ -162,6 +157,10 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
     const next = [...grid];
     next[selected] = value;
     setGrid(next);
+    if (isSolved(next, SOLUTION)) {
+      setCompletedAt(now);
+      setClockNow(now);
+    }
     setNotes((current) => {
       const copy = { ...current };
       delete copy[selected];
@@ -274,7 +273,7 @@ export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) 
                   onPointerCancel={isSecretDigit ? cancelSecretUnlock : undefined}
                   onClick={() => {
                     if (isSecretDigit && consumeFiveClick()) return;
-                    enterDigit(value);
+                    enterDigit(value, Date.now());
                   }}
                 >
                   {value}

@@ -69,6 +69,13 @@ final class SudokuViewController: UIViewController {
 
         showPrivacyCover()
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(updatePreferredTextSize),
+            name: UIContentSizeCategory.didChangeNotification,
+            object: nil
+        )
+
         var request = URLRequest(url: Self.appURL)
         request.cachePolicy = .reloadRevalidatingCacheData
         request.timeoutInterval = 30
@@ -76,6 +83,7 @@ final class SudokuViewController: UIViewController {
     }
 
     deinit {
+        NotificationCenter.default.removeObserver(self)
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.contactHandlerName
         )
@@ -88,18 +96,41 @@ final class SudokuViewController: UIViewController {
     }
 
     func showPrivacyCover() {
+        webView.accessibilityElementsHidden = true
         privacyCover.isHidden = false
         view.bringSubviewToFront(privacyCover)
     }
 
     func hidePrivacyCoverAfterResume() {
         guard webContentLoaded else { return }
+        updatePreferredTextSize()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             guard let self else { return }
             guard self.view.window?.windowScene?.activationState == .foregroundActive else { return }
             self.privacyCover.isHidden = true
+            self.webView.accessibilityElementsHidden = false
         }
+    }
+
+    @objc private func updatePreferredTextSize() {
+        guard webContentLoaded else { return }
+        // Transfer only the system text scale; no message or account data.
+        let size = UIFontMetrics(forTextStyle: .body).scaledValue(
+            for: 16, compatibleWith: traitCollection
+        )
+        webView.callAsyncJavaScript(
+            """
+            if (location.protocol === "https:" && location.hostname === "sudoku.moscow") {
+              document.documentElement.style.setProperty("--sudoku-text-size", percent + "%");
+              window.dispatchEvent(new Event("sudoku:text-size-changed"));
+            }
+            """,
+            arguments: ["percent": Double(size / 16 * 100)],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
     }
 
     private func presentContactPicker(requestID: String) {

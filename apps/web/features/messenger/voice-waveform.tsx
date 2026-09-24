@@ -70,15 +70,14 @@ export function VoiceDraftPreview({
   onSend: () => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [source, setSource] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
 
   useEffect(() => {
     const url = URL.createObjectURL(blob);
-    setSource(url);
+    const audio = audioRef.current;
+    if (audio) audio.src = url;
     return () => {
-      const audio = audioRef.current;
       if (audio) {
         audio.pause();
         audio.removeAttribute("src");
@@ -93,7 +92,7 @@ export function VoiceDraftPreview({
 
   async function togglePlayback() {
     const audio = audioRef.current;
-    if (!audio || !source) return;
+    if (!audio || !blob.size) return;
     if (audio.paused) {
       try {
         await audio.play();
@@ -123,7 +122,6 @@ export function VoiceDraftPreview({
         ref={audioRef}
         className="voice-audio-engine"
         preload="metadata"
-        src={source ?? undefined}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
@@ -136,7 +134,7 @@ export function VoiceDraftPreview({
         type="button"
         className={`voice-preview-play ${playing ? "is-playing" : ""}`}
         aria-label={playing ? "Pause voice preview" : "Play voice preview"}
-        disabled={busy || !source}
+        disabled={busy || !blob.size}
         onClick={() => void togglePlayback()}
       >
         {playing ? "Pause" : "Play"}
@@ -146,7 +144,7 @@ export function VoiceDraftPreview({
           waveform={presentation.waveform}
           progress={progress}
           onSeek={seek}
-          disabled={busy || !source}
+          disabled={busy || !blob.size}
           label="Voice preview position"
         />
         <small>{formatDuration(remaining)}</small>

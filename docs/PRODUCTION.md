@@ -426,3 +426,7 @@ The authoritative checklist and evidence log is `docs/steps/70-live-verification
 - `scripts/preflight-production.sh` — pre-deploy safety gate;
 - `scripts/smoke-production.sh` — live edge smoke;
 - `scripts/backup-production.sh` / `scripts/restore-production.sh` — backup and recovery.
+
+## Planned media storage expansion
+
+See the [production media workstream](steps/88-native-ios-production-plan.md#media-storage-and-compression--production-workstream) and [Step95](steps/95-media-storage-and-compression.md). The target is private S3 in a Russian region (Selectel is the first candidate), sender-side compression before E2EE, and optional lower-cost storage for old encrypted objects without age-based deletion. This is a plan, not the deployed inventory. The current MinIO deployment remains unchanged until an explicitly authorized migration with backup, verification and rollback.

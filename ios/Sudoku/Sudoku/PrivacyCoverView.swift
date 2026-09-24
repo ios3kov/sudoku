@@ -11,26 +11,37 @@ final class PrivacyCoverView: UIView {
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = "Sudoku"
-        titleLabel.font = .systemFont(ofSize: 30, weight: .semibold)
+        titleLabel.font = .preferredFont(forTextStyle: .largeTitle)
+        titleLabel.adjustsFontForContentSizeCategory = true
+        titleLabel.numberOfLines = 0
         titleLabel.textColor = .label
         titleLabel.textAlignment = .center
 
         gridView.translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(titleLabel)
-        addSubview(gridView)
+        let stack = UIStackView(arrangedSubviews: [titleLabel, gridView])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 20
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
 
+        let preferredGridWidth = gridView.widthAnchor.constraint(equalToConstant: 270)
+        preferredGridWidth.priority = .defaultHigh
+        titleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         NSLayoutConstraint.activate([
-            titleLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -170),
-
-            gridView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            gridView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            gridView.widthAnchor.constraint(equalToConstant: 270),
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(greaterThanOrEqualTo: safeAreaLayoutGuide.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: safeAreaLayoutGuide.bottomAnchor, constant: -20),
+            preferredGridWidth,
             gridView.heightAnchor.constraint(equalTo: gridView.widthAnchor),
         ])
 
         isAccessibilityElement = true
+        accessibilityViewIsModal = true
         accessibilityLabel = "Sudoku"
     }
 
