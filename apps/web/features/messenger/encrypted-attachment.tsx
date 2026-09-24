@@ -5,30 +5,9 @@ import { messengerApi } from "./api";
 import type { EncryptedAttachmentMetadata } from "./types";
 import { downloadEncryptedAsset } from "./uploads";
 import { formatBytes } from "./chat-utils";
+import { VoiceMessagePlayback } from "./voice-waveform";
 
-export function isEncryptedAttachmentMetadata(
-  value: unknown,
-): value is EncryptedAttachmentMetadata {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Record<string, unknown>;
-  return (
-    item.version === 1
-    && item.algorithm === "AES-256-GCM"
-    && typeof item.assetId === "string"
-    && typeof item.keyB64 === "string"
-    && typeof item.nonceB64 === "string"
-    && typeof item.originalName === "string"
-    && typeof item.originalMime === "string"
-    && typeof item.plaintextSize === "number"
-    && Number.isSafeInteger(item.plaintextSize)
-    && item.plaintextSize >= 0
-    && typeof item.plaintextSha256Hex === "string"
-    && /^[0-9a-f]{64}$/i.test(item.plaintextSha256Hex)
-    && typeof item.ciphertextSha256Hex === "string"
-    && /^[0-9a-f]{64}$/i.test(item.ciphertextSha256Hex)
-  );
-}
-
+export { isEncryptedAttachmentMetadata } from "./attachment-metadata";
 export function EncryptedAttachment({
   metadata,
   messageType,
@@ -168,13 +147,14 @@ export function EncryptedAttachment({
   if (messageType === "voice") {
     return (
       <div className="voice-attachment">
-        {objectUrl ? (
-          <audio controls preload="metadata" src={objectUrl} />
-        ) : (
-          <button type="button" onClick={() => void decrypt().catch(() => undefined)} disabled={state === "loading"}>
-            {state === "loading" ? "Decrypting voice…" : "Load encrypted voice"}
-          </button>
-        )}
+        <VoiceMessagePlayback
+          source={objectUrl}
+          presentation={metadata.voice}
+          loading={state === "loading"}
+          onLoad={async () => {
+            await decrypt();
+          }}
+        />
       </div>
     );
   }

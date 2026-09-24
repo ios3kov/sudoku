@@ -21,7 +21,7 @@ test.beforeEach(async ({page}) => {
 
 test("late attachment decryption cannot create a blob after hiding", async ({page}) => {
   await page.evaluate(()=>window.__predeployAudit.mount("voice"));
-  await page.getByRole("button",{name:"Load encrypted voice"}).click();
+  await page.getByRole("button",{name:"Play voice message"}).click();
   await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.io.downloads.length)).toBe(1);
   await page.getByRole("button",{name:"Unmount private surface"}).click();
   expect(await page.evaluate(()=>window.__predeployAudit.io.downloads[0].signal?.aborted)).toBe(true);
@@ -33,14 +33,14 @@ test("late attachment decryption cannot create a blob after hiding", async ({pag
 test("voice download failure is handled and can be retried", async ({page}) => {
   const errors: string[] = []; page.on("pageerror", error=>errors.push(error.message));
   await page.evaluate(()=>window.__predeployAudit.mount("voice"));
-  await page.getByRole("button",{name:"Load encrypted voice"}).click();
+  await page.getByRole("button",{name:"Play voice message"}).click();
   await page.evaluate(()=>window.__predeployAudit.rejectDownload());
   await expect(page.getByText("Encrypted attachment unavailable",{exact:true})).toBeVisible();
   expect(errors).toEqual([]);
   await page.getByRole("button",{name:"Retry encrypted attachment",exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.io.downloads.length)).toBe(2);
   await page.evaluate(()=>window.__predeployAudit.resolveDownload(1));
-  await expect(page.locator("audio")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Play voice message"})).toBeVisible();
 });
 
 test("late microphone permission after hiding stops the newly acquired track", async ({page}) => {
@@ -91,17 +91,79 @@ test("transport failure never disables the microphone Stop control", async ({pag
   await expect(page.locator(".voice-button")).toBeEnabled({timeout:1000});
   await page.locator(".voice-button").click();
   await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.media.activeTracks)).toBe(0);
+  await expect(page.getByRole("group",{name:"Voice message preview"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Send voice message"})).toBeDisabled();
+  await expect(page.getByRole("alert")).toContainText("Secure sync is blocked");
   expect(await page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(0);
 });
 
-test("normal recording stops once, releases tracks and sends exactly once", async ({page}) => {
+test("normal recording becomes a local preview and explicit Send happens exactly once", async ({page}) => {
   await page.evaluate(()=>window.__predeployAudit.mount("chat"));
-  await page.locator(".voice-button").click();await page.evaluate(()=>window.__predeployAudit.resolveMedia());
-  await expect(page.locator(".voice-button")).toContainText("Stop");await page.locator(".voice-button").click();
-  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(1);
+  await page.locator(".voice-button").click();
+  await page.evaluate(()=>window.__predeployAudit.resolveMedia());
+  await expect(page.locator(".voice-button")).toContainText("Stop");
+  await page.locator(".voice-button").click();
+
+  const preview = page.getByRole("group",{name:"Voice message preview"});
+  await expect(preview).toBeVisible();
+  await expect(page.getByRole("slider",{name:"Voice preview position"})).toBeVisible();
   expect(await page.evaluate(()=>window.__predeployAudit.media.activeTracks)).toBe(0);
-  expect(await page.evaluate(()=>window.__predeployAudit.io.uploads)).toBe(1);
+  expect(await page.evaluate(()=>window.__predeployAudit.io.uploads)).toBe(0);
+  expect(await page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(0);
+
+  const send = page.getByRole("button",{name:"Send voice message"});
+  await send.evaluate((node)=>{
+    (node as HTMLButtonElement).click();
+    (node as HTMLButtonElement).click();
+  });
+
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.io.uploads)).toBe(1);
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(1);
+  await expect(preview).toHaveCount(0);
+
+  const lastSend = await page.evaluate(()=>window.__predeployAudit.protocol.lastSend) as {
+    attachments?: Array<{voice?: {durationMs?: number; waveform?: number[]}}>;
+  };
+  expect(lastSend.attachments?.[0]?.voice?.durationMs).toBeGreaterThan(0);
+  expect(lastSend.attachments?.[0]?.voice?.waveform).toEqual([]);
+
+  const urls = await page.evaluate(()=>window.__predeployAudit.urls);
+  expect(urls.created.length).toBeGreaterThan(0);
+  expect(urls.revoked).toContain(urls.created.at(-1));
 });
+
+test("deleting a voice draft never uploads or sends and revokes its preview URL", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  await page.locator(".voice-button").click();
+  await page.evaluate(()=>window.__predeployAudit.resolveMedia());
+  await page.locator(".voice-button").click();
+
+  const preview = page.getByRole("group",{name:"Voice message preview"});
+  await expect(preview).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.urls.created.length)).toBeGreaterThan(0);
+  const created = await page.evaluate(()=>window.__predeployAudit.urls.created.at(-1));
+
+  await page.getByRole("button",{name:"Delete voice draft"}).click();
+  await expect(preview).toHaveCount(0);
+  expect(await page.evaluate(()=>window.__predeployAudit.io.uploads)).toBe(0);
+  expect(await page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(0);
+  expect(await page.evaluate((url)=>window.__predeployAudit.urls.revoked.includes(url!), created)).toBe(true);
+});
+test("hiding an unsent voice draft revokes its preview URL without upload", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  await page.locator(".voice-button").click();
+  await page.evaluate(()=>window.__predeployAudit.resolveMedia());
+  await page.locator(".voice-button").click();
+  await expect(page.getByRole("group",{name:"Voice message preview"})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.urls.created.length)).toBeGreaterThan(0);
+  const created = await page.evaluate(()=>window.__predeployAudit.urls.created.at(-1));
+
+  await page.getByRole("button",{name:"Hide",exact:true}).click();
+  expect(await page.evaluate(()=>window.__predeployAudit.io.uploads)).toBe(0);
+  expect(await page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(0);
+  expect(await page.evaluate((url)=>window.__predeployAudit.urls.revoked.includes(url!), created)).toBe(true);
+});
+
 test("hiding an active recording discards it and releases all tracks", async ({page}) => {
   await page.evaluate(()=>window.__predeployAudit.mount("chat"));await page.locator(".voice-button").click();
   await page.evaluate(()=>window.__predeployAudit.resolveMedia());await expect(page.locator(".voice-button")).toContainText("Stop");
@@ -110,11 +172,15 @@ test("hiding an active recording discards it and releases all tracks", async ({p
   expect(await page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(0);
 });
 test("hiding loaded media revokes its URL", async ({page}) => {
-  await page.evaluate(()=>window.__predeployAudit.mount("voice"));await page.getByRole("button",{name:"Load encrypted voice"}).click();
-  await page.evaluate(()=>window.__predeployAudit.resolveDownload());await expect(page.locator("audio")).toBeVisible();
+  await page.evaluate(()=>window.__predeployAudit.mount("voice"));
+  await page.getByRole("button",{name:"Play voice message"}).click();
+  await page.evaluate(()=>window.__predeployAudit.resolveDownload());
+  await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.urls.created.length)).toBe(1);
+  await expect(page.getByRole("button",{name:"Play voice message"})).toBeVisible();
   await page.getByRole("button",{name:"Unmount private surface"}).click();
   const urls = await page.evaluate(()=>window.__predeployAudit.urls);
-  expect(urls.created).toHaveLength(1);expect(urls.revoked).toEqual(urls.created);
+  expect(urls.created).toHaveLength(1);
+  expect(urls.revoked).toEqual(urls.created);
 });
 
 for (const [width,height] of [[320,568],[390,844],[844,390],[768,1024]]) {
