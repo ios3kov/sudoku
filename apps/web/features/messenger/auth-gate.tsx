@@ -64,7 +64,9 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       if (enableBiometric) await enrollNativeBiometricPin(pin);
       else await clearNativeBiometricPin();
     } catch {
-      throw new Error("PIN was saved, but biometric quick unlock could not be enabled. Try again or continue with PIN only.");
+      // PIN enrollment already succeeded on the server. Fail safe to PIN-only
+      // instead of leaving onboarding in a half-completed state.
+      await clearNativeBiometricPin().catch(() => undefined);
     }
 
     if (!acceptUnlock(result.unlock_token, started)) {
