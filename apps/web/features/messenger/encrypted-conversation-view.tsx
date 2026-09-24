@@ -934,6 +934,8 @@ export function EncryptedConversationView({
                 <input
                   ref={fileInputRef}
                   className="hidden-file-input"
+                  tabIndex={-1}
+                  aria-hidden="true"
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,audio/mpeg,audio/mp4,audio/webm,video/mp4,video/webm"
                   onChange={(event) => void attach(event)}

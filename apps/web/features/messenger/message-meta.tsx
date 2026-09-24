@@ -22,12 +22,12 @@ export function MessageMeta({ createdAt, sequence, own, peerReads, peerNames = [
   const deliveryDetail =
     readerNames.length > 0
       ? `Read by ${readerNames.join(", ")}`
-      : "Sent to server";
+      : delivery === "Sent" ? "Sent to server" : delivery;
   return (
     <small className="message-time">
       {time ? <time dateTime={createdAt!}>{time}</time> : null}
       {edited ? <span>{time ? " · " : ""}edited</span> : null}
-      {own ? <span className="message-delivery" title={deliveryDetail} aria-label={deliveryDetail}>{time || edited ? " · " : ""}{delivery}</span> : null}
+      {own ? <span className="message-delivery" title={deliveryDetail}>{time || edited ? " · " : ""}<span aria-hidden="true">{delivery}</span><span className="sr-only">{deliveryDetail}</span></span> : null}
     </small>
   );
 }

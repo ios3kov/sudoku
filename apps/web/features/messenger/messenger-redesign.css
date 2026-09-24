@@ -45,14 +45,14 @@
   gap:2px!important;
 }
 .minimal-list-heading strong{
-  font-size:18px;
+  font-size:1.125rem;
   line-height:1.15;
   letter-spacing:-.025em;
   color:#0f172a;
 }
 .minimal-list-heading span{
   color:#94a3b8;
-  font-size:11px;
+  font-size:0.6875rem;
   line-height:1.2;
 }
 .minimal-header-action{
@@ -66,7 +66,7 @@
   place-items:center;
   background:#f8fafc!important;
   color:#2563eb!important;
-  font-size:22px!important;
+  font-size:1.375rem!important;
   font-weight:500!important;
   line-height:1!important;
 }
@@ -109,7 +109,7 @@
   background:#eff6ff;
   color:#2563eb;
   border:1px solid #dbeafe;
-  font-size:13px;
+  font-size:0.8125rem;
   font-weight:800;
   letter-spacing:.01em;
   box-shadow:0 1px 2px rgba(15,23,42,.04);
@@ -119,20 +119,20 @@
 }
 .minimal-chat-item .conversation-copy strong{
   color:#1e293b;
-  font-size:14px;
+  font-size:0.875rem;
   line-height:1.25;
   font-weight:650;
 }
 .minimal-chat-item .conversation-copy small{
   margin-top:4px;
   color:#64748b;
-  font-size:12px;
+  font-size:0.75rem;
   line-height:1.25;
 }
 .minimal-row-chevron{
   align-self:center;
   color:#cbd5e1;
-  font-size:24px;
+  font-size:1.5rem;
   line-height:1;
 }
 .unread-badge{
@@ -141,7 +141,7 @@
   padding:0 6px;
   border-radius:999px;
   background:#2563eb;
-  font-size:10px;
+  font-size:0.625rem;
   box-shadow:none;
 }
 .minimal-new-chat-button{
@@ -163,7 +163,7 @@
   border-radius:11px;
   color:#64748b;
   background:transparent;
-  font-size:11px;
+  font-size:0.6875rem;
   font-weight:650;
   white-space:nowrap;
   overflow:hidden;
@@ -187,7 +187,7 @@
 }
 .private-header h2{
   color:#0f172a;
-  font-size:24px;
+  font-size:1.5rem;
   letter-spacing:-.025em;
 }
 .private-header p{
@@ -199,7 +199,7 @@
 .auth-form label{
   gap:7px;
   color:#64748b;
-  font-size:12px;
+  font-size:0.75rem;
 }
 .auth-form input{
   min-height:48px;
@@ -244,14 +244,14 @@
 .messenger-topbar strong,
 .chat-header strong{
   color:#0f172a;
-  font-size:15px;
+  font-size:0.9375rem;
   font-weight:700;
   letter-spacing:-.015em;
 }
 .messenger-topbar span,
 .chat-header span{
   color:#64748b;
-  font-size:11px;
+  font-size:0.6875rem;
 }
 .back-button{
   width:44px;
@@ -282,7 +282,7 @@
   border-radius:999px;
   background:#f8fafc;
   color:#64748b;
-  font-size:11px;
+  font-size:0.6875rem;
   font-weight:650;
 }
 .message-list{
@@ -324,13 +324,13 @@
   box-shadow:0 2px 7px rgba(37,99,235,.16);
 }
 .message-bubble p{
-  font-size:14.5px;
+  font-size:0.90625rem;
   line-height:1.5;
 }
 .message-time{
   margin-top:5px;
   color:#475569;
-  font-size:10px;
+  font-size:0.625rem;
 }
 .own .message-time{
   color:#fff;
@@ -351,7 +351,7 @@
   border-radius:999px;
   background:rgba(255,255,255,.12);
   color:inherit;
-  font-size:11px;
+  font-size:0.6875rem;
   font-weight:650;
 }
 .pending-message-actions button:disabled{
@@ -364,7 +364,7 @@
   align-items:center;
   padding:3px 12px 5px;
   color:transparent;
-  font-size:11px;
+  font-size:0.6875rem;
   line-height:20px;
   transition:color .14s ease,opacity .14s ease;
   opacity:0;
@@ -410,7 +410,7 @@
   border-radius:999px;
   background:#fff;
   color:#475569;
-  font-size:11px;
+  font-size:0.6875rem;
 }
 .reaction-row{
   margin-top:7px;
@@ -504,7 +504,7 @@
   font-weight:400;
 }
 .attach-button.is-uploading{
-  font-size:10px;
+  font-size:0.625rem;
   font-weight:800;
   letter-spacing:-.02em;
 }
@@ -552,7 +552,7 @@
   padding:9px 12px max(9px,env(safe-area-inset-bottom));
   background:linear-gradient(to top,#fafafc 72%,rgba(250,250,252,.9));
   color:#64748b;
-  font-size:12px;
+  font-size:0.75rem;
   font-weight:650;
 }
 
@@ -654,7 +654,7 @@
 .voice-message-track small{
   min-width:34px;
   color:#64748b;
-  font-size:10px;
+  font-size:0.625rem;
   font-variant-numeric:tabular-nums;
   text-align:right;
 }
@@ -922,12 +922,12 @@
 }
 .settings-header strong{
   color:#0f172a;
-  font-size:15px;
+  font-size:0.9375rem;
 }
 .settings-header span{
   margin-top:3px;
   color:#94a3b8;
-  font-size:11px;
+  font-size:0.6875rem;
 }
 .settings-header button{
   min-height:34px;
@@ -936,7 +936,7 @@
   border-radius:999px;
   background:#f8fafc;
   color:#2563eb;
-  font-size:11px;
+  font-size:0.6875rem;
   font-weight:700;
 }
 .preference-row{
@@ -985,7 +985,7 @@
   border-radius:14px;
   background:#f8fafc;
   color:#475569;
-  font-size:12px;
+  font-size:0.75rem;
 }
 .messenger-inline-status.is-error{
   border-color:#fecaca;
@@ -1005,7 +1005,7 @@
   border-radius:999px;
   background:#fff;
   color:inherit;
-  font-size:11px;
+  font-size:0.6875rem;
   font-weight:750;
   box-shadow:0 1px 2px rgba(15,23,42,.05);
 }
@@ -1060,7 +1060,7 @@
   border-radius:999px;
   background:#f8fafc;
   color:#2563eb;
-  font-size:11px;
+  font-size:0.6875rem;
   font-weight:700;
 }
 .new-chat-panel>input,
@@ -1117,7 +1117,7 @@
   margin:0;
   padding:8px 2px;
   color:#94a3b8;
-  font-size:11px;
+  font-size:0.6875rem;
 }
 
 .chat-empty-state{

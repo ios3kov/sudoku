@@ -214,6 +214,9 @@ Product direction confirmed on 2026-09-24. Implementation is tracked in [Step95]
 Provider trust does not replace E2EE. No provider-side plaintext compression or thumbnails. No public bucket, user metadata in object keys, or permanent public object URLs. Original means the bytes selected by the client; native Photos already converts selected images to JPEG, which must not be described as an archival original.
 
 Paid provisioning, production credentials/configuration changes, migrations, data transfers and releases require explicit authorization after a concrete reviewed plan. Repository work does not authorize them.
+### Mobile viewport and text sizing
+
+Per [ADR-020](../DECISIONS.md#adr-020--scale-text-inside-the-mobile-viewport-not-the-whole-messenger), the messenger stays within the phone viewport. Manual page zoom remains restricted. iOS Dynamic Type enlarges text, and the UI reflows within the screen width without horizontal page/history scrolling. Headers and controls may wrap; history and long input scroll vertically. Validate enlarged text together with the software keyboard and preserve access to essential controls. Physical-iPhone VoiceOver and Dynamic Type acceptance remain separate from automated tests.
 
 ## P2 — Native reliability
 
@@ -392,7 +395,7 @@ Still open:
 - PR #70 merged [Step90](90-e2ee-send-state-reliability.md) as `32e869e10f8c14ae1caabda89e9d20c19e45200c`: durable send states plus manual Retry/Remove on the existing MLS outbox.
 - PR #71 merged [Step91](91-automatic-send-retry.md) as `8c57dc1942420a84147f742fa44a62dc36eab133`: bounded transient automatic retry with stable idempotency.
 - PR #72 merged [Step92](92-voice-message-polish.md) as `22e94a87bfbc3b1b40b54f381c263db412b38537`: local voice preview, waveform/scrub and custom encrypted playback.
-- [Step93](93-typing-read-polish.md) merged in PR #73 as `ceccb776a645fec5ca671491f9eeb9d0a3648a07`, completing bounded typing presence and truthful Sent/Read semantics. Accessibility/Dynamic Type/VoiceOver remains open.
+- [Step93](93-typing-read-polish.md) merged in PR #73 as `ceccb776a645fec5ca671491f9eeb9d0a3648a07`, completing bounded typing presence and truthful Sent/Read semantics. [Step94](94-accessibility-dynamic-type.md) is the active accessibility follow-up; Dynamic Type/VoiceOver acceptance remains open.
 - Android remains Web/PWA.
 - Production still runs the earlier server release and has not received migrations `0017_single_admin` or `0018_session_biometrics`.
 

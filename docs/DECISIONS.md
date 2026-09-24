@@ -59,3 +59,10 @@ The native iOS release uses a small Swift/UIKit host with `WKWebView`, app-bound
 
 ## ADR-019 — Native biometric unlock uses Secure Enclave challenge-response
 Do not store the four-digit PIN, a reusable biometric secret or a trusted biometric boolean in native storage. iOS creates a P-256 private key in the Secure Enclave protected by the current biometric set; the server stores only its per-session public key. Unlock signs only a validated, domain-separated, short-lived one-time server challenge and, after verification, receives the same RAM-only capability used by PIN unlock. PIN lockout, session expiry/revocation and password recovery remain authoritative.
+
+
+## ADR-020 — Scale text inside the mobile viewport, not the whole messenger
+
+Product decision confirmed on 2026-09-24: the messenger must fit the phone viewport. Keep page zoom restricted; do not enable pinch-to-zoom of the entire interface as part of accessibility work. iOS Dynamic Type changes text size, while layout reflows within the available screen width. Headers and controls wrap as needed; message history and long input remain vertically scrollable. Text enlargement must not introduce horizontal page/history scrolling or place essential controls outside the viewport. System accessibility features remain under OS control.
+
+Acceptance covers 200%/300% text at 320 CSS pixels plus physical-iPhone Dynamic Type categories, keyboard and VoiceOver checks. Automated browser evidence does not complete physical-device acceptance. See [Step94](steps/94-accessibility-dynamic-type.md) and the [native production plan](steps/88-native-ios-production-plan.md).
