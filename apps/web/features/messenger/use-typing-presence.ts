@@ -24,12 +24,14 @@ export function useTypingPresence({
   members,
   realtime,
   realtimeEvent,
+  clearOnMessageCreated = true,
 }: {
   conversationId: string;
   currentUserId: string;
   members: readonly ConversationMember[];
   realtime: RealtimeClient | null;
   realtimeEvent: RealtimeEvent | null;
+  clearOnMessageCreated?: boolean;
 }) {
   const [remoteTypingIds, setRemoteTypingIds] = useState<string[]>([]);
   const localActiveRef = useRef(false);
@@ -103,10 +105,10 @@ export function useTypingPresence({
       return;
     }
 
-    if (realtimeEvent.type === "message.created") {
+    if (clearOnMessageCreated && realtimeEvent.type === "message.created") {
       removeRemote(senderId);
     }
-  }, [conversationId, currentUserId, realtimeEvent, removeRemote]);
+  }, [clearOnMessageCreated, conversationId, currentUserId, realtimeEvent, removeRemote]);
 
   useEffect(() => {
     const stopWhenHidden = () => {
@@ -136,5 +138,6 @@ export function useTypingPresence({
     typingLabel: typingPresenceLabel(typingNames),
     updateLocalTyping,
     stopLocalTyping,
+    clearRemoteTyping: removeRemote,
   };
 }
