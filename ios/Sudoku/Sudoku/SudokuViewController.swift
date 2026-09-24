@@ -1,5 +1,6 @@
 import Contacts
 import ContactsUI
+import LocalAuthentication
 import UIKit
 import WebKit
 
