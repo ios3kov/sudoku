@@ -605,6 +605,7 @@ export function EncryptedConversationView({
     // Stop is always available, even when secure authoring becomes blocked.
     if (recording) { await toggleVoice(); return; }
     if (busy || syncBlocked || requestingMic || voiceDraftPreparing || voiceDraft) return;
+    typing.stopLocalTyping();
     setError(null);
     if (!navigator.onLine) { setError("Encrypted voice notes require a connection"); return; }
     await toggleVoice();
