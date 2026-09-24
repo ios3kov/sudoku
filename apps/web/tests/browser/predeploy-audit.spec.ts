@@ -98,6 +98,49 @@ test("encrypted typing stops on hide and remote presence has names plus fail-saf
   await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
 });
 
+test("encrypted read watermark skips duplicate writes and advances once for a newer visible message", async ({page}) => {
+  await page.evaluate(() => {
+    window.__predeployAudit.seedHistory();
+    window.__predeployAudit.mount("chat");
+  });
+  await expect(page.locator('[data-message-id="seed-19"]')).toBeVisible();
+  await page.waitForTimeout(80);
+  expect(await page.evaluate(() => window.__predeployAudit.protocol.reads)).toEqual([]);
+
+  await page.evaluate(() => {
+    window.__predeployAudit.protocol.messages.push({
+      id: "seed-20",
+      sequence: 21,
+      senderId: "peer",
+      messageType: "text",
+      body: "Newest visible message",
+      createdAt: "2026-09-22T08:21:00Z",
+      replyTo: null,
+      assetIds: [],
+      attachments: [],
+      reactions: [],
+      edited: false,
+      deleted: false,
+    });
+    window.__predeployAudit.emitRealtime({
+      type: "message.created",
+      conversation_id: "chat",
+      payload: { sender_id: "peer", sequence: 21 },
+    });
+  });
+
+  await expect(page.locator('[data-message-id="seed-20"]')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.reads)).toEqual([21]);
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "message.created",
+    conversation_id: "chat",
+    payload: { sender_id: "peer", sequence: 21 },
+  }));
+  await page.waitForTimeout(80);
+  expect(await page.evaluate(() => window.__predeployAudit.protocol.reads)).toEqual([21]);
+});
+
 test("encrypted incoming message clears stale typing and read detail names the reader", async ({page}) => {
   await page.evaluate(()=>{
     window.__predeployAudit.seedHistory();
