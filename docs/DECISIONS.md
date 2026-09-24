@@ -55,3 +55,10 @@ Signal iOS, Element X and similar AGPL/GPL projects may inform UX/security patte
 
 ## ADR-018 — Production iOS host is first-party Swift, not Capacitor remote-url mode
 The native iOS release uses a small Swift/UIKit host with `WKWebView`, app-bound domains and narrow script-message handlers. This preserves the existing same-origin session/API/MLS behavior. Capacitor remains a valid general option, but its documented external `server.url` mode is intended for live reload/development rather than production, so it is not used for this release architecture.
+
+
+## ADR-019 — iOS biometrics reuse the existing server PIN gate
+Face ID / Touch ID does not introduce a second authentication protocol. When the user explicitly enables biometric quick unlock, iOS stores the current four-digit device PIN in a `WhenUnlockedThisDeviceOnly` Keychain item protected by `biometryCurrentSet`. A successful biometric check releases that PIN to the trusted main-frame bridge only long enough for the web client to call the existing server PIN-unlock endpoint. The server session and RAM-only unlock capability remain authoritative.
+
+## ADR-020 — Native media selection does not own attachment transport
+The iOS host may use system Photos and Files pickers to obtain one explicit user selection, but it does not upload that plaintext. Native bytes are converted back into a browser `File` and pass through the existing shared client-side E2EE attachment pipeline. Web/PWA keeps its file-input fallback.
