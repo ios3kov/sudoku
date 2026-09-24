@@ -28,7 +28,7 @@ Real-iPhone checks include portrait layout on iPhone mini, no bottom seam, no wh
 
 ## Outstanding pre-existing visual issue
 
-The operator confirmed that adding the launch-screen declaration removed black letterboxing and the board loads on a physical iPhone. A faint strip remained near the bottom on both Sudoku and messenger login; disabling native scroll-edge effects did not resolve it. Review identified a permanent idle CSS shadow and the separate 34-point native bottom region as relevant boundaries. The next correction removes the idle shadow and extends the native canvas to the bottom edge while preserving content safe-area padding. The updated native build has been launched on the physical iPhone; operator confirmation is pending. Do not mark the strip or overall physical acceptance complete.
+The operator confirmed that adding the launch-screen declaration removed black letterboxing and the board loads on a physical iPhone. A faint strip remained near the bottom on both Sudoku and messenger login; disabling native scroll-edge effects did not resolve it. Review identified a permanent idle CSS shadow and the separate 34-point native bottom region as relevant boundaries. The next correction removes the idle shadow and extends the native canvas to the bottom edge while preserving content safe-area padding. The updated native build launched on the physical iPhone. The operator subsequently reported that the remaining strip is visible only beneath the moving Sudoku screen during reveal. Remove the decorative reveal pseudo-element entirely, including its gesture-time shadow, in both web CSS and the native compatibility stylesheet. The final gesture-time correction still requires operator confirmation; overall physical acceptance stays open.
 
 ## Implemented repository scope
 
@@ -52,4 +52,6 @@ Physical iPhone acceptance, absence of the lower seam, VoiceOver/Dynamic Type ac
 
 ## Review branches
 
-Native frame corrections are tracked in PR #80 at head `0ed946e`; the game engine is tracked in PR #81 at head `dbcde73`. The integrated UI/startup work is on `feat/full-sudoku-game`, with its PR still being prepared at this checkpoint. These references identify submitted work, not completed browser or physical-device acceptance. Record the final full reviewed heads and CI evidence before merge.
+Native frame corrections are tracked in PR #80 at head `0ed946e`; the game engine is tracked in PR #81 at head `dbcde73`. The integrated UI/startup work is on `feat/full-sudoku-game`, in PR #82. These references identify submitted work, not completed browser or physical-device acceptance. Record the final full reviewed heads and CI evidence before merge.
+
+Manual in-app-browser verification at 375×728 covered 4×4, 6×6 and 9×9 layout, hard-mode selection, ordinary digit-5 entry, hints/undo/redo, pause/menu, notes and saved-game restoration after reload. No console warnings/errors were observed. This does not substitute for WKWebView or VoiceOver acceptance.
