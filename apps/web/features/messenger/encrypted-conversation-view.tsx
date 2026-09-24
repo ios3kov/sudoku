@@ -728,7 +728,7 @@ export function EncryptedConversationView({
                     <button
                       type="button"
                       aria-label="Remove queued message"
-                      disabled={retrying}
+                      disabled={retryingQueuedId !== null}
                       onClick={() => void removeQueuedMessage(message.id)}
                     >
                       Remove
