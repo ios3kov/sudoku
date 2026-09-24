@@ -364,7 +364,8 @@ Still open:
 - PR #69 merged native Photos/Files selection and `PrivacyInfo.xcprivacy` as `b6f7ac9cc185bb55a8ec476ec2daed9f204f198c`. See [Step89](89-ios-biometric-media.md).
 - PR #70 merged [Step90](90-e2ee-send-state-reliability.md) as `32e869e10f8c14ae1caabda89e9d20c19e45200c`: durable send states plus manual Retry/Remove on the existing MLS outbox.
 - PR #71 merged [Step91](91-automatic-send-retry.md) as `8c57dc1942420a84147f742fa44a62dc36eab133`: bounded transient automatic retry with stable idempotency.
-- [Step92](92-voice-message-polish.md) is the active P1 follow-up for local voice preview, waveform and scrub.
+- PR #72 merged [Step92](92-voice-message-polish.md) as `22e94a87bfbc3b1b40b54f381c263db412b38537`: local voice preview, waveform/scrub and custom encrypted playback.
+- [Step93](93-typing-read-polish.md) is the active P1 follow-up for bounded typing presence and truthful Sent/Read semantics.
 - Android remains Web/PWA.
 - Production still runs the earlier server release and has not received migrations `0017_single_admin` or `0018_session_biometrics`.
 
