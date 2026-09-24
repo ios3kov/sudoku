@@ -163,6 +163,11 @@ export function EncryptedConversationView({
     const timer = window.setTimeout(() => {
       retryTimerRef.current = null;
       setAutoRetryQueuedId((current) => current === clientId ? null : current);
+      if (!navigator.onLine) {
+        if (attempt <= 1) retryAttemptsRef.current.delete(clientId);
+        else retryAttemptsRef.current.set(clientId, attempt - 1);
+        return;
+      }
       setRetryingQueuedId(clientId);
 
       void adapter.retryPendingApplicationSend(clientId)
