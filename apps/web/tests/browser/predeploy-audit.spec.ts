@@ -171,3 +171,27 @@ test("encrypted attach button opens the hidden file picker", async ({page}) => {
   await page.getByRole("button",{name:"Attach encrypted file",exact:true}).click();
   await expect(input).toHaveAttribute("data-audit-clicked", "true");
 });
+
+test("encrypted attach button prefers the native iOS picker bridge when available", async ({page}) => {
+  await page.evaluate(() => {
+    const state = window as unknown as {
+      __nativePickerCalled?: boolean;
+      SudokuNativeMedia?: { pickAttachment: () => Promise<never> };
+    };
+    state.__nativePickerCalled = false;
+    state.SudokuNativeMedia = {
+      pickAttachment: async () => {
+        state.__nativePickerCalled = true;
+        throw new DOMException("User canceled", "AbortError");
+      },
+    };
+  });
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+
+  const input = page.locator('input[type="file"]');
+  await input.evaluate((node) => node.addEventListener("click", () => node.setAttribute("data-audit-clicked", "true")));
+
+  await page.getByRole("button",{name:"Attach encrypted file",exact:true}).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __nativePickerCalled?: boolean }).__nativePickerCalled)).toBe(true);
+  await expect(input).not.toHaveAttribute("data-audit-clicked", "true");
+});
