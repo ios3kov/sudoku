@@ -357,6 +357,34 @@
 .pending-message-actions button:disabled{
   opacity:.55;
 }
+
+.typing-indicator{
+  min-height:28px;
+  display:flex;
+  align-items:center;
+  padding:3px 12px 5px;
+  color:transparent;
+  font-size:11px;
+  line-height:20px;
+  transition:color .14s ease,opacity .14s ease;
+  opacity:0;
+}
+
+.typing-indicator.is-active{
+  color:#64748b;
+  opacity:1;
+}
+
+.typing-indicator.is-active::before{
+  content:"•••";
+  margin-right:6px;
+  color:#94a3b8;
+  letter-spacing:2px;
+}
+
+.own + .typing-indicator{
+  justify-content:flex-start;
+}
 .message-more-button{
   width:44px;
   min-width:44px;
