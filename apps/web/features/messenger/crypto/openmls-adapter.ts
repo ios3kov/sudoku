@@ -814,6 +814,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   async sendMessageDurably(
     input: OutboundPlaintext,
     clientId = crypto.randomUUID(),
+    onPrepared?: () => void,
   ): Promise<Message> {
     const event: EncryptedEventRecord["event"] = {
       kind: "message",
@@ -829,6 +830,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       event,
       input.messageType,
       input.assetIds,
+      onPrepared,
     );
   }
 
@@ -895,6 +897,43 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         ? [{ id: item.clientId, body: item.event.body, messageType: item.event.messageType }]
         : [],
     );
+  }
+
+  async retryPendingApplicationSend(clientId: string): Promise<Message | null> {
+    if (!clientId) throw new Error("Pending encrypted message id is required");
+    return this.enqueue(async () => {
+      this.assertReady();
+      const pending = this.localState!.pendingApplicationSends.find(
+        (item) => item.clientId === clientId && item.event.kind === "message",
+      );
+      if (!pending) return null;
+      const delivered = await this.flushPendingApplicationSends(pending.conversationId);
+      return delivered.get(clientId) ?? null;
+    });
+  }
+
+  async discardPendingApplicationSend(clientId: string): Promise<boolean> {
+    if (!clientId) throw new Error("Pending encrypted message id is required");
+    return this.enqueue(async () => {
+      this.assertReady();
+      const pending = this.localState!.pendingApplicationSends.find(
+        (item) => item.clientId === clientId && item.event.kind === "message",
+      );
+      if (!pending) return false;
+
+      const snapshot = this.snapshotRuntime();
+      try {
+        this.localState!.pendingApplicationSends =
+          this.localState!.pendingApplicationSends.filter(
+            (item) => item.clientId !== clientId,
+          );
+        await this.persistCurrentState();
+        return true;
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
+      }
+    });
   }
 
   async decryptAndJournal(
@@ -1503,6 +1542,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     event: EncryptedEventRecord["event"],
     serverType: "text" | "image" | "file" | "voice",
     assetIds: string[],
+    onPrepared?: () => void,
   ): Promise<Message> {
     return this.enqueue(async () => {
       this.assertReady();
@@ -1550,6 +1590,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         throw new Error("Encrypted client id is already queued for another conversation");
       }
 
+      onPrepared?.();
       const delivered = await this.flushPendingApplicationSends();
       const result = delivered.get(clientId);
       if (!result) {
