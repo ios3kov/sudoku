@@ -41,6 +41,14 @@ final class SudokuViewController: UIViewController {
         webView.allowsLinkPreview = false
         // Prevent browser-style rubber banding without disabling nested chat
         // scrolling or the web app's deliberate hold-5 reveal gesture.
+        if #available(iOS 26.0, *) {
+            // This full-screen canvas has no overlaid native bars to separate
+            // with UIKit's automatic scroll-edge shadows.
+            webView.scrollView.topEdgeEffect.isHidden = true
+            webView.scrollView.bottomEdgeEffect.isHidden = true
+            webView.scrollView.leftEdgeEffect.isHidden = true
+            webView.scrollView.rightEdgeEffect.isHidden = true
+        }
         webView.scrollView.bounces = false
         webView.scrollView.alwaysBounceVertical = false
         webView.scrollView.alwaysBounceHorizontal = false
