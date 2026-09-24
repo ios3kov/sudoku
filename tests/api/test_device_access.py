@@ -193,6 +193,53 @@ async def test_native_biometric_challenge_is_session_bound_one_time_and_pin_gate
             assert await db.get(SessionBiometricCredential, sid) is None
 
 
+async def test_biometric_challenge_expiry_is_fail_closed():
+    async with account() as (client, _, sid):
+        token = await enroll(client)
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        public_key = private_key.public_key().public_bytes(
+            Encoding.X962,
+            PublicFormat.UncompressedPoint,
+        )
+        enrolled = await client.put(
+            ROOT + "/biometric",
+            headers={HEADER: token},
+            json={
+                "password": PASSWORD,
+                "public_key_x963_b64": base64.b64encode(public_key).decode("ascii"),
+            },
+        )
+        assert enrolled.status_code == 200
+        assert (await client.post(ROOT + "/lock", headers={HEADER: token})).status_code == 204
+
+        challenge_response = await client.post(ROOT + "/biometric/challenge")
+        assert challenge_response.status_code == 200
+        challenge = challenge_response.json()
+
+        async with SessionFactory() as db:
+            credential = await db.get(SessionBiometricCredential, sid)
+            credential.challenge_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+            await db.commit()
+
+        signature = private_key.sign(
+            challenge["payload"].encode("ascii"),
+            ec.ECDSA(hashes.SHA256()),
+        )
+        expired = await client.post(
+            ROOT + "/biometric/unlock",
+            json={
+                "challenge": challenge["challenge"],
+                "signature_b64": base64.b64encode(signature).decode("ascii"),
+            },
+        )
+        assert expired.status_code == 409
+
+        async with SessionFactory() as db:
+            credential = await db.get(SessionBiometricCredential, sid)
+            assert credential.challenge_hash is None
+            assert credential.challenge_expires_at is None
+
+
 async def test_biometric_disable_requires_password_and_current_unlock():
     async with account() as (client, _, sid):
         token = await enroll(client)
