@@ -41,16 +41,20 @@ URL.revokeObjectURL = (url) => { urls.revoked.push(url); revoke(url); };
 const metadata: EncryptedAttachmentMetadata = {
   version: 1, algorithm: "AES-256-GCM", assetId: "asset", originalName: "test.webm", originalMime: "audio/webm",
   plaintextSize: 10, plaintextSha256Hex: "0".repeat(64), ciphertextSha256Hex: "0".repeat(64), keyB64: "", nonceB64: "",
+  voice: { durationMs: 4_200, waveform: [0.2, 0.5, 0.8, 0.4] },
 };
 const user = {id: "me", display_name: "Test owner", email: "owner@example.test", is_admin: false} as CurrentUser;
 const conversation = {id: "chat", type: "direct", title: null, latest_sequence: 0, members: [], encryption_required: true, e2ee_ready: true} as unknown as Conversation;
-const protocol = { blocked: false, sends: 0, messages: [] as ProjectedEncryptedMessage[] };
+const protocol = { blocked: false, sends: 0, lastSend: null as unknown, messages: [] as ProjectedEncryptedMessage[] };
 const adapter = {
   syncTransport: async () => { if (protocol.blocked) throw new Error("transport unavailable"); },
   projectConversation: () => ({messages: protocol.messages, rejectedEventIds: []}),
   pendingApplicationCount: () => 0,
   pendingApplicationMessages: () => [],
-  sendMessageDurably: async () => { protocol.sends += 1; },
+  sendMessageDurably: async (payload: unknown) => {
+    protocol.sends += 1;
+    protocol.lastSend = payload;
+  },
 } as unknown as OpenMlsProtocolAdapter;
 messengerApi.asset = async () => ({id: "asset", e2ee_ciphertext: true}) as Awaited<ReturnType<typeof messengerApi.asset>>;
 messengerApi.markRead = async () => undefined;
