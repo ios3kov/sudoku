@@ -54,7 +54,8 @@ The iOS layer adds `BiometricPinVault`:
 - Face ID / Touch ID is required before the Keychain releases the PIN;
 - changing enrolled biometrics invalidates the protected Keychain item;
 - the PIN is never placed in LocalStorage, SessionStorage or IndexedDB;
-- sign-out, PIN removal, or explicit biometric-disable clears the item.
+- sign-out, PIN removal, or explicit biometric-disable clears the item;
+- if server PIN enrollment succeeds but native biometric enrollment fails, onboarding degrades to a working PIN-only session instead of leaving a half-configured lock state.
 
 After biometric success, the trusted main-frame bridge receives the PIN only long enough to submit it to the existing server PIN-unlock endpoint. The same-origin/XSS limitation remains unchanged: active trusted-origin JavaScript is already inside the endpoint trust boundary and can observe decrypted content after unlock.
 
@@ -109,6 +110,7 @@ Repository/browser coverage must prove:
 
 - native biometric availability is detected;
 - user can opt in to Face ID during PIN setup;
+- biometric-enrollment failure falls back to PIN-only without losing the server-side PIN unlock path;
 - no raw PIN appears in web storage;
 - reload returns to the PIN gate;
 - Face ID bridge returns the stored PIN only after the native-auth step;
