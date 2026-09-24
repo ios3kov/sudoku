@@ -141,7 +141,7 @@ test("encrypted read watermark skips duplicate writes and advances once for a ne
   expect(await page.evaluate(() => window.__predeployAudit.protocol.reads)).toEqual([21]);
 });
 
-test("encrypted incoming message clears stale typing and read detail names the reader", async ({page}) => {
+test("encrypted typing clears only for a real decrypted message, not a reaction/edit envelope", async ({page}) => {
   await page.evaluate(()=>{
     window.__predeployAudit.seedHistory();
     window.__predeployAudit.mount("chat");
@@ -155,11 +155,39 @@ test("encrypted incoming message clears stale typing and read detail names the r
   }));
   await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
 
+  // Encrypted reaction/edit/delete application events are also transported as
+  // server message.created rows. If the decrypted projection has no message
+  // with that event id, typing must remain visible.
   await page.evaluate(() => window.__predeployAudit.emitRealtime({
     type: "message.created",
     conversation_id: "chat",
-    payload: { sender_id: "peer" },
+    payload: { id: "encrypted-reaction-event", sender_id: "peer", sequence: 21 },
   }));
+  await page.waitForTimeout(80);
+  await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
+
+  await page.evaluate(() => {
+    window.__predeployAudit.protocol.messages.push({
+      id: "typing-message",
+      sequence: 21,
+      senderId: "peer",
+      messageType: "text",
+      body: "Actual new message",
+      createdAt: "2026-09-22T08:21:00Z",
+      replyTo: null,
+      assetIds: [],
+      attachments: [],
+      reactions: [],
+      edited: false,
+      deleted: false,
+    });
+    window.__predeployAudit.emitRealtime({
+      type: "message.created",
+      conversation_id: "chat",
+      payload: { id: "typing-message", sender_id: "peer", sequence: 21 },
+    });
+  });
+  await expect(page.locator('[data-message-id="typing-message"]')).toBeVisible();
   await expect(page.getByText("Alice is typing…",{exact:true})).toHaveCount(0);
 
   await expect(
