@@ -55,12 +55,16 @@ export function VoiceDraftPreview({
   blob,
   presentation,
   busy,
+  sendDisabled = false,
+  uploadProgress = null,
   onDelete,
   onSend,
 }: {
   blob: Blob;
   presentation: VoiceAttachmentPresentation;
   busy: boolean;
+  sendDisabled?: boolean;
+  uploadProgress?: number | null;
   onDelete: () => void;
   onSend: () => void;
 }) {
@@ -155,10 +159,10 @@ export function VoiceDraftPreview({
         type="button"
         className="voice-preview-send"
         aria-label="Send voice message"
-        disabled={busy}
+        disabled={busy || sendDisabled}
         onClick={onSend}
       >
-        Send
+        {uploadProgress === null ? "Send" : `${uploadProgress}%`}
       </button>
     </div>
   );
