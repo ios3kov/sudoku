@@ -13,6 +13,7 @@ import { ConversationPreferences } from "./conversation-preferences";
 import { MessageSearch } from "./message-search";
 import { ConversationHeader } from "./conversation-header";
 import { useVoiceRecorder } from "./use-voice-recorder";
+import { useTypingPresence } from "./use-typing-presence";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
 import { useConversationDraft } from "./conversation-drafts";
 import { MessageActionSheet } from "./message-action-sheet";
@@ -57,7 +58,6 @@ export function ConversationView({
   const [visibleCount, setVisibleCount] = useState(120);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [online, setOnline] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -68,8 +68,6 @@ export function ConversationView({
   const [showSearch, setShowSearch] = useState(false);
   const [highlightedSequence, setHighlightedSequence] = useState<number | null>(null);
 
-  const typingTimer = useRef<number | null>(null);
-  const remoteTypingTimers = useRef<Map<string, number>>(new Map());
   const timelineRef = useRef<MessageTimelineHandle>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -84,7 +82,16 @@ export function ConversationView({
   const timelineMessages = useMemo(() => messages.map((message) => ({
     ...message, senderId: message.sender_id, createdAt: message.created_at, deleted: Boolean(message.deleted_at),
   })), [messages]);
-  const peerReads = conversation.members.filter((member) => member.id !== user.id).map((member) => member.last_read_sequence);
+  const peerMembers = conversation.members.filter((member) => member.id !== user.id);
+  const peerReads = peerMembers.map((member) => member.last_read_sequence);
+  const peerNames = peerMembers.map((member) => member.display_name);
+  const typing = useTypingPresence({
+    conversationId: conversation.id,
+    currentUserId: user.id,
+    members: conversation.members,
+    realtime,
+    realtimeEvent,
+  });
   useAutosizeTextarea(textareaRef, body);
 
   const lastSequence = useMemo(
@@ -131,16 +138,12 @@ export function ConversationView({
 
   useEffect(() => {
     const syncOnline = () => setOnline(navigator.onLine);
-    const typingTimers = remoteTypingTimers.current;
     syncOnline();
     window.addEventListener("online", syncOnline);
     window.addEventListener("offline", syncOnline);
     return () => {
       window.removeEventListener("online", syncOnline);
       window.removeEventListener("offline", syncOnline);
-      for (const timer of typingTimers.values()) window.clearTimeout(timer);
-      typingTimers.clear();
-      if (typingTimer.current !== null) window.clearTimeout(typingTimer.current);
       if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
     };
   }, []);
@@ -172,31 +175,7 @@ export function ConversationView({
       return;
     }
 
-    if ((realtimeEvent.type === "typing.started" || realtimeEvent.type === "typing.stopped") && realtimeEvent.payload) {
-      const senderId = String((realtimeEvent.payload as { user_id?: string }).user_id ?? "");
-      if (!senderId || senderId === user.id) return;
-      const existingTimer = remoteTypingTimers.current.get(senderId);
-      if (existingTimer !== undefined) window.clearTimeout(existingTimer);
-      if (realtimeEvent.type === "typing.stopped") {
-        setTypingUsers((current) => {
-          const next = new Set(current);
-          next.delete(senderId);
-          return next;
-        });
-        remoteTypingTimers.current.delete(senderId);
-      } else {
-        setTypingUsers((current) => new Set(current).add(senderId));
-        const timer = window.setTimeout(() => {
-          setTypingUsers((current) => {
-            const next = new Set(current);
-            next.delete(senderId);
-            return next;
-          });
-          remoteTypingTimers.current.delete(senderId);
-        }, 3000);
-        remoteTypingTimers.current.set(senderId, timer);
-      }
-    }
+
   }, [realtimeEvent, conversation, onConversationUpdated, user.id]);
 
   useEffect(() => {
@@ -284,7 +263,7 @@ export function ConversationView({
 
     timelineRef.current?.toLatest();
     setBody("");
-    realtime?.sendTyping(conversation.id, false);
+    typing.stopLocalTyping();
     const local: PendingMessage = {
       client_id: crypto.randomUUID(),
       conversation_id: conversation.id,
@@ -377,10 +356,7 @@ export function ConversationView({
 
   function updateTyping(nextBody: string) {
     setBody(nextBody);
-    if (editingMessage) return;
-    realtime?.sendTyping(conversation.id, nextBody.trim().length > 0);
-    if (typingTimer.current !== null) window.clearTimeout(typingTimer.current);
-    typingTimer.current = window.setTimeout(() => realtime?.sendTyping(conversation.id, false), 1500);
+    typing.updateLocalTyping(nextBody, Boolean(editingMessage));
   }
 
   function beginReply(message: Message) {
@@ -392,6 +368,7 @@ export function ConversationView({
 
   function beginEdit(message: Message) {
     if (!message.body || message.type !== "text") return;
+    typing.stopLocalTyping();
     setReplyingTo(null);
     setEditingMessage(message);
     setEditBody(message.body);
@@ -454,6 +431,7 @@ export function ConversationView({
   async function toggleRecording() {
     if (recording) { await toggleVoice(); return; }
     if (requestingMic || uploadProgress !== null) return;
+    typing.stopLocalTyping();
     setError(null);
     if (!navigator.onLine) { setError("Voice notes require a connection"); return; }
     await toggleVoice();
@@ -507,13 +485,13 @@ export function ConversationView({
       <ConversationHeader
         title={conversationTitle(conversation, user.id)}
         subtitle={online ? "connected" : "offline"}
-        onBack={onBack}
+        onBack={() => { typing.stopLocalTyping(); onBack(); }}
         actions={
           <>
             <button type="button" className="hide-chat-button" onClick={() => { setShowSearch((value) => !value); setShowPreferences(false); setShowGroupSettings(false); }}>Find</button>
             {conversation.type === "group" ? <button type="button" className="hide-chat-button" onClick={() => { setShowGroupSettings((value) => !value); setShowSearch(false); setShowPreferences(false); }}>Group</button> : null}
             <button type="button" className="hide-chat-button" aria-label="Conversation settings" onClick={() => { setShowPreferences((value) => !value); setShowSearch(false); setShowGroupSettings(false); }}>•••</button>
-            <button type="button" className="hide-chat-button" onClick={onHide}>Hide</button>
+            <button type="button" className="hide-chat-button" onClick={() => { typing.stopLocalTyping(); onHide(); }}>Hide</button>
           </>
         }
       />
@@ -549,6 +527,7 @@ export function ConversationView({
         items={timelineMessages}
         visibleCount={visibleCount}
         currentUserId={user.id}
+        knownReadSequence={conversation.last_read_sequence}
         onReadLatest={markVisibleRead}
         childrenBefore={<>
           {loading ? <p className="muted center">Loading…</p> : null}
@@ -565,6 +544,7 @@ export function ConversationView({
               own={message.sender_id === user.id}
               replyMessage={message.reply_to ? messageById.get(message.reply_to) ?? null : null}
               peerReads={peerReads}
+              peerNames={peerNames}
               senderName={conversation.type === "group" && message.sender_id !== user.id ? conversation.members.find((member) => member.id === message.sender_id)?.display_name ?? "Member" : null}
               onReply={() => beginReply(message)}
               onToggleActions={() => setActionMessageId(message.id)}
@@ -573,7 +553,13 @@ export function ConversationView({
         )}
         childrenAfter={<>
           {pending.map((message) => <div className="message-row own" key={message.client_id}><div className="message-bubble pending"><p>{message.body}</p><small>{online ? "Sending…" : "Queued"}</small></div></div>)}
-          {typingUsers.size > 0 ? <div className="typing-indicator">typing…</div> : null}
+          <div
+            className={`typing-indicator ${typing.typingLabel ? "is-active" : ""}`}
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {typing.typingLabel ?? "\u00a0"}
+          </div>
         </>}
       />
       {actionMessage && !actionMessage.deleted_at ? <MessageActionSheet
@@ -636,6 +622,7 @@ function MessageBubble({
   own,
   replyMessage,
   peerReads,
+  peerNames,
   senderName,
   onReply,
   onToggleActions,
@@ -644,6 +631,7 @@ function MessageBubble({
   own: boolean;
   replyMessage: Message | null;
   peerReads: readonly number[];
+  peerNames: readonly string[];
   senderName: string | null;
   onReply: () => void;
   onToggleActions: () => void;
@@ -667,7 +655,7 @@ function MessageBubble({
               {message.reactions.map((reaction) => <span key={reaction.emoji}>{reaction.emoji} {reaction.user_ids.length}</span>)}
             </div>
           ) : null}
-          <MessageMeta createdAt={message.created_at} sequence={message.sequence} own={own} peerReads={peerReads} edited={Boolean(message.edited_at)} />
+          <MessageMeta createdAt={message.created_at} sequence={message.sequence} own={own} peerReads={peerReads} peerNames={peerNames} edited={Boolean(message.edited_at)} />
         </div>
         </MessageInteraction>
         {!deleted ? <button className="message-more-button" type="button" onClick={onToggleActions} aria-label="Message actions" aria-haspopup="dialog">•••</button> : null}

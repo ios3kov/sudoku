@@ -113,3 +113,18 @@ Required before merge:
 Repository work only.
 
 No production deployment, migration, TestFlight upload or App Store submission is authorized by this step.
+
+
+## Merge verification — 2026-09-24
+
+PR #72 merged to `main` as `22e94a87bfbc3b1b40b54f381c263db412b38537`.
+
+Reviewed exact head `bf2168ea3e0b744e2a9e3e54d224dcf6b1703dd3` passed:
+
+- ci `35983899656`, including voice browser E2E and production image builds;
+- device-access `35983899721`;
+- ios-native `35983899729`;
+- beat-runtime `35983899740`;
+- api-shutdown `35983899732`.
+
+No production deployment, migration, TestFlight upload or App Store submission occurred.

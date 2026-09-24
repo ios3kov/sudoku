@@ -14,7 +14,11 @@ test.beforeAll(async () => {
 });
 test.beforeEach(async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
-  await page.setContent('<div id="root"></div>');
+  // A trustworthy local origin supplies Web Crypto, just like the HTTPS app.
+  // Fulfill the document locally; this fixture does not depend on a web server.
+  const fixtureURL = "http://127.0.0.1:3000/__audit_fixture";
+  await page.route(fixtureURL, route => route.fulfill({contentType: "text/html", body: '<div id="root"></div>'}));
+  await page.goto(fixtureURL);
   await page.addStyleTag({content: styles});
   await page.addScriptTag({content: bundle});
 });
@@ -41,6 +45,172 @@ test("voice download failure is handled and can be retried", async ({page}) => {
   await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.io.downloads.length)).toBe(2);
   await page.evaluate(()=>window.__predeployAudit.resolveDownload(1));
   await expect(page.getByRole("button",{name:"Play voice message"})).toBeVisible();
+});
+
+test("encrypted typing coalesces keystrokes, refreshes while active and stops cleanly", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  const input = page.getByRole("textbox",{name:"Message"});
+  await expect(input).toBeEnabled();
+
+  for (const value of ["h", "he", "hel", "hell"]) {
+    await input.fill(value);
+    await page.waitForTimeout(600);
+  }
+
+  const activeFrames = await page.evaluate(() => window.__predeployAudit.protocol.typing);
+  const activeCount = activeFrames.filter((frame) => frame.active).length;
+  expect(activeCount).toBeGreaterThanOrEqual(2);
+  expect(activeCount).toBeLessThan(4);
+  expect(activeFrames.some((frame) => !frame.active)).toBe(false);
+
+  // Inactivity must stop presence before the remote fail-safe expiry.
+  await page.waitForTimeout(1_700);
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
+
+  // A successful send must stop typing immediately.
+  await input.fill("send now");
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(true);
+  await page.getByRole("button",{name:"Send",exact:true}).click();
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.sends)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
+
+  // Empty composer also stops an active typing session.
+  await input.fill("again");
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(true);
+  await input.fill("");
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
+});
+
+test("encrypted typing stops on hide and remote presence has names plus fail-safe expiry", async ({page}) => {
+  await page.evaluate(()=>window.__predeployAudit.mount("chat"));
+  const input = page.getByRole("textbox",{name:"Message"});
+  await expect(input).toBeEnabled();
+  await input.fill("draft");
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(true);
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "typing.started",
+    conversation_id: "chat",
+    payload: { user_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "typing.stopped",
+    conversation_id: "chat",
+    payload: { user_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toHaveCount(0);
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "typing.started",
+    conversation_id: "chat",
+    payload: { user_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
+  await page.waitForTimeout(3_700);
+  await expect(page.getByText("Alice is typing…",{exact:true})).toHaveCount(0);
+
+  await input.fill("still typing");
+  await page.getByRole("button",{name:"Hide",exact:true}).click();
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.typing.at(-1)?.active)).toBe(false);
+});
+
+test("encrypted read watermark skips duplicate writes and advances once for a newer visible message", async ({page}) => {
+  await page.evaluate(() => {
+    window.__predeployAudit.seedHistory();
+    window.__predeployAudit.mount("chat");
+  });
+  await expect(page.locator('[data-message-id="seed-19"]')).toBeVisible();
+  await page.waitForTimeout(80);
+  expect(await page.evaluate(() => window.__predeployAudit.protocol.reads)).toEqual([]);
+
+  await page.evaluate(() => {
+    window.__predeployAudit.protocol.messages.push({
+      id: "seed-20",
+      sequence: 21,
+      senderId: "peer",
+      messageType: "text",
+      body: "Newest visible message",
+      createdAt: "2026-09-22T08:21:00Z",
+      replyTo: null,
+      assetIds: [],
+      attachments: [],
+      reactions: [],
+      edited: false,
+      deleted: false,
+    });
+    window.__predeployAudit.emitRealtime({
+      type: "message.created",
+      conversation_id: "chat",
+      payload: { sender_id: "peer", sequence: 21 },
+    });
+  });
+
+  await expect(page.locator('[data-message-id="seed-20"]')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__predeployAudit.protocol.reads)).toEqual([21]);
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "message.created",
+    conversation_id: "chat",
+    payload: { sender_id: "peer", sequence: 21 },
+  }));
+  await page.waitForTimeout(80);
+  expect(await page.evaluate(() => window.__predeployAudit.protocol.reads)).toEqual([21]);
+});
+
+test("encrypted typing clears only for a real decrypted message, not a reaction/edit envelope", async ({page}) => {
+  await page.evaluate(()=>{
+    window.__predeployAudit.seedHistory();
+    window.__predeployAudit.mount("chat");
+  });
+  await expect(page.locator('[data-message-id="seed-19"]')).toBeVisible();
+
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "typing.started",
+    conversation_id: "chat",
+    payload: { user_id: "peer" },
+  }));
+  await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
+
+  // Encrypted reaction/edit/delete application events are also transported as
+  // server message.created rows. If the decrypted projection has no message
+  // with that event id, typing must remain visible.
+  await page.evaluate(() => window.__predeployAudit.emitRealtime({
+    type: "message.created",
+    conversation_id: "chat",
+    payload: { id: "encrypted-reaction-event", sender_id: "peer", sequence: 21 },
+  }));
+  await page.waitForTimeout(80);
+  await expect(page.getByText("Alice is typing…",{exact:true})).toBeVisible();
+
+  await page.evaluate(() => {
+    window.__predeployAudit.protocol.messages.push({
+      id: "typing-message",
+      sequence: 21,
+      senderId: "peer",
+      messageType: "text",
+      body: "Actual new message",
+      createdAt: "2026-09-22T08:21:00Z",
+      replyTo: null,
+      assetIds: [],
+      attachments: [],
+      reactions: [],
+      edited: false,
+      deleted: false,
+    });
+    window.__predeployAudit.emitRealtime({
+      type: "message.created",
+      conversation_id: "chat",
+      payload: { id: "typing-message", sender_id: "peer", sequence: 21 },
+    });
+  });
+  await expect(page.locator('[data-message-id="typing-message"]')).toBeVisible();
+  await expect(page.getByText("Alice is typing…",{exact:true})).toHaveCount(0);
+
+  await expect(
+    page.locator('[data-message-id="seed-19"] .message-delivery')
+  ).toHaveAttribute("title","Read by Alice");
 });
 
 test("late microphone permission after hiding stops the newly acquired track", async ({page}) => {
