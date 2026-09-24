@@ -94,7 +94,7 @@ Required before merge:
 - stale realtime receipts cannot regress state;
 - direct/group Sent/Read semantics remain truthful;
 - web lint/typecheck/build/performance and browser acceptance;
-- exact-head ci, device-access, beat-runtime, api-shutdown and ios-native are green.
+- exact-head ci, device-access, beat-runtime and api-shutdown are green; ios-native must also be green when that workflow is triggered by the changed paths, otherwise the latest merged iOS baseline remains the iOS evidence.
 
 ## Release boundary
 
