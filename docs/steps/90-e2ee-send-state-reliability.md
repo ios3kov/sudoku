@@ -15,7 +15,7 @@ When delivery cannot complete:
 - offline after local encryption/persistence -> `Queued`;
 - online transport failure after local encryption/persistence -> `Failed`;
 - `Retry` resends the already persisted ciphertext with the same client id;
-- `Remove` deletes a queued text send locally and never transmits it later.
+- `Remove` deletes a queued application message locally and never transmits it later.
 
 Accepted messages continue to use the existing `Sent` / read-receipt metadata.
 
