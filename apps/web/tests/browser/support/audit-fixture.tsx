@@ -68,7 +68,7 @@ const realtime = {
   sendTyping: (conversationId: string, active: boolean) => {
     protocol.typing.push({ conversationId, active });
   },
-} as RealtimeClient;
+} as unknown as RealtimeClient;
 const adapter = {
   syncTransport: async () => { if (protocol.blocked) throw new Error("transport unavailable"); },
   projectConversation: () => ({messages: protocol.messages, rejectedEventIds: []}),
