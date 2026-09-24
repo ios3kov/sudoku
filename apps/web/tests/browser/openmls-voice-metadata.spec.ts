@@ -73,3 +73,25 @@ test("malformed encrypted voice presentation fails closed at the MLS boundary", 
     )
   ).toThrow("Invalid decrypted MLS message event");
 });
+
+
+test("voice presentation is rejected on non-voice encrypted messages", () => {
+  expect(() =>
+    decryptApplicationEvent(
+      decryptor({
+        version: 1,
+        kind: "message",
+        messageType: "file",
+        body: null,
+        replyTo: null,
+        assetIds: ["asset-voice"],
+        attachments: [{
+          ...baseAttachment,
+          voice: { durationMs: 4_200, waveform: [0.2, 0.5] },
+        }],
+      }),
+      "conversation",
+      envelope,
+    )
+  ).toThrow("Voice presentation metadata requires a voice message");
+});
