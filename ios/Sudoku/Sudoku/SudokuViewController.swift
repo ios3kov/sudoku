@@ -70,11 +70,15 @@ final class SudokuViewController: UIViewController {
         view.addSubview(webView)
         view.addSubview(privacyCover)
 
+        // Keep web controls outside the notch/status bar and home indicator even
+        // when the hosted web release does not apply CSS safe-area insets.
+        // The root background and privacy cover still fill the entire window.
+        let contentArea = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: contentArea.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: contentArea.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: contentArea.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: contentArea.bottomAnchor),
 
             privacyCover.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             privacyCover.trailingAnchor.constraint(equalTo: view.trailingAnchor),
