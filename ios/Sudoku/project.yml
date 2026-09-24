@@ -34,7 +34,19 @@ targets:
       - sdk: LocalAuthentication.framework
       - sdk: Security.framework
       - sdk: PhotosUI.framework
+      - sdk: AVFoundation.framework
       - sdk: UniformTypeIdentifiers.framework
+
+  SudokuTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: SudokuTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Sudoku
 
 schemes:
   Sudoku:
@@ -43,5 +55,9 @@ schemes:
         Sudoku: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - SudokuTests
     archive:
       config: Release

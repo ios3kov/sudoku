@@ -15,6 +15,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "audio/webm",
   "video/mp4",
   "video/webm",
+  "video/quicktime",
 ]);
 
 type NativePickedFilePayload = {

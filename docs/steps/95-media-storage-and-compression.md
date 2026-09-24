@@ -14,7 +14,7 @@ Date: 2026-09-24. Status: repository implementation in progress; no production c
 
 1. JPEG photo preparation: Standard quality (target long edge up to 2048 px, JPEG quality 0.82) / Original selected bytes. Preserve smaller files when re-encoding would increase size. No silent fallback after a preparation error.
 2. Voice recording: [Step96](96-voice-recording-compression.md) implements a mono preference and 32 kbit/s target with platform fallback; actual bitrate may differ by browser. Measure intelligibility, playback and size on Safari/iPhone before enabling.
-3. Video: design native iOS transcoding plus a tested web fallback; offer Standard / Original, bound duration/input/output size and memory, preserve orientation/audio, and support cancellation. Do not claim this is already implemented.
+3. Video: native iOS Standard / Original preparation is under review in [Step97](97-native-video-preparation.md), with duration/input/output bounds, preserved source orientation/audio-track checks and cancellation. Web/PWA retains original-file sending. Device quality and playback acceptance remain open.
 4. Storage choice: estimate 100 GB and 1 TB with normal/high download rates, requests, archive retrieval, minimum retention and independent backups. Test access from users' mobile networks.
 5. Provider adapter/configuration and copy/verify/read-switch rollback procedure; then authorized production migration.
 6. Quotas and operator alerts; optional age-based tiering only if it saves money and meets chat retrieval requirements.

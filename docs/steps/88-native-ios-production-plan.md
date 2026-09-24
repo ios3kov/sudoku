@@ -40,6 +40,15 @@ This is a product hardening program, not a rewrite. Native Android is explicitly
 
 ## Architecture target
 
+### Mobile orientation contract
+
+- The entire application uses portrait orientation: Sudoku, authentication, messenger, settings, attachment selection and media preparation.
+- Landscape is permitted only while playing a landscape video in the video player. Leaving playback must restore portrait orientation before returning to the application.
+- Portrait videos remain supported; this rule controls the application interface, not the orientation of files users may send.
+- Text can grow through iPhone accessibility settings while the interface remains within the mobile viewport; whole-page zoom is not the text-size mechanism.
+- The native host currently declares portrait only in `Info.plist`. The landscape video-player exception is a future implementation requirement, not completed acceptance.
+- Physical-iPhone acceptance must cover device rotation on ordinary screens, entering/exiting landscape video playback, background/foreground during playback, and large text without horizontal page overflow. These checks remain open.
+
 ```mermaid
 flowchart TB
     WEB[Web / PWA\nNext.js]
