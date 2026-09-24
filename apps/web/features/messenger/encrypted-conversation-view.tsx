@@ -588,16 +588,14 @@ export function EncryptedConversationView({
                         Retry
                       </button>
                     ) : null}
-                    {message.messageType === "text" ? (
-                      <button
-                        type="button"
-                        aria-label="Remove queued message"
-                        disabled={retrying}
-                        onClick={() => void removeQueuedMessage(message.id)}
-                      >
-                        Remove
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      aria-label="Remove queued message"
+                      disabled={retrying}
+                      onClick={() => void removeQueuedMessage(message.id)}
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
               </div>
