@@ -12,7 +12,7 @@ Reviewed primary sources before implementation:
 
 - [Apple, Get started with Dynamic Type (WWDC24)](https://developer.apple.com/videos/play/wwdc2024/10074/): use system-scaled text, allow wrapping, adapt layouts and inspect the largest accessibility categories.
 - [WebKit, Using the System Font in Web Content](https://webkit.org/blog/3709/using-the-system-font-in-web-content/): choosing the system font family alone does not opt fixed pixel sizes into Dynamic Type. The native host therefore supplies a UIKit body-text scale explicitly.
-- [WAI, Resize Text](https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html): retain content and functionality when enlarging text to 200%.
+- [WAI, Resize Text](https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html): retain content and functionality when enlarging text to 200%; this pass implements text reflow, while page zoom remains restricted by the product requirement.
 - [WAI, Modal Dialog Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/): keep focus inside the dialog, restore it on dismissal, and prefer the least destructive initial action for irreversible operations.
 - [Element, accessible by design](https://blog.element.dev/element-is-accessible-by-design/): check screen-reader reading order, image descriptions and keyboard behavior as explicit product work.
 
@@ -20,7 +20,7 @@ These are behavioral references, not source-code imports. No Signal/Element GPL/
 
 ## Implementation
 
-- Remove the web viewport's zoom prohibition.
+- Preserve the fixed mobile viewport and its page-zoom restriction, per the product requirement. Dynamic Type enlarges text inside the viewport; it does not scale the entire page.
 - Use relative text sizes in messenger styles, preserving the default scale while allowing browser preferences and the native text scale to enlarge text.
 - The iOS host derives the root percentage from UIKit body `UIFontMetrics`. It updates the trusted main page after navigation and on content-size changes; no inbound message handler or content access is introduced.
 - Let conversation headers/actions wrap. Keep long message words and receipt descriptions inside bubbles. Preserve 44-point/CSS-pixel control targets and scrollable text input.
@@ -47,7 +47,7 @@ The bundled conversation was also checked through the desktop app browser at 320
 
 Local Playwright browser execution on the operator Mac is constrained by the Codex sandbox (Chromium MachPortRendezvous permission denied). GitHub CI is the browser execution gate. Local typecheck also requires the generated OpenMLS package; do not replace it with a stub to claim a passing production build.
 
-Initial CI on `fbbb671ea076bca6132c7a136f9bc2a8ca407669` passed all five new accessibility tests, 66 browser tests overall, web build/typecheck and the native iOS workflow. One legacy UI assertion still required disabled zoom; it now verifies that zoom is unrestricted. The updated head requires a fresh full CI run.
+Initial CI on `fbbb671ea076bca6132c7a136f9bc2a8ca407669` passed all five new accessibility tests, 66 browser tests overall, web build/typecheck and the native iOS workflow. The sole failure was the existing fixed-viewport assertion. Following product clarification, the viewport zoom restriction and its original regression assertion are preserved; only text scales. The updated head requires a fresh full CI run.
 
 ## Manual acceptance — remains open
 
