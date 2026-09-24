@@ -527,6 +527,7 @@ export function ConversationView({
         items={timelineMessages}
         visibleCount={visibleCount}
         currentUserId={user.id}
+        knownReadSequence={conversation.last_read_sequence}
         onReadLatest={markVisibleRead}
         childrenBefore={<>
           {loading ? <p className="muted center">Loading…</p> : null}
