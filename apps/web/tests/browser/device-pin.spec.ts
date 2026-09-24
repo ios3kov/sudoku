@@ -124,6 +124,66 @@ for (const role of ["member", "admin"]) {
   });
 }
 
+test("native Face ID quick unlock uses the stored device PIN without persisting it in web storage", async ({ page }) => {
+  test.setTimeout(240_000);
+  let storedPin: string | null = null;
+
+  await page.exposeFunction("__mockBiometricStatus", async () => ({
+    available: true,
+    enrolled: storedPin !== null,
+    type: "faceID",
+  }));
+  await page.exposeFunction("__mockBiometricEnroll", async (pin: string) => {
+    storedPin = pin;
+    return { available: true, enrolled: true, type: "faceID" };
+  });
+  await page.exposeFunction("__mockBiometricClear", async () => {
+    storedPin = null;
+    return { available: true, enrolled: false, type: "faceID" };
+  });
+  await page.exposeFunction("__mockBiometricUnlock", async () => ({ pin: storedPin ?? "" }));
+
+  await page.addInitScript(() => {
+    const mock = window as unknown as {
+      __mockBiometricStatus: () => Promise<unknown>;
+      __mockBiometricEnroll: (pin: string) => Promise<unknown>;
+      __mockBiometricClear: () => Promise<unknown>;
+      __mockBiometricUnlock: () => Promise<unknown>;
+      SudokuNativeBiometric?: unknown;
+    };
+    Object.defineProperty(window, "SudokuNativeBiometric", {
+      configurable: true,
+      value: {
+        status: () => mock.__mockBiometricStatus(),
+        enroll: (pin: string) => mock.__mockBiometricEnroll(pin),
+        clear: () => mock.__mockBiometricClear(),
+        unlock: () => mock.__mockBiometricUnlock(),
+      },
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await passwordLogin(page, testPhone(1));
+  await page.getByRole("button", { name: "Set PIN", exact: true }).click();
+  await page.getByLabel("Four-digit PIN", { exact: true }).fill("2468");
+  await page.getByLabel("Confirm PIN", { exact: true }).fill("2468");
+  await page.getByLabel("Use Face ID for quick unlock", { exact: true }).check();
+  await page.getByRole("button", { name: "Save PIN", exact: true }).click();
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+  expect(storedPin).toBe("2468");
+
+  const storage = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } }));
+  expect(JSON.stringify(storage)).not.toContain("2468");
+
+  await page.reload();
+  await revealCurrentPage(page);
+  await expect(page.getByRole("button", { name: "Unlock with Face ID", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Unlock with Face ID", exact: true }).click();
+
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+  await expect(page.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
+});
+
 test("Not now enters the app without enabling a device PIN", async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 390, height: 844 });
