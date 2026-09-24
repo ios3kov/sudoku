@@ -13,6 +13,7 @@ import {
 import { messengerApi } from "./api";
 import { EncryptedAttachment, isEncryptedAttachmentMetadata } from "./encrypted-attachment";
 import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
+import type { RealtimeClient } from "./realtime";
 import type { Conversation, CurrentUser, RealtimeEvent, VoiceAttachmentPresentation } from "./types";
 import { uploadEncryptedAsset } from "./uploads";
 import { NATIVE_MEDIA_READY_EVENT, nativeMediaAvailable, pickNativeAttachment } from "./native-media-access";
@@ -20,6 +21,7 @@ import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
 import { ConversationHeader } from "./conversation-header";
 import { useVoiceRecorder } from "./use-voice-recorder";
+import { useTypingPresence } from "./use-typing-presence";
 import { analyzeVoiceBlob } from "./voice-analysis";
 import { VoiceDraftPreview } from "./voice-waveform";
 import { useAutosizeTextarea } from "./use-autosize-textarea";
@@ -51,6 +53,7 @@ export function EncryptedConversationView({
   conversation,
   user,
   adapter,
+  realtime,
   realtimeEvent,
   reconnectTick,
   onBack,
@@ -62,6 +65,7 @@ export function EncryptedConversationView({
   conversation: Conversation;
   user: CurrentUser;
   adapter: OpenMlsProtocolAdapter;
+  realtime: RealtimeClient | null;
   realtimeEvent: RealtimeEvent | null;
   reconnectTick: number;
   onBack: () => void;
@@ -114,6 +118,13 @@ export function EncryptedConversationView({
   const messageById = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
   const actionMessage = actionMessageId ? messageById.get(actionMessageId) : undefined;
   const peerReads = conversation.members.filter((member) => member.id !== user.id).map((member) => member.last_read_sequence);
+  const typing = useTypingPresence({
+    conversationId: conversation.id,
+    currentUserId: user.id,
+    members: conversation.members,
+    realtime,
+    realtimeEvent,
+  });
   useAutosizeTextarea(textareaRef, body);
 
   const refreshProjection = useCallback((): Promise<void> => {
@@ -322,6 +333,7 @@ export function EncryptedConversationView({
     setBusy(true);
     setError(null);
     timelineRef.current?.toLatest();
+    typing.stopLocalTyping();
     const clientId = crypto.randomUUID();
     if (!editing) {
       setSendingPreview({ id: clientId, body: text, phase: "encrypting" });
@@ -643,6 +655,7 @@ export function EncryptedConversationView({
 
   function beginEdit(message: ProjectedEncryptedMessage) {
     if (syncBlocked || voiceDraftPreparing || voiceDraft || message.senderId !== user.id || message.deleted) return;
+    typing.stopLocalTyping();
     setEditingId(message.id);
     setReplyingToId(null);
     setEditBody(message.body ?? "");
@@ -673,7 +686,7 @@ export function EncryptedConversationView({
       <ConversationHeader
         title={conversationTitle(conversation, user.id)}
         subtitle="End-to-end encrypted"
-        onBack={onBack}
+        onBack={() => { typing.stopLocalTyping(); onBack(); }}
         actions={
           <>
             {conversation.type === "group" ? (
@@ -684,7 +697,7 @@ export function EncryptedConversationView({
             <button type="button" onClick={() => setShowSecurity((value) => !value)}>
               Verify
             </button>
-            <button type="button" onClick={onHide}>Hide</button>
+            <button type="button" onClick={() => { typing.stopLocalTyping(); onHide(); }}>Hide</button>
           </>
         }
       />
@@ -800,6 +813,13 @@ export function EncryptedConversationView({
               </div>
             );
           })}
+          <div
+            className={`typing-indicator ${typing.typingLabel ? "is-active" : ""}`}
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {typing.typingLabel ?? "\u00a0"}
+          </div>
           {sendingPreview ? (
             <div className="message-row own">
               <div className="message-bubble pending">
@@ -874,7 +894,11 @@ export function EncryptedConversationView({
                   ref={textareaRef}
                   aria-label="Message"
                   value={body}
-                  onChange={(event) => setBody(event.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setBody(next);
+                    typing.updateLocalTyping(next, Boolean(editing));
+                  }}
                   rows={1}
                   maxLength={20000}
                   placeholder={recording ? `Recording ${formatDuration(recordSeconds)}` : editing ? "Edit encrypted message" : "Message"}
