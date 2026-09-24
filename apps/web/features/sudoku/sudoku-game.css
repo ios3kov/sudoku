@@ -1,26 +1,26 @@
 /* The game owns a fixed viewport; only its content pane may scroll at large text sizes. */
 .sudoku-game.page { height:100dvh; min-height:0; padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); overflow:hidden; }
 .sudoku-game .sudoku-shell { height:100%; min-height:0; max-width:500px; display:flex; flex-direction:column; gap:8px; }
-.sudoku-game .sudoku-topbar { flex:none; min-height:44px; }
-.sudoku-game .sudoku-brand h1 { font-size:1.5rem; }
-.sudoku-game .sudoku-brand span { font-size:.75rem; white-space:normal; }
+.sudoku-game .sudoku-topbar { flex:none; min-height:44px; flex-wrap:wrap; align-items:flex-start; }
+.sudoku-game .sudoku-brand h1 { font-size:clamp(24px,1.5rem,40px); }
+.sudoku-game .sudoku-brand span { font-size:clamp(12px,.75rem,20px); white-space:normal; }
 .sudoku-game .sudoku-logo { width:36px; height:36px; }
 .sudoku-game .game-content { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-width:none; flex:1; display:flex; flex-direction:column; gap:8px; }
 .sudoku-game .game-content::-webkit-scrollbar { display:none; }
 .sudoku-game .sudoku-stats { flex:none; }
-.sudoku-game .sudoku-stats span { font-size:.625rem; }
-.sudoku-game .sudoku-stats strong { font-size:.875rem; }
+.sudoku-game .sudoku-stats span { font-size:clamp(10px,.625rem,16px); overflow-wrap:anywhere; }
+.sudoku-game .sudoku-stats strong { font-size:clamp(15px,.875rem,22px); }
 .sudoku-game .sudoku-stats>div { padding:5px; }
-.sudoku-game .status { font-size:.75rem; flex:none; }
+.sudoku-game .status { font-size:clamp(12px,.75rem,18px); flex:none; }
 .sudoku-game .board { flex:none; align-self:center; width:min(100%,calc(100dvh - 330px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); min-width:min(240px,100%); box-shadow:none; }
-.sudoku-game .board .cell { border-bottom:0; box-shadow:none; font-size:clamp(1rem,4.8vw,1.6rem); }
+.sudoku-game .board .cell { border-bottom:0; box-shadow:none; font-size:clamp(17px,4.8vw,24px); line-height:1; overflow:hidden; }
 .sudoku-game .board .cell.box-right { border-right:2px solid var(--text); }
 .sudoku-game .board .cell.box-bottom { border-bottom:2px solid var(--text); }
 .sudoku-game .board .cell.selected { box-shadow:inset 0 0 0 2px var(--accent); }
 .sudoku-game .controls { flex:none; gap:6px; }
-.sudoku-game .digit { font-size:1.1rem; min-height:44px; }
+.sudoku-game .digit { font-size:clamp(18px,1.1rem,24px); min-height:44px; }
 .sudoku-game .actions { gap:5px; }
-.sudoku-game .action { padding:5px; font-size:.8rem; min-height:44px; overflow-wrap:anywhere; }
+.sudoku-game .action { padding:5px; font-size:clamp(13px,.8rem,20px); min-height:44px; overflow-wrap:anywhere; }
 .sudoku-menu { display:grid; gap:18px; padding:12px 0; }
 .sudoku-menu h2 { margin:0; font-size:1.4rem; }
 .sudoku-menu p { margin:0; line-height:1.5; color:var(--muted); font-size:.9rem; }
@@ -39,5 +39,5 @@
 @media(max-height:650px) { .sudoku-game .sudoku-logo{display:none} .sudoku-game .sudoku-shell,.sudoku-game .game-content{gap:5px} .sudoku-game .board{width:min(100%,calc(100dvh - 315px - env(safe-area-inset-top) - env(safe-area-inset-bottom)))} }
 @media(prefers-reduced-motion:reduce) { .sudoku-game * { scroll-behavior:auto; } }
 
-.sudoku-header-actions { display:flex; align-items:center; gap:4px; flex:none; font-size:.85rem; }
+.sudoku-header-actions { display:flex; align-items:center; gap:4px; flex:none; margin-left:auto; font-size:clamp(14px,.85rem,22px); }
 .sudoku-game .sudoku-identity { display:block; line-height:1.35; color:var(--muted); }

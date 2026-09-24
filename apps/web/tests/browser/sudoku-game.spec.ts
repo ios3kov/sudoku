@@ -1,5 +1,47 @@
 import { expect, test } from "@playwright/test";
 
+test("maximum Dynamic Type keeps the game inside a narrow phone viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 693 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "New game", exact: true }).click();
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--sudoku-text-size", "300%");
+    window.dispatchEvent(new Event("sudoku:text-size-changed"));
+  });
+
+  await expect(page.getByRole("grid", { name: "Sudoku board" })).toBeVisible();
+  const geometry = await page.evaluate(() => {
+    const content = document.querySelector<HTMLElement>(".game-content")!;
+    const board = document.querySelector<HTMLElement>(".board")!;
+    const cells = [...document.querySelectorAll<HTMLElement>(".cell")];
+    const stats = [...document.querySelectorAll<HTMLElement>(".sudoku-stats > div")];
+    const labels = [...document.querySelectorAll<HTMLElement>(".sudoku-stats span")];
+    return {
+      documentOverflow: document.documentElement.scrollWidth - innerWidth,
+      contentScrollable: content.scrollHeight > content.clientHeight,
+      boardWidth: board.getBoundingClientRect().width,
+      cellsContained: cells.every(cell => cell.scrollWidth <= cell.clientWidth + 1 && cell.scrollHeight <= cell.clientHeight + 1),
+      labelsContained: labels.every((label, index) => label.scrollWidth <= stats[index]!.clientWidth + 1),
+    };
+  });
+  expect(geometry.documentOverflow).toBeLessThanOrEqual(0);
+  expect(geometry.contentScrollable).toBe(true);
+  expect(geometry.boardWidth).toBeLessThanOrEqual(300);
+  expect(geometry.cellsContained).toBe(true);
+  expect(geometry.labelsContained).toBe(true);
+
+  for (const name of ["Pause", "Menu", "Notes", "Hint (0 used)"]) {
+    const control = page.getByRole("button", { name, exact: true });
+    await control.scrollIntoViewIfNeeded();
+    await expect(control).toBeVisible();
+    const bounds = await control.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(321);
+    expect(bounds!.height).toBeGreaterThanOrEqual(44);
+  }
+});
+
 test("full game menu supports small boards, notes, history and pause", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "4×4", exact: true }).click();

@@ -106,3 +106,5 @@ PR #72 is merged as `22e94a87bfbc3b1b40b54f381c263db412b38537`. PR #73 is merged
 [Step96](steps/96-voice-recording-compression.md) is the voice-encoding follow-up: mono preference and a 32 kbit/s recording target, with platform fallback and real-encoder regression coverage. Physical-iPhone speech quality remains unverified.
 
 2026-09-24 follow-up: PR #80 (native layout) and #81 (offline Sudoku engine) merged after exact-head CI passed. The operator confirmed the lower strip is gone after the final reveal-shadow removal included in #82. Full game UI/startup PR #82 awaits its final CI; broader physical-device and accessibility acceptance remain open.
+
+2026-09-24 Dynamic Type follow-up: the operator's maximum iOS text-size screenshot exposed clipping and overflow in the new Sudoku game. Step101 bounds typography inside fixed game elements, preserves internal scrolling and adds a 300% narrow-phone regression. Local lint/typecheck and in-app-browser geometry/visual checks pass; corrected physical-device confirmation, exact-head CI, VoiceOver and messenger accessibility remain open.
