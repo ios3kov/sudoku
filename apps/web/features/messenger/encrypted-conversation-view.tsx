@@ -35,6 +35,18 @@ import {
 
 const INITIAL_VISIBLE_MESSAGES = 120;
 
+function sendFailureForError(error: unknown): "transient" | "permanent" {
+  if (
+    error
+    && typeof error === "object"
+    && "status" in error
+    && typeof (error as { status?: unknown }).status === "number"
+  ) {
+    return sendFailureKind((error as { status: number }).status);
+  }
+  return sendFailureKind(null);
+}
+
 export function EncryptedConversationView({
   conversation,
   user,
@@ -130,6 +142,98 @@ export function EncryptedConversationView({
     });
   }, [adapter, conversation.id, queueRefresh]);
 
+  const scheduleAutoRetry = useCallback((clientId: string) => {
+    if (
+      !navigator.onLine
+      || failedQueuedIds.includes(clientId)
+      || retryingQueuedId !== null
+      || retryTimerRef.current !== null
+    ) {
+      return;
+    }
+
+    const attempt = (retryAttemptsRef.current.get(clientId) ?? 0) + 1;
+    if (attempt > MAX_AUTO_SEND_RETRY_ATTEMPTS) {
+      retryAttemptsRef.current.delete(clientId);
+      setAutoRetryQueuedId(null);
+      setFailedQueuedIds((current) => [...new Set([...current, clientId])]);
+      return;
+    }
+
+    retryAttemptsRef.current.set(clientId, attempt);
+    setAutoRetryQueuedId(clientId);
+    const timer = window.setTimeout(() => {
+      retryTimerRef.current = null;
+      setAutoRetryQueuedId((current) => current === clientId ? null : current);
+      setRetryingQueuedId(clientId);
+
+      void adapter.retryPendingApplicationSend(clientId)
+        .then(async () => {
+          retryAttemptsRef.current.delete(clientId);
+          setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+          await refreshProjection();
+        })
+        .catch((retryError) => {
+          const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+          setQueuedMessages(pendingMessages);
+          setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+
+          const next = pendingMessages[0];
+          if (!next) {
+            retryAttemptsRef.current.delete(clientId);
+            return;
+          }
+
+          if (sendFailureForError(retryError) === "permanent") {
+            retryAttemptsRef.current.delete(clientId);
+            retryAttemptsRef.current.delete(next.id);
+            setFailedQueuedIds((current) => [...new Set([...current, next.id])]);
+            return;
+          }
+
+          if (next.id !== clientId) {
+            retryAttemptsRef.current.delete(clientId);
+          }
+          setRetryTick((value) => value + 1);
+        })
+        .finally(() => {
+          setRetryingQueuedId((current) => current === clientId ? null : current);
+        });
+    }, sendRetryDelayMs(attempt));
+
+    retryTimerRef.current = { clientId, timer };
+  }, [adapter, conversation.id, failedQueuedIds, refreshProjection, retryingQueuedId]);
+
+  useEffect(() => {
+    const first = queuedMessages[0];
+    if (
+      !first
+      || !navigator.onLine
+      || failedQueuedIds.includes(first.id)
+      || retryingQueuedId !== null
+      || autoRetryQueuedId !== null
+      || retryTimerRef.current !== null
+    ) {
+      return;
+    }
+    scheduleAutoRetry(first.id);
+  }, [
+    autoRetryQueuedId,
+    failedQueuedIds,
+    queuedMessages,
+    retryTick,
+    retryingQueuedId,
+    scheduleAutoRetry,
+  ]);
+
+  useEffect(() => () => {
+    if (retryTimerRef.current) {
+      window.clearTimeout(retryTimerRef.current.timer);
+      retryTimerRef.current = null;
+    }
+    retryAttemptsRef.current.clear();
+  }, []);
+
   // MessengerShell keys this view by conversation identity. Updates within
   // that conversation should sync history, never reset an active draft/edit.
   useEffect(() => {
@@ -166,12 +270,12 @@ export function EncryptedConversationView({
   }, []);
 
   useEffect(() => {
-    if (!syncBlocked || loading) return;
+    if (!syncBlocked || loading || queuedMessages.length > 0) return;
     const timer = window.setInterval(() => {
       if (navigator.onLine) void refreshProjection();
     }, 2_000);
     return () => window.clearInterval(timer);
-  }, [loading, refreshProjection, syncBlocked]);
+  }, [loading, queuedMessages.length, refreshProjection, syncBlocked]);
 
 
   const replyingTo = useMemo(
