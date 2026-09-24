@@ -73,7 +73,13 @@ const realtime = {
 } as unknown as RealtimeClient;
 const adapter = {
   syncTransport: async () => { if (protocol.blocked) throw new Error("transport unavailable"); },
-  projectConversation: () => ({messages: protocol.messages, rejectedEventIds: []}),
+  projectConversation: (): ReturnType<OpenMlsProtocolAdapter["projectConversation"]> => ({
+    // Match the real projector: every sync returns a fresh immutable snapshot.
+    messages: [...protocol.messages],
+    appliedEventIds: protocol.messages.map(message => message.id),
+    rejectedEventIds: [],
+    latestSequence: protocol.messages.reduce((latest, message) => Math.max(latest, message.sequence), 0),
+  }),
   pendingApplicationCount: () => 0,
   pendingApplicationMessages: () => [],
   sendMessageDurably: async (payload: unknown) => {

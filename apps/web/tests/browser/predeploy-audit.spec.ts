@@ -14,7 +14,11 @@ test.beforeAll(async () => {
 });
 test.beforeEach(async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
-  await page.setContent('<div id="root"></div>');
+  // A trustworthy local origin supplies Web Crypto, just like the HTTPS app.
+  // Fulfill the document locally; this fixture does not depend on a web server.
+  const fixtureURL = "http://127.0.0.1:3000/__audit_fixture";
+  await page.route(fixtureURL, route => route.fulfill({contentType: "text/html", body: '<div id="root"></div>'}));
+  await page.goto(fixtureURL);
   await page.addStyleTag({content: styles});
   await page.addScriptTag({content: bundle});
 });
