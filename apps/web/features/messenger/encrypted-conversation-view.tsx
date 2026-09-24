@@ -36,13 +36,11 @@ import {
 const INITIAL_VISIBLE_MESSAGES = 120;
 
 function sendFailureForError(error: unknown): "transient" | "permanent" {
-  if (
-    error
-    && typeof error === "object"
-    && "status" in error
-    && typeof (error as { status?: unknown }).status === "number"
-  ) {
-    return sendFailureKind((error as { status: number }).status);
+  if (error && typeof error === "object" && "status" in error) {
+    const status = (error as { status?: unknown }).status;
+    if (typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599) {
+      return sendFailureKind(status);
+    }
   }
   return sendFailureKind(null);
 }
