@@ -29,6 +29,23 @@ final class SudokuViewController: UIViewController {
                 forMainFrameOnly: true
             )
         )
+        // Compatibility with the currently hosted web release. New web styles
+        // retain these rules; this can be removed after their production release.
+        controller.addUserScript(WKUserScript(
+            source: """
+            if (location.protocol === "https:" && location.hostname === "sudoku.moscow") {
+              const style = document.createElement("style");
+              style.id = "sudoku-native-canvas";
+              style.textContent = `
+                .sudoku-reveal-screen:not(.is-dragging):not(.is-returning):not(.is-unlocking)::after { box-shadow:none !important; }
+                .page,.shell { padding-bottom:max(10px,env(safe-area-inset-bottom)) !important; }
+              `;
+              document.head.appendChild(style);
+            }
+            """,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -89,15 +106,15 @@ final class SudokuViewController: UIViewController {
         view.addSubview(webView)
         view.addSubview(privacyCover)
 
-        // Keep web controls outside the notch/status bar and home indicator even
-        // when the hosted web release does not apply CSS safe-area insets.
-        // The root background and privacy cover still fill the entire window.
+        // Keep controls below the notch. Extend the web canvas under the home
+        // indicator so each screen paints its own background without a seam.
+        // Bottom control padding is supplied by CSS safe-area insets.
         let contentArea = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: contentArea.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: contentArea.trailingAnchor),
             webView.topAnchor.constraint(equalTo: contentArea.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: contentArea.bottomAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             privacyCover.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             privacyCover.trailingAnchor.constraint(equalTo: view.trailingAnchor),

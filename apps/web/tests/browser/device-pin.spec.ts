@@ -161,7 +161,7 @@ test("login navigation, invite submit and hide controls work", async ({ page }) 
   await page.getByLabel("Phone number", { exact: true }).fill("+70000000008");
   await page.getByLabel("Password", { exact: true }).fill("button audit password");
   await page.getByRole("button", { name: "Join", exact: true }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.locator(".form-error[role=alert]")).toBeVisible();
 
   await page.getByRole("button", { name: "I already have an account", exact: true }).click();
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
