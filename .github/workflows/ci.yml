@@ -99,6 +99,8 @@ jobs:
         run: npm run test:domain
       - name: Build domain declarations
         run: npm --workspace @sudoku/domain run build
+      - name: Sudoku save migration regression
+        run: node --experimental-strip-types --test scripts/sudoku-saved-game.test.mjs
       - name: Messenger refresh queue regression
         run: node --experimental-strip-types --test scripts/refresh-queue.test.mjs
       - name: Pre-deployment lifecycle and storage regressions

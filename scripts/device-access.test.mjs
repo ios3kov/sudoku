@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { acceptUnlock, accessEpoch, currentUnlockToken, forgetUnlock, lockDevice, privateFetch, rememberEmail, rememberPhone, savedEmail, savedPhone, requireDevicePin, DEVICE_LOCK_EVENT, UNLOCK_HEADER } from '../apps/web/features/messenger/device-access.ts';
+import { readSudokuStartupPreference, rememberMessengerEntry, SUDOKU_STARTUP_PREFERENCE_KEY } from '../apps/web/features/sudoku/startup-preference.ts';
 
 const originalFetch = globalThis.fetch;
 const ticket = 'a'.repeat(43);
@@ -13,6 +14,29 @@ beforeEach(() => {
   globalThis.fetch = async (input, init) => { calls.push([input, init]); return new Response('{}'); };
 });
 afterEach(() => { globalThis.fetch = originalFetch; delete globalThis.window; delete globalThis.localStorage; forgetUnlock(); });
+
+test('startup preference defaults to menu, persists only presentation, and survives device lock', () => {
+  assert.equal(readSudokuStartupPreference(), 'menu');
+  for (const value of ['true', '1', '{}', 'quick-play-corrupt']) {
+    localStorage.setItem(SUDOKU_STARTUP_PREFERENCE_KEY, value);
+    assert.equal(readSudokuStartupPreference(), 'menu');
+  }
+  rememberMessengerEntry();
+  assert.equal(readSudokuStartupPreference(), 'quick-play');
+  assert.equal(currentUnlockToken(), null);
+  lockDevice();
+  assert.equal(readSudokuStartupPreference(), 'quick-play');
+  assert.equal(currentUnlockToken(), null);
+});
+
+test('startup preference tolerates unavailable and blocked browser storage', () => {
+  delete globalThis.localStorage;
+  assert.equal(readSudokuStartupPreference(), 'menu');
+  assert.doesNotThrow(rememberMessengerEntry);
+  globalThis.localStorage = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } };
+  assert.equal(readSudokuStartupPreference(), 'menu');
+  assert.doesNotThrow(rememberMessengerEntry);
+});
 
 test('only a valid current-generation ticket is accepted; PIN is never accepted as a ticket', () => {
   assert.equal(acceptUnlock('0123', accessEpoch()), false);

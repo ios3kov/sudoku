@@ -1,293 +1,299 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  colOf,
-  conflictsFor,
-  givensMask,
-  isSolved,
-  rowOf,
-  type CellValue,
-} from "@sudoku/domain";
-import { PUZZLE, SOLUTION } from "./puzzle";
+import { useEffect, useState } from "react";
+import { applySudokuAction, createSudokuGame, generateGamePuzzle, isSudokuGameComplete, sudokuBoxDimensions, type SudokuAction, type SudokuDifficulty, type SudokuGame, type SudokuSize } from "@sudoku/domain";
 import { useSecretUnlock } from "../secret-unlock/use-secret-unlock";
-
-const STORAGE_KEY = "sudoku:level-1:v2";
-
-const PUZZLE_NUMBER = (() => {
-  let hash = 2166136261;
-  PUZZLE.forEach((value, index) => {
-    hash ^= (value + 1) * (index + 17);
-    hash = Math.imul(hash, 16777619);
-  });
-  return 1000 + ((hash >>> 0) % 9000);
-})();
-
-type NotesMap = Record<number, number[]>;
-
-interface PersistedGame {
-  grid: CellValue[];
-  notes: NotesMap;
-  mistakes?: number;
-  startedAt?: number | null;
-  completedAt?: number | null;
+import { readSudokuStartupPreference } from "./startup-preference";
+import { SUDOKU_GAME_STORAGE_KEY, readSavedSudokuGame } from "./saved-game";
+import { PUZZLE, SOLUTION } from "./puzzle";
+interface Session {
+  game: SudokuGame | null;
+  screen: "menu" | "game";
+  autosave: boolean;
 }
-
-function formatElapsed(seconds: number): string {
-  const safe = Math.max(0, seconds);
-  const minutes = Math.floor(safe / 60);
-  const secs = safe % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+// Survives private-surface mounting and privacy covers, but deliberately not a cold reload.
+let pageSession: Session | null = null;
+function retainSession(next: Session) {
+  pageSession = next;
 }
-
-export function SudokuBoard({ onSecretUnlock }: { onSecretUnlock: () => void }) {
-  const givens = useMemo(() => givensMask(PUZZLE), []);
-  const [grid, setGrid] = useState<CellValue[]>([...PUZZLE]);
-  const [notes, setNotes] = useState<NotesMap>({});
+function readSaved(): SudokuGame | null {
+  try {
+    return readSavedSudokuGame(localStorage, {givens: PUZZLE, solution: SOLUTION});
+  } catch {
+    return null;
+  }
+}
+function saveGame(game: SudokuGame): boolean {
+  try {
+    localStorage.setItem(SUDOKU_GAME_STORAGE_KEY, JSON.stringify(game));
+    return true;
+  } catch {
+    return false;
+  }
+}
+function formatElapsed(seconds: number) {
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+export function SudokuBoard({
+  onSecretUnlock
+}: {
+  onSecretUnlock: () => void;
+}) {
+  const [session, setSession] = useState<Session | null>(null);
+  const [saved, setSaved] = useState<SudokuGame | null>(null);
+  const [size, setSize] = useState<SudokuSize>(9);
+  const [difficulty, setDifficulty] = useState<SudokuDifficulty>("easy");
   const [selected, setSelected] = useState<number | null>(null);
   const [notesMode, setNotesMode] = useState(false);
-  const [mistakes, setMistakes] = useState(0);
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [completedAt, setCompletedAt] = useState<number | null>(null);
-  const [clockNow, setClockNow] = useState(0);
-  const [hydrated, setHydrated] = useState(false);
+  const [notice, setNotice] = useState("");
   const {
     setScreenElement,
     onFivePointerDown,
     onFivePointerMove,
     onFivePointerUp,
     consumeFiveClick,
-    cancel: cancelSecretUnlock,
+    cancel
   } = useSecretUnlock({
-    onUnlock: onSecretUnlock,
+    onUnlock: onSecretUnlock
   });
-
   useEffect(() => {
-    const now = Date.now();
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as PersistedGame;
-        if (Array.isArray(parsed.grid) && parsed.grid.length === 81) {
-          // Hydrate browser-only storage after SSR; initial server/client markup must match.
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setGrid(parsed.grid as CellValue[]);
-          setNotes(parsed.notes ?? {});
-          setMistakes(Number.isFinite(parsed.mistakes) ? Math.max(0, Number(parsed.mistakes)) : 0);
-          setStartedAt(parsed.startedAt && parsed.startedAt > 0 ? parsed.startedAt : now);
-          setCompletedAt(
-            isSolved(parsed.grid, SOLUTION)
-              ? (parsed.completedAt && parsed.completedAt > 0 ? parsed.completedAt : now)
-              : null,
-          );
-        } else {
-          setStartedAt(now);
-        }
-      } else {
-        setStartedAt(now);
-      }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-      setStartedAt(now);
-    } finally {
-      setClockNow(now);
-      setHydrated(true);
-    }
+    const stored = readSaved();
+    const initial = pageSession ?? (readSudokuStartupPreference() === "quick-play" ? {
+      game: createSudokuGame(generateGamePuzzle(9, "easy")),
+      screen: "game" as const,
+      autosave: false
+    } : {
+      game: null,
+      screen: "menu" as const,
+      autosave: false
+    });
+    retainSession(initial);
+    // Browser-only startup and saved game hydration must follow the identical SSR placeholder.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSession(initial);
+    setSaved(stored);
   }, []);
-
-  const solved = isSolved(grid, SOLUTION);
-
-  useEffect(() => {
-    if (!hydrated || !startedAt || solved) return;
-    const tick = () => setClockNow(Date.now());
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [hydrated, solved, startedAt]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        grid,
-        notes,
-        mistakes,
-        startedAt,
-        completedAt,
-      } satisfies PersistedGame),
-    );
-  }, [completedAt, grid, hydrated, mistakes, notes, startedAt]);
-
-  const selectedValue = selected === null ? 0 : grid[selected] ?? 0;
-  const playableCells = givens.reduce((total, given) => total + (given ? 0 : 1), 0);
-  const completedPlayableCells = grid.reduce<number>(
-    (total, value, index) => total + (!givens[index] && value === SOLUTION[index] ? 1 : 0),
-    0,
-  );
-  const elapsedSeconds =
-    startedAt === null
-      ? 0
-      : Math.floor(((completedAt ?? (clockNow || startedAt)) - startedAt) / 1000);
-
-  function selectCell(index: number) {
-    setSelected(index);
+  function update(next: Session) {
+    retainSession(next);
+    setSession(next);
+    if (next.autosave && next.game) {
+      if (saveGame(next.game)) setSaved(next.game);else setNotice("Storage is unavailable. Keep this window open to retain your game.");
+    }
   }
-
-  function enterDigit(value: CellValue, now: number) {
-    if (selected === null || givens[selected] || solved) return;
-
-    if (notesMode) {
-      if (grid[selected] !== 0) return;
-      setNotes((current) => {
-        const existing = new Set(current[selected] ?? []);
-        if (existing.has(value)) existing.delete(value);
-        else existing.add(value);
-        return { ...current, [selected]: [...existing].sort((a, b) => a - b) };
-      });
-      return;
-    }
-
-    if (value !== SOLUTION[selected] && grid[selected] !== value) {
-      setMistakes((current) => current + 1);
-    }
-    // A real Sudoku keypad must always enter the requested digit into an
-    // editable cell. Conflicts and wrong answers are shown as errors instead
-    // of making the keypad appear unresponsive.
-    const next = [...grid];
-    next[selected] = value;
-    setGrid(next);
-    if (isSolved(next, SOLUTION)) {
-      setCompletedAt(now);
-      setClockNow(now);
-    }
-    setNotes((current) => {
-      const copy = { ...current };
-      delete copy[selected];
-      return copy;
+  function act(action: SudokuAction) {
+    if (!session?.game) return;
+    update({
+      ...session,
+      game: applySudokuAction(session.game, action)
     });
   }
-
-  function erase() {
-    if (selected === null || givens[selected] || solved) return;
-    const next = [...grid];
-    next[selected] = 0;
-    setGrid(next);
-    setNotes((current) => {
-      const copy = { ...current };
-      delete copy[selected];
-      return copy;
-    });
-  }
-
-  function reset() {
-    const now = Date.now();
-    setGrid([...PUZZLE]);
-    setNotes({});
+  const game = session?.game;
+  const solved = game ? isSudokuGameComplete(game) : false;
+  const clockRunning = Boolean(game && !game.paused && !solved && session?.screen === "game");
+  useEffect(() => {
+    if (!clockRunning) return;
+    // Count only visible playing time; background, menu and privacy surfaces do not run the clock.
+    let previous = performance.now();
+    const resetClockBaseline = () => {
+      previous = performance.now();
+    };
+    document.addEventListener("visibilitychange", resetClockBaseline);
+    window.addEventListener("pageshow", resetClockBaseline);
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      const seconds = Math.floor((now - previous) / 1000);
+      if (!seconds) return;
+      previous += seconds * 1000;
+      if (document.visibilityState !== "visible" || !pageSession?.game) return;
+      const next = {
+        ...pageSession,
+        game: applySudokuAction(pageSession.game, {
+          type: "tick",
+          seconds
+        })
+      };
+      retainSession(next);
+      setSession(next);
+      if (next.autosave) saveGame(next.game);
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", resetClockBaseline);
+      window.removeEventListener("pageshow", resetClockBaseline);
+    };
+  }, [clockRunning]);
+  function start() {
+    const next = createSudokuGame(generateGamePuzzle(size, difficulty));
     setSelected(null);
     setNotesMode(false);
-    setMistakes(0);
-    setStartedAt(now);
-    setCompletedAt(null);
-    setClockNow(now);
+    setNotice("");
+    update({
+      game: next,
+      screen: "game",
+      autosave: true
+    });
   }
-
-  return (
-    <main ref={setScreenElement} className="page sudoku-reveal-screen">
-      <section className="sudoku-shell" aria-label="Sudoku">
-        <header className="topbar sudoku-topbar">
-          <div className="sudoku-brand">
-            <span className="sudoku-logo" aria-hidden="true" />
-            <div>
-              <h1>Sudoku</h1>
-              <span>Classic · Puzzle #{PUZZLE_NUMBER}</span>
+  function menu() {
+    if (session) update({
+      ...session,
+      screen: "menu"
+    });
+    cancel();
+    setSelected(null);
+  }
+  function enter(value: number) {
+    if (selected !== null) act({
+      type: "digit",
+      index: selected,
+      value,
+      notes: notesMode
+    });
+  }
+  const selectedValue = selected === null ? 0 : game?.values[selected] ?? 0;
+  const [boxHeight, boxWidth] = sudokuBoxDimensions(game?.puzzle.size ?? 9);
+  const playable = game?.puzzle.givens.filter(v => !v).length ?? 0;
+  const completed = game?.values.filter((v, i) => !game.puzzle.givens[i] && v === game.puzzle.solution[i]).length ?? 0;
+  return <main ref={setScreenElement} className="page sudoku-reveal-screen sudoku-game">
+    <section className="sudoku-shell" aria-label="Sudoku">
+      <header className="topbar sudoku-topbar">
+        <div
+          className="sudoku-brand"><span
+          className="sudoku-logo"
+          aria-hidden="true" /><div><h1>Sudoku</h1><span
+          className="sudoku-identity">{session?.screen === "game" && game ? `${game.puzzle.size}×${game.puzzle.size} · ${game.puzzle.difficulty}` : "A little focus, every day"}</span></div></div>
+        {session?.screen === "game" && <div className="sudoku-header-actions">
+          {!game?.paused && <button type="button" disabled={solved} onClick={() => act({
+            type: "pause"
+          })}>Pause</button>}
+          <button type="button" onClick={menu}>Menu</button>
+        </div>}
+      </header>
+      <div className="game-content">
+        {!session ? <p role="status">Loading game…</p> : session.screen === "menu" ? <div className="sudoku-menu">
+          <h2>Your next puzzle</h2>
+          {session.game && <button className="secondary-button" onClick={() => update({
+            ...session,
+            screen: "game"
+          })}>Back to game</button>}
+          {session.game && <button className="secondary-button" onClick={() => {
+            update({
+              ...session,
+              game: createSudokuGame(session.game!.puzzle),
+              screen: "game"
+            });
+            setSelected(null);
+            setNotesMode(false);
+          }}>Reset</button>}
+          {saved && <button className="secondary-button" onClick={() => {
+            setSelected(null);
+            setNotesMode(false);
+            update({
+              game: {
+                ...saved,
+                paused: false
+              },
+              screen: "game",
+              autosave: true
+            });
+          }}>Continue saved game · {saved.puzzle.size}×{saved.puzzle.size}</button>}
+          <fieldset><legend>Board size</legend><div
+            className="sudoku-options">{([4, 6, 9] as SudokuSize[]).map(value => <button key={value}
+            className="secondary-button"
+            aria-pressed={size === value}
+            onClick={() => setSize(value)}>{value}×{value}</button>)}</div></fieldset>
+          <fieldset><legend>Difficulty</legend><div
+            className="sudoku-options">{(["easy", "medium", "hard"] as SudokuDifficulty[]).map(value => <button key={value}
+            className="secondary-button"
+            aria-pressed={difficulty === value}
+            onClick={() => setDifficulty(value)}>{value[0]!.toUpperCase() + value.slice(1)}</button>)}</div></fieldset>
+          {saved && <p>Starting a new game replaces your saved game.</p>}
+          <button className="primary-button" onClick={start}>New game</button>
+          {session.game && !session.autosave && <><p>Your quick game is kept for this visit. Save it to continue another day; this replaces the previous saved game.</p><button
+            className="secondary-button"
+            onClick={() => {
+              if (session.game && saveGame(session.game)) {
+                update({
+                  ...session,
+                  autosave: true
+                });
+                setNotice("Game saved on this device.");
+              } else setNotice("Storage is unavailable. Keep this window open to retain your game.");
+            }}>Save this game</button></>}
+          <details><summary>How to play</summary><p>Fill each row, column and outlined box with the digits shown below the board, using each digit once.</p><ol><li>Select an empty square, then a digit.</li><li>Use Notes to record possible digits.</li><li>Hint fills one square. Undo and Redo let you revisit moves.</li></ol><p>Difficulty changes the number of starting clues. Every generated puzzle has one solution. Progress stays on this device.</p></details>
+        </div> : game && <>
+          <div
+            className="sudoku-stats"
+            aria-label="Puzzle status"><div><span>Time</span><strong>{formatElapsed(game.elapsedSeconds)}</strong></div><div><span>Mistakes</span><strong>{game.mistakes}</strong></div><div><span>Progress</span><strong>{completed}/{playable}</strong></div></div>
+          <div className="status" aria-live="polite">{game.paused ? "Paused" : solved ? "Completed" : notesMode ? "Notes mode" : "Playing"}</div>
+          {game.paused ? <div className="sudoku-paused"><h2>Take a breath</h2><button className="primary-button" onClick={() => act({
+              type: "resume"
+            })}>Resume</button></div> : <>
+            <div className="board" role="grid" aria-label="Sudoku board" style={{
+              gridTemplateColumns: `repeat(${game.puzzle.size},minmax(0,1fr))`
+            }}>
+              {game.values.map((value, index) => {
+                const row = Math.floor(index / game.puzzle.size),
+                  col = index % game.puzzle.size;
+                const sr = selected === null ? -1 : Math.floor(selected / game.puzzle.size),
+                  sc = selected === null ? -1 : selected % game.puzzle.size;
+                const related = selected !== null && (row === sr || col === sc || Math.floor(row / boxHeight) === Math.floor(sr / boxHeight) && Math.floor(col / boxWidth) === Math.floor(sc / boxWidth));
+                const given = game.puzzle.givens[index] !== 0,
+                  invalid = value !== 0 && value !== game.puzzle.solution[index],
+                  cellNotes = game.notes[index] ?? [];
+                return <button key={index} type="button"
+                  role="gridcell"
+                  aria-selected={selected === index}
+                  aria-readonly={given}
+                  aria-invalid={invalid || undefined}
+                  aria-label={`Row ${row + 1}, column ${col + 1}${value ? `, ${value}` : ", empty"}${given ? ", given" : ""}${cellNotes.length ? `, notes ${cellNotes.join(", ")}` : ""}`}
+                  className={["cell", given ? "given" : "", selected === index ? "selected" : "", selected !== index && value !== 0 && selectedValue === value ? "same" : "", selected !== index && related ? "related" : "", invalid ? "invalid" : "", (col + 1) % boxWidth === 0 && col < game.puzzle.size - 1 ? "box-right" : "", (row + 1) % boxHeight === 0 && row < game.puzzle.size - 1 ? "box-bottom" : ""].filter(Boolean).join(" ")}
+                  onClick={() => setSelected(index)}>{value || (cellNotes.length ? <span
+                  className="notes"
+                  aria-hidden="true">{Array.from({
+                      length: game.puzzle.size
+                    }, (_, i) => <span className="note" key={i}>{cellNotes.includes(i + 1) ? i + 1 : ""}</span>)}</span> : null)}</button>;
+              })}
             </div>
-          </div>
-          <button type="button" onClick={reset}>Reset</button>
-        </header>
-
-        <div className="sudoku-stats" aria-label="Puzzle status">
-          <div><span>Time</span><strong>{formatElapsed(elapsedSeconds)}</strong></div>
-          <div><span>Mistakes</span><strong>{mistakes}</strong></div>
-          <div><span>Progress</span><strong>{completedPlayableCells}/{playableCells}</strong></div>
-        </div>
-
-        <div className="status" aria-live="polite">
-          {solved ? "Completed" : notesMode ? "Notes mode" : "Playing"}
-        </div>
-
-        <div className="board" role="grid" aria-label="Sudoku board">
-          {grid.map((value, index) => {
-            const row = rowOf(index);
-            const col = colOf(index);
-            const selectedRow = selected === null ? -1 : rowOf(selected);
-            const selectedCol = selected === null ? -1 : colOf(selected);
-            const sameBox = selected !== null && Math.floor(row / 3) === Math.floor(selectedRow / 3) && Math.floor(col / 3) === Math.floor(selectedCol / 3);
-            const related = selected !== null && (row === selectedRow || col === selectedCol || sameBox);
-            const same = value !== 0 && selectedValue === value;
-            const invalid = value !== 0 && (conflictsFor(grid, index, value).length > 0 || value !== SOLUTION[index]);
-            const cellNotes = notes[index] ?? [];
-
-            return (
-              <button
-                key={index}
-                type="button"
-                role="gridcell"
-                aria-selected={selected === index}
-                aria-label={`Row ${row + 1}, column ${col + 1}${value ? `, ${value}` : ", empty"}`}
-                className={[
-                  "cell",
-                  givens[index] ? "given" : "",
-                  selected === index ? "selected" : "",
-                  selected !== index && same ? "same" : "",
-                  selected !== index && !same && related ? "related" : "",
-                  invalid ? "invalid" : "",
-                ].filter(Boolean).join(" ")}
-                onClick={() => selectCell(index)}
-              >
-                {value !== 0 ? value : cellNotes.length > 0 ? (
-                  <span className="notes" aria-hidden="true">
-                    {Array.from({ length: 9 }, (_, noteIndex) => {
-                      const digit = noteIndex + 1;
-                      return <span className="note" key={digit}>{cellNotes.includes(digit) ? digit : ""}</span>;
-                    })}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="controls">
-          <div className="digits" aria-label="Digits">
-            {([1,2,3,4,5,6,7,8,9] as CellValue[]).map((value) => {
-              const isSecretDigit = value === 5;
-              return (
-                <button
-                  key={value}
-                  className={`digit${isSecretDigit ? " secret-digit" : ""}`}
-                  type="button"
-                  onPointerDown={isSecretDigit ? onFivePointerDown : undefined}
-                  onPointerMove={isSecretDigit ? onFivePointerMove : undefined}
-                  onPointerUp={isSecretDigit ? onFivePointerUp : undefined}
-                  onPointerCancel={isSecretDigit ? cancelSecretUnlock : undefined}
+            <div className="controls"><div className="digits" aria-label="Digits" style={{
+                gridTemplateColumns: `repeat(${game.puzzle.size},minmax(0,1fr))`
+              }}>
+              {Array.from({
+                  length: game.puzzle.size
+                }, (_, i) => i + 1).map(value => <button key={value}
+                  className={`digit${value === 5 ? " secret-digit" : ""}`} type="button"
+                  onPointerDown={value === 5 ? onFivePointerDown : undefined}
+                  onPointerMove={value === 5 ? onFivePointerMove : undefined}
+                  onPointerUp={value === 5 ? onFivePointerUp : undefined}
+                  onPointerCancel={value === 5 ? cancel : undefined}
                   onClick={() => {
-                    if (isSecretDigit && consumeFiveClick()) return;
-                    enterDigit(value, Date.now());
-                  }}
-                >
-                  {value}
-                </button>
-              );
-            })}
-          </div>
-          <div className="actions">
-            <button className="action" type="button" onClick={erase}>Erase</button>
-            <button className={`action ${notesMode ? "active" : ""}`} type="button" onClick={() => setNotesMode((v) => !v)}>Notes</button>
-            <button className="action" type="button" onClick={() => setSelected(null)}>Clear</button>
-          </div>
-        </div>
-      </section>
-    </main>
-  );
+                  if (value === 5 && consumeFiveClick()) return;
+                  enter(value);
+                }}>{value}</button>)}
+            </div><div className="actions">
+              <button className="action" disabled={solved || selected === null} onClick={() => {
+                  if (selected !== null) act({
+                    type: "erase",
+                    index: selected
+                  });
+                }}>Erase</button>
+              <button className={`action${notesMode ? " active" : ""}`} aria-pressed={notesMode} onClick={() => setNotesMode(!notesMode)}>Notes</button>
+              <button className="action" onClick={() => setSelected(null)}>Clear</button>
+              <button className="action" disabled={!game.history.length} onClick={() => act({
+                  type: "undo"
+                })}>Undo</button>
+              <button className="action" disabled={!game.future.length} onClick={() => act({
+                  type: "redo"
+                })}>Redo</button>
+              <button className="action" disabled={solved} aria-label={`Hint (${game.hints} used)`} onClick={() => act({
+                  type: "hint",
+                  index: selected !== null && !game.puzzle.givens[selected] && game.values[selected] !== game.puzzle.solution[selected] ? selected : undefined
+                })}>Hint</button>
+
+            </div></div>
+          </>}
+        </>}
+        {notice && <p className="game-notice" role="status">{notice}</p>}
+      </div>
+    </section>
+  </main>;
 }

@@ -4,6 +4,7 @@ import { PwaRegister } from "../components/pwa-register";
 import "./globals.css";
 import "../features/messenger/messenger-redesign.css";
 import "../features/messenger/messenger-ux3.css";
+import "../features/sudoku/sudoku-game.css";
 
 export const metadata: Metadata = {
   title: "Sudoku",

@@ -37,7 +37,7 @@ final class SudokuViewController: UIViewController {
               const style = document.createElement("style");
               style.id = "sudoku-native-canvas";
               style.textContent = `
-                .sudoku-reveal-screen:not(.is-dragging):not(.is-returning):not(.is-unlocking)::after { box-shadow:none !important; }
+                .sudoku-reveal-screen::after { content:none !important; box-shadow:none !important; }
                 .page,.shell { padding-bottom:max(10px,env(safe-area-inset-bottom)) !important; }
               `;
               document.head.appendChild(style);
