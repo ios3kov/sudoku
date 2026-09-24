@@ -25,6 +25,7 @@ These are behavioral references, not source-code imports. No Signal/Element GPL/
 - The iOS host derives the root percentage from UIKit body `UIFontMetrics`. It updates the trusted main page after navigation and on content-size changes; no inbound message handler or content access is introduced.
 - Let conversation headers/actions wrap. Keep long message words and receipt descriptions inside bubbles. Preserve 44-point/CSS-pixel control targets and scrollable text input.
 - Recalculate the composer when the viewport or native text scale changes, preserving the draft and bounding its height so history remains available.
+- Expose one attachment action to assistive technology; remove the duplicate visually hidden file input from the reading/tab order.
 - Expose message history as a named keyboard-focusable region. Do not turn the entire private history into a live region that would announce bulk history or receipt updates.
 - Read details are real visually-hidden text, rather than an `aria-label` on a generic span; visible Sent/Read labels remain.
 - Keep native modal action behavior; focus Cancel when entering deletion confirmation. Explicit action buttons remain the alternative to swipe/long press.

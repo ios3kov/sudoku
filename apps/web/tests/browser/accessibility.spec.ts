@@ -24,6 +24,7 @@ test.beforeEach(async ({page}) => {
     window.__predeployAudit.mount("chat");
   });
   await expect(page.getByRole("textbox", {name: "Message", exact: true})).toBeEnabled();
+  await expect(page.getByRole("button", {name: "Choose File", exact: true})).toHaveCount(0);
 });
 
 for (const scale of [200, 300]) {

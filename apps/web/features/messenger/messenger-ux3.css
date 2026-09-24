@@ -51,4 +51,4 @@
   .messenger-runtime-shell *,.messenger-runtime-shell *::before,.messenger-runtime-shell *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
 /* The action glyph is decorative; scaling its text must not overflow its target. */
-.messenger-runtime-shell .message-more-button{font-size:16px;flex-shrink:0}
+.messenger-runtime-shell .message-more-button{font-size:16px;flex-shrink:0;color:#475569}
