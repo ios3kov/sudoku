@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProjectedEncryptedMessage } from "@sudoku/domain";
+import { MAX_AUTO_SEND_RETRY_ATTEMPTS, sendFailureKind, sendRetryDelayMs, type ProjectedEncryptedMessage } from "@sudoku/domain";
 import {
   ChangeEvent,
   FormEvent,
@@ -35,6 +35,16 @@ import {
 
 const INITIAL_VISIBLE_MESSAGES = 120;
 
+function sendFailureForError(error: unknown): "transient" | "permanent" {
+  if (error && typeof error === "object" && "status" in error) {
+    const status = (error as { status?: unknown }).status;
+    if (typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599) {
+      return sendFailureKind(status);
+    }
+  }
+  return sendFailureKind(null);
+}
+
 export function EncryptedConversationView({
   conversation,
   user,
@@ -64,7 +74,9 @@ export function EncryptedConversationView({
   const [sendingPreview, setSendingPreview] = useState<{ id: string; body: string; phase: "encrypting" | "sending" } | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<ReturnType<OpenMlsProtocolAdapter["pendingApplicationMessages"]>>([]);
   const [failedQueuedIds, setFailedQueuedIds] = useState<string[]>([]);
+  const [autoRetryQueuedId, setAutoRetryQueuedId] = useState<string | null>(null);
   const [retryingQueuedId, setRetryingQueuedId] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
   const [readSequence, setReadSequence] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -83,6 +95,8 @@ export function EncryptedConversationView({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lastEventRef = useRef<RealtimeEvent | null>(null);
+  const retryTimerRef = useRef<{ clientId: string; timer: number } | null>(null);
+  const retryAttemptsRef = useRef(new Map<string, number>());
   const queueRefresh = useMemo(() => createRefreshQueue(), []);
 
   const body = editingId ? editBody : draft;
@@ -126,6 +140,103 @@ export function EncryptedConversationView({
     });
   }, [adapter, conversation.id, queueRefresh]);
 
+  const scheduleAutoRetry = useCallback((clientId: string) => {
+    if (
+      !navigator.onLine
+      || failedQueuedIds.includes(clientId)
+      || retryingQueuedId !== null
+      || retryTimerRef.current !== null
+    ) {
+      return;
+    }
+
+    const attempt = (retryAttemptsRef.current.get(clientId) ?? 0) + 1;
+    if (attempt > MAX_AUTO_SEND_RETRY_ATTEMPTS) {
+      retryAttemptsRef.current.delete(clientId);
+      setAutoRetryQueuedId(null);
+      setFailedQueuedIds((current) => [...new Set([...current, clientId])]);
+      return;
+    }
+
+    retryAttemptsRef.current.set(clientId, attempt);
+    setAutoRetryQueuedId(clientId);
+    const timer = window.setTimeout(() => {
+      retryTimerRef.current = null;
+      setAutoRetryQueuedId((current) => current === clientId ? null : current);
+      if (!navigator.onLine) {
+        if (attempt <= 1) retryAttemptsRef.current.delete(clientId);
+        else retryAttemptsRef.current.set(clientId, attempt - 1);
+        return;
+      }
+      setRetryingQueuedId(clientId);
+
+      void adapter.retryPendingApplicationSend(clientId)
+        .then(async () => {
+          retryAttemptsRef.current.delete(clientId);
+          setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+          await refreshProjection();
+        })
+        .catch((retryError) => {
+          const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+          setQueuedMessages(pendingMessages);
+          setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+
+          const next = pendingMessages[0];
+          if (!next) {
+            retryAttemptsRef.current.delete(clientId);
+            return;
+          }
+
+          if (sendFailureForError(retryError) === "permanent") {
+            retryAttemptsRef.current.delete(clientId);
+            retryAttemptsRef.current.delete(next.id);
+            setFailedQueuedIds((current) => [...new Set([...current, next.id])]);
+            return;
+          }
+
+          if (next.id !== clientId) {
+            retryAttemptsRef.current.delete(clientId);
+          }
+          setRetryTick((value) => value + 1);
+        })
+        .finally(() => {
+          setRetryingQueuedId((current) => current === clientId ? null : current);
+        });
+    }, sendRetryDelayMs(attempt));
+
+    retryTimerRef.current = { clientId, timer };
+  }, [adapter, conversation.id, failedQueuedIds, refreshProjection, retryingQueuedId]);
+
+  useEffect(() => {
+    const first = queuedMessages[0];
+    if (
+      !first
+      || !navigator.onLine
+      || failedQueuedIds.includes(first.id)
+      || retryingQueuedId !== null
+      || autoRetryQueuedId !== null
+      || retryTimerRef.current !== null
+    ) {
+      return;
+    }
+    scheduleAutoRetry(first.id);
+  }, [
+    autoRetryQueuedId,
+    failedQueuedIds,
+    queuedMessages,
+    retryTick,
+    retryingQueuedId,
+    scheduleAutoRetry,
+  ]);
+
+  useEffect(() => () => {
+    if (retryTimerRef.current) {
+      window.clearTimeout(retryTimerRef.current.timer);
+      retryTimerRef.current = null;
+    }
+    retryAttemptsRef.current.clear();
+  }, []);
+
   // MessengerShell keys this view by conversation identity. Updates within
   // that conversation should sync history, never reset an active draft/edit.
   useEffect(() => {
@@ -162,12 +273,12 @@ export function EncryptedConversationView({
   }, []);
 
   useEffect(() => {
-    if (!syncBlocked || loading) return;
+    if (!syncBlocked || loading || queuedMessages.length > 0) return;
     const timer = window.setInterval(() => {
       if (navigator.onLine) void refreshProjection();
     }, 2_000);
     return () => window.clearInterval(timer);
-  }, [loading, refreshProjection, syncBlocked]);
+  }, [loading, queuedMessages.length, refreshProjection, syncBlocked]);
 
 
   const replyingTo = useMemo(
@@ -178,6 +289,20 @@ export function EncryptedConversationView({
     () => messageById.get(editingId ?? "") ?? null,
     [messageById, editingId],
   );
+
+  function classifyPendingFailure(clientId: string, sendError: unknown) {
+    if (!navigator.onLine) {
+      setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+      return;
+    }
+    if (sendFailureForError(sendError) === "permanent") {
+      retryAttemptsRef.current.delete(clientId);
+      setFailedQueuedIds((current) => [...new Set([...current, clientId])]);
+      return;
+    }
+    setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+    setRetryTick((value) => value + 1);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -213,18 +338,15 @@ export function EncryptedConversationView({
       setEditingId(null);
       setReplyingToId(null);
       await refreshProjection();
-    } catch {
+    } catch (sendError) {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       setQueuedMessages(pendingMessages);
       if (!editing && pendingMessages.some((message) => message.id === clientId)) {
         setBody("");
         setReplyingToId(null);
-        setFailedQueuedIds((current) =>
-          navigator.onLine
-            ? [...new Set([...current, clientId])]
-            : current.filter((id) => id !== clientId)
-        );
+        const blocked = pendingMessages[0];
+        if (blocked) classifyPendingFailure(blocked.id, sendError);
         setError(null);
       } else {
         setError("Unable to send encrypted update");
@@ -245,15 +367,17 @@ export function EncryptedConversationView({
     setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
     try {
       await adapter.retryPendingApplicationSend(clientId);
+      retryAttemptsRef.current.delete(clientId);
       await refreshProjection();
-    } catch {
+    } catch (retryError) {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
-      if (pendingMessages.some((message) => message.id === clientId)) {
-        setFailedQueuedIds((current) => [...new Set([...current, clientId])]);
+      const next = pendingMessages[0];
+      if (next) {
+        classifyPendingFailure(next.id, retryError);
+        setError(sendFailureForError(retryError) === "permanent" ? "Encrypted message retry failed" : null);
       }
-      setError("Encrypted message retry failed");
     } finally {
       setRetryingQueuedId(null);
     }
@@ -261,12 +385,20 @@ export function EncryptedConversationView({
 
   async function removeQueuedMessage(clientId: string) {
     setError(null);
+    if (retryTimerRef.current?.clientId === clientId) {
+      window.clearTimeout(retryTimerRef.current.timer);
+      retryTimerRef.current = null;
+      setAutoRetryQueuedId(null);
+    }
+    retryAttemptsRef.current.delete(clientId);
     try {
       await adapter.discardPendingApplicationSend(clientId);
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
+      setRetryTick((value) => value + 1);
+      if (navigator.onLine) await refreshProjection();
     } catch {
       setError("Unable to remove queued encrypted message");
     }
@@ -306,10 +438,10 @@ export function EncryptedConversationView({
       const queuedClientId = clientId;
       if (
         queuedClientId
-        && navigator.onLine
         && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
-        setFailedQueuedIds((current) => [...new Set([...current, queuedClientId])]);
+        const blocked = pendingMessages[0];
+        if (blocked) classifyPendingFailure(blocked.id, uploadError);
         setError(null);
       } else {
         setError(
@@ -351,7 +483,7 @@ export function EncryptedConversationView({
     let clientId: string | null = null;
     try {
       const extension = voiceFileExtension(mimeType);
-      const file = new File(chunks, `voice-${Date.now()}.${extension}`, {
+      const file = new File(chunks, `voice-message.${extension}`, {
         type: mimeType,
       });
       const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
@@ -374,10 +506,10 @@ export function EncryptedConversationView({
       const queuedClientId = clientId;
       if (
         queuedClientId
-        && navigator.onLine
         && pendingMessages.some((message) => message.id === queuedClientId)
       ) {
-        setFailedQueuedIds((current) => [...new Set([...current, queuedClientId])]);
+        const blocked = pendingMessages[0];
+        if (blocked) classifyPendingFailure(blocked.id, voiceError);
         setError(null);
       } else {
         setError(
@@ -576,11 +708,12 @@ export function EncryptedConversationView({
           {queuedMessages.map((message) => {
             const failed = failedQueuedIds.includes(message.id);
             const retrying = retryingQueuedId === message.id;
+            const autoRetrying = autoRetryQueuedId === message.id;
             return (
               <div className="message-row own" key={message.id}>
                 <div className={`message-bubble pending ${failed ? "failed" : ""}`}>
                   <p>{message.body ?? (message.messageType === "voice" ? "Voice message" : "Attachment")}</p>
-                  <small role={failed ? "alert" : "status"}>{retrying ? "Sending…" : failed ? "Failed" : "Queued"}</small>
+                  <small role={failed ? "alert" : "status"}>{retrying ? "Sending…" : failed ? "Failed" : autoRetrying ? "Retrying…" : "Queued"}</small>
                   <div className="pending-message-actions">
                     {failed ? (
                       <button
@@ -595,7 +728,7 @@ export function EncryptedConversationView({
                     <button
                       type="button"
                       aria-label="Remove queued message"
-                      disabled={retrying}
+                      disabled={retryingQueuedId !== null}
                       onClick={() => void removeQueuedMessage(message.id)}
                     >
                       Remove

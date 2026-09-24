@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTimeline, countNewIncoming, dayLabel, deliveryLabel, gestureIntent, SessionDrafts } from "../dist/messenger-ux.js";
+import { buildTimeline, countNewIncoming, dayLabel, deliveryLabel, gestureIntent, MAX_AUTO_SEND_RETRY_ATTEMPTS, sendFailureKind, sendRetryDelayMs, SessionDrafts } from "../dist/messenger-ux.js";
 
 const message = (id, senderId, sequence, createdAt) => ({id, senderId, sequence, createdAt});
 const time = new Date(2026, 8, 21, 12, 0);
@@ -59,4 +59,20 @@ test("draft store bounds text and uses least recently accessed eviction", () => 
  assert.equal(drafts.get("b"),"");assert.equal(drafts.get("a"),"A");
  drafts.set("a","x".repeat(21000));assert.equal(drafts.get("a").length,20000);
  for(const value of [0,-1,1.2,NaN])assert.throws(()=>new SessionDrafts(value));
+});
+
+test("send failure classification retries only transient transport conditions", () => {
+ assert.equal(sendFailureKind(null),"transient");
+ for(const status of [408,409,425,429,500,503,599]) assert.equal(sendFailureKind(status),"transient");
+ for(const status of [400,401,403,404,410,422]) assert.equal(sendFailureKind(status),"permanent");
+ for(const status of [0,99,600,NaN,Infinity]) assert.throws(()=>sendFailureKind(status));
+});
+test("send retry backoff is bounded exponential and rejects invalid attempts", () => {
+ assert.equal(MAX_AUTO_SEND_RETRY_ATTEMPTS,5);
+ assert.deepEqual(
+  Array.from({length:MAX_AUTO_SEND_RETRY_ATTEMPTS},(_,index)=>sendRetryDelayMs(index+1)),
+  [1000,2000,4000,8000,16000],
+ );
+ assert.equal(sendRetryDelayMs(6),16000);
+ for(const attempt of [0,-1,1.2,NaN,Infinity]) assert.throws(()=>sendRetryDelayMs(attempt));
 });

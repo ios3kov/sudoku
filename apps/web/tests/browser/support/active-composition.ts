@@ -31,6 +31,18 @@ export async function verifyActiveComposition(
 
   async function receiveWhileWriting(label: string, draft: string) {
     await composer.fill(draft);
+
+    // This helper verifies active-composition preservation, not the separate
+    // "reading older history" behavior. Opening actions on an old message can
+    // legitimately move the timeline away from the tail, especially as this
+    // acceptance conversation grows. Pin to latest without clearing the draft,
+    // reply or edit context before injecting the next incoming message.
+    const jumpToLatest = peer.locator(".jump-to-latest");
+    if (await jumpToLatest.isVisible()) {
+      await jumpToLatest.click();
+      await expect(composer).toHaveValue(draft);
+    }
+
     await sendText(owner, label);
     await expect(acceptedMessage(owner, label)).toBeVisible();
     const response = await peer.request.get("/v1/conversations");

@@ -362,7 +362,8 @@ Still open:
 - PR #65 merged the first-party Swift/UIKit host and native Contacts bridge.
 - PR #67 merged Secure Enclave biometric challenge-response as `301ee0cc0719fac44d37c2c633734849b013a5da`; the four-digit PIN is not stored by native code.
 - PR #69 merged native Photos/Files selection and `PrivacyInfo.xcprivacy` as `b6f7ac9cc185bb55a8ec476ec2daed9f204f198c`. See [Step89](89-ios-biometric-media.md).
-- [Step90](90-e2ee-send-state-reliability.md) is the active messaging-reliability follow-up: durable send states plus manual Retry/Remove on the existing MLS outbox.
+- PR #70 merged [Step90](90-e2ee-send-state-reliability.md) as `32e869e10f8c14ae1caabda89e9d20c19e45200c`: durable send states plus manual Retry/Remove on the existing MLS outbox.
+- [Step91](91-automatic-send-retry.md) is the active P1 follow-up for bounded transient automatic retry with stable idempotency.
 - Android remains Web/PWA.
 - Production still runs the earlier server release and has not received migrations `0017_single_admin` or `0018_session_biometrics`.
 

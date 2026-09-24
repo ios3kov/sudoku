@@ -83,3 +83,18 @@ Required before merge:
 Repository work only.
 
 No production deployment, migration, TestFlight upload or App Store submission is authorized by this step. Production remains on the previously recorded server release and database migration `0016_phone_contacts`; migrations `0017_single_admin` and `0018_session_biometrics` remain undeployed until their separate production gate.
+
+
+## Merge verification — 2026-09-24
+
+PR #70 merged to `main` as `32e869e10f8c14ae1caabda89e9d20c19e45200c`.
+
+Reviewed exact head `3c0f74efd0c5440b943a0c4eccfcf25d9a2d334c` passed:
+
+- ci `35974275667`, including browser E2E and production image builds;
+- device-access `35974275666`;
+- beat-runtime `35974275664`;
+- ios-native `35974275686`;
+- api-shutdown `35974275659`.
+
+No production deployment or TestFlight/App Store upload occurred.
