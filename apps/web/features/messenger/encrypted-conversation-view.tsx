@@ -500,7 +500,6 @@ export function EncryptedConversationView({
       const presentation = await analyzeVoiceBlob(blob, fallbackDurationMs);
       if (voicePreparationGenerationRef.current !== generation) return;
       setVoiceDraft({ blob, mimeType, presentation });
-      setError(null);
     } finally {
       if (voicePreparationGenerationRef.current === generation) {
         setVoiceDraftPreparing(false);
@@ -511,7 +510,7 @@ export function EncryptedConversationView({
   function deleteVoiceDraft() {
     if (busy || voiceSendInFlightRef.current) return;
     setVoiceDraft(null);
-    setError(null);
+    setError(syncBlocked ? "Secure sync is blocked" : null);
   }
 
   async function sendVoiceDraft() {
