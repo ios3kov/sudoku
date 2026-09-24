@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProjectedEncryptedMessage } from "@sudoku/domain";
+import { MAX_AUTO_SEND_RETRY_ATTEMPTS, sendFailureKind, sendRetryDelayMs, type ProjectedEncryptedMessage } from "@sudoku/domain";
 import {
   ChangeEvent,
   FormEvent,
@@ -64,7 +64,9 @@ export function EncryptedConversationView({
   const [sendingPreview, setSendingPreview] = useState<{ id: string; body: string; phase: "encrypting" | "sending" } | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<ReturnType<OpenMlsProtocolAdapter["pendingApplicationMessages"]>>([]);
   const [failedQueuedIds, setFailedQueuedIds] = useState<string[]>([]);
+  const [autoRetryQueuedId, setAutoRetryQueuedId] = useState<string | null>(null);
   const [retryingQueuedId, setRetryingQueuedId] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
   const [readSequence, setReadSequence] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -83,6 +85,8 @@ export function EncryptedConversationView({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lastEventRef = useRef<RealtimeEvent | null>(null);
+  const retryTimerRef = useRef<{ clientId: string; timer: number } | null>(null);
+  const retryAttemptsRef = useRef(new Map<string, number>());
   const queueRefresh = useMemo(() => createRefreshQueue(), []);
 
   const body = editingId ? editBody : draft;
