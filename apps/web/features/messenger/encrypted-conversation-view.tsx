@@ -94,6 +94,7 @@ export function EncryptedConversationView({
     mimeType: string;
     presentation: VoiceAttachmentPresentation;
   } | null>(null);
+  const [voiceDraftPreparing, setVoiceDraftPreparing] = useState(false);
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_MESSAGES);
@@ -105,6 +106,7 @@ export function EncryptedConversationView({
   const retryTimerRef = useRef<{ clientId: string; timer: number } | null>(null);
   const retryAttemptsRef = useRef(new Map<string, number>());
   const voiceSendInFlightRef = useRef(false);
+  const voicePreparationGenerationRef = useRef(0);
   const queueRefresh = useMemo(() => createRefreshQueue(), []);
 
   const body = editingId ? editBody : draft;
@@ -243,6 +245,7 @@ export function EncryptedConversationView({
       retryTimerRef.current = null;
     }
     retryAttemptsRef.current.clear();
+    voicePreparationGenerationRef.current += 1;
   }, []);
 
   // MessengerShell keys this view by conversation identity. Updates within
@@ -489,11 +492,20 @@ export function EncryptedConversationView({
     mimeType: string,
     fallbackDurationMs: number,
   ) {
-    const blob = new Blob(chunks, { type: mimeType });
-    if (blob.size < 1) throw new Error("Voice recording is empty");
-    const presentation = await analyzeVoiceBlob(blob, fallbackDurationMs);
-    setVoiceDraft({ blob, mimeType, presentation });
-    setError(null);
+    const generation = ++voicePreparationGenerationRef.current;
+    setVoiceDraftPreparing(true);
+    try {
+      const blob = new Blob(chunks, { type: mimeType });
+      if (blob.size < 1) throw new Error("Voice recording is empty");
+      const presentation = await analyzeVoiceBlob(blob, fallbackDurationMs);
+      if (voicePreparationGenerationRef.current !== generation) return;
+      setVoiceDraft({ blob, mimeType, presentation });
+      setError(null);
+    } finally {
+      if (voicePreparationGenerationRef.current === generation) {
+        setVoiceDraftPreparing(false);
+      }
+    }
   }
 
   function deleteVoiceDraft() {
@@ -579,7 +591,7 @@ export function EncryptedConversationView({
   async function toggleRecording() {
     // Stop is always available, even when secure authoring becomes blocked.
     if (recording) { await toggleVoice(); return; }
-    if (busy || syncBlocked || requestingMic || voiceDraft) return;
+    if (busy || syncBlocked || requestingMic || voiceDraftPreparing || voiceDraft) return;
     setError(null);
     if (!navigator.onLine) { setError("Encrypted voice notes require a connection"); return; }
     await toggleVoice();
@@ -631,7 +643,7 @@ export function EncryptedConversationView({
   }
 
   function beginEdit(message: ProjectedEncryptedMessage) {
-    if (syncBlocked || voiceDraft || message.senderId !== user.id || message.deleted) return;
+    if (syncBlocked || voiceDraftPreparing || voiceDraft || message.senderId !== user.id || message.deleted) return;
     setEditingId(message.id);
     setReplyingToId(null);
     setEditBody(message.body ?? "");
@@ -641,7 +653,7 @@ export function EncryptedConversationView({
 
 
   function beginReply(message: ProjectedEncryptedMessage) {
-    if (busy || syncBlocked || recording || voiceDraft || message.deleted) return;
+    if (busy || syncBlocked || recording || voiceDraftPreparing || voiceDraft || message.deleted) return;
     setReplyingToId(message.id);
     setEditingId(null);
     setActionMessageId(null);
@@ -726,7 +738,7 @@ export function EncryptedConversationView({
           return (
             <div className={`message-row ${own ? "own" : ""}`}>
               <div className="message-bubble-wrap">
-                <MessageInteraction disabled={busy || syncBlocked || recording || voiceDraft !== null || message.deleted} onActions={() => setActionMessageId(message.id)} onReply={() => beginReply(message)}>
+                <MessageInteraction disabled={busy || syncBlocked || recording || voiceDraftPreparing || voiceDraft !== null || message.deleted} onActions={() => setActionMessageId(message.id)} onReply={() => beginReply(message)}>
                   <div className={`message-bubble ${message.deleted ? "deleted" : ""}`}>
                     {conversation.type === "group" && !own ? <strong className="message-sender">{conversation.members.find((member) => member.id === message.senderId)?.display_name ?? "Member"}</strong> : null}
                     {reply ? <div className="reply-preview">{encryptedPreview(reply)}</div> : null}
@@ -804,8 +816,8 @@ export function EncryptedConversationView({
         onClose={() => setActionMessageId(null)}
         actions={[
           ...(actionMessage.body ? [{ id: "copy", label: "Copy", run: () => { void copyMessage(actionMessage.body!); } }] : []),
-          { id: "reply", label: "Reply", disabled: busy || syncBlocked || recording || voiceDraft !== null, run: () => beginReply(actionMessage) },
-          ...(actionMessage.senderId === user.id && actionMessage.messageType === "text" ? [{ id: "edit", label: "Edit", disabled: busy || syncBlocked || recording || voiceDraft !== null, run: () => beginEdit(actionMessage) }] : []),
+          { id: "reply", label: "Reply", disabled: busy || syncBlocked || recording || voiceDraftPreparing || voiceDraft !== null, run: () => beginReply(actionMessage) },
+          ...(actionMessage.senderId === user.id && actionMessage.messageType === "text" ? [{ id: "edit", label: "Edit", disabled: busy || syncBlocked || recording || voiceDraftPreparing || voiceDraft !== null, run: () => beginEdit(actionMessage) }] : []),
           { id: "👍", label: "👍", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "👍"); } },
           { id: "❤️", label: "❤️", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "❤️"); } },
           { id: "😂", label: "😂", disabled: busy || syncBlocked, run: () => { void toggleReaction(actionMessage, "😂"); } },
@@ -829,7 +841,9 @@ export function EncryptedConversationView({
         </div>
       ) : null}
 
-      {voiceDraft ? (
+      {voiceDraftPreparing ? (
+        <div className="voice-draft-preparing" role="status">Preparing voice…</div>
+      ) : voiceDraft ? (
         <VoiceDraftPreview
           blob={voiceDraft.blob}
           presentation={voiceDraft.presentation}
