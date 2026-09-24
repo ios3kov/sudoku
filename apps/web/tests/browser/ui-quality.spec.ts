@@ -203,12 +203,17 @@ test("solving the last Sudoku cell persists one completion time across reload", 
   const index = 2;
   const grid = [...solution];
   grid[index] = 0;
+  await page.addInitScript(value => {
+    if (sessionStorage.getItem("completion-fixture-seeded")) return;
+    sessionStorage.setItem("completion-fixture-seeded", "1");
+    localStorage.setItem("sudoku:level-1:v2", JSON.stringify({
+      grid: value, notes: {}, mistakes: 0, startedAt: Date.now() - 60_000, completedAt: null,
+    }));
+  }, grid);
   await page.goto("/");
-  await page.evaluate(value => localStorage.setItem("sudoku:level-1:v2", JSON.stringify({
-    grid: value, notes: {}, mistakes: 0, startedAt: Date.now() - 60_000, completedAt: null,
-  })), grid);
-  await page.reload();
   const board = page.getByRole("grid", { name: "Sudoku board" });
+  // Wait for storage hydration, not an empty cell that also exists in SSR markup.
+  await expect(board.locator("button").nth(3)).toHaveText("6");
   await expect(board.locator("button").nth(index)).toHaveText("");
   await board.locator("button").nth(index).click();
   await page.locator(".digits").getByRole("button", { name: String(solution[index]), exact: true }).click();
