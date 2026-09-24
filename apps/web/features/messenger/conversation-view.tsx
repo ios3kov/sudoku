@@ -101,12 +101,7 @@ export function ConversationView({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setMessages([]);
-    setReplyingTo(null);
-    setEditingMessage(null);
-    setActionMessageId(null);
+    // The parent keys this view by conversation id, so initial state is fresh.
     void Promise.all([
       messengerApi.messages(conversation.id, { limit: 50 }),
       listPending().catch(() => [] as PendingMessage[]),
@@ -155,6 +150,8 @@ export function ConversationView({
 
     if (realtimeEvent.type.startsWith("message.") && realtimeEvent.payload) {
       const message = realtimeEvent.payload as Message;
+      // Apply an external realtime message once; the event identity guard prevents feedback loops.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages((current) => mergeMessages(current, [message]));
       setPending((current) => current.filter((item) => item.client_id !== message.client_id));
       void removePending(message.client_id).catch(() => undefined);
@@ -177,21 +174,6 @@ export function ConversationView({
 
 
   }, [realtimeEvent, conversation, onConversationUpdated, user.id]);
-
-  useEffect(() => {
-    if (reconnectTick > 0) void catchUp();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reconnectTick]);
-
-  useEffect(() => {
-    function handleOnline() {
-      void flushOutbox();
-    }
-    window.addEventListener("online", handleOnline);
-    void flushOutbox();
-    return () => window.removeEventListener("online", handleOnline);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversation.id]);
 
   async function catchUp() {
     try {
@@ -238,6 +220,25 @@ export function ConversationView({
       }
     }
   }
+
+  useEffect(() => {
+    // Reconnect is an external signal that starts asynchronous history synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (reconnectTick > 0) void catchUp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reconnectTick]);
+
+  useEffect(() => {
+    function handleOnline() {
+      void flushOutbox();
+    }
+    window.addEventListener("online", handleOnline);
+    // Mount starts durable outbox I/O; updates follow asynchronous server responses.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void flushOutbox();
+    return () => window.removeEventListener("online", handleOnline);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.id]);
 
   async function send(event: FormEvent) {
     event.preventDefault();

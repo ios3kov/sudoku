@@ -62,6 +62,8 @@ export function SecurityVerification({
   }, [adapter, conversation.id, conversation.members, user.id]);
 
   useEffect(() => {
+    // Fetch external device identities when group membership changes; this is not derived render state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

@@ -136,6 +136,7 @@ export function EncryptedConversationView({
     realtimeEvent,
     clearOnMessageCreated: false,
   });
+  const { clearRemoteTyping } = typing;
   useAutosizeTextarea(textareaRef, body);
 
   const refreshProjection = useCallback((messageEvent?: RealtimeEvent): Promise<void> => {
@@ -170,7 +171,7 @@ export function EncryptedConversationView({
             && senderId
             && projection.messages.some((message) => message.id === messageId)
           ) {
-            typing.clearRemoteTyping(senderId);
+            clearRemoteTyping(senderId);
           }
         }
         setQueuedMessages(pendingMessages);
@@ -197,7 +198,7 @@ export function EncryptedConversationView({
         setLoading(false);
       }
     });
-  }, [adapter, conversation.id, queueRefresh, typing.clearRemoteTyping]);
+  }, [adapter, conversation.id, queueRefresh, clearRemoteTyping]);
 
   const scheduleAutoRetry = useCallback((clientId: string) => {
     if (

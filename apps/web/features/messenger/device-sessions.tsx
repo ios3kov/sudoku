@@ -23,6 +23,8 @@ export function DeviceSessions({ onClose, onCurrentRevoked, onPhoneUpdated }: { 
     }
   }
 
+  // Load remote sessions on mount; the same loader drives explicit refresh after revocation.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, []);
 
   async function revoke(session: DeviceSession) {

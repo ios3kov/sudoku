@@ -91,6 +91,8 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
     window.addEventListener(DEVICE_LOCK_EVENT, locked);
     window.addEventListener("pagehide", hide);
     document.addEventListener("visibilitychange", background);
+    // Session verification performs asynchronous I/O; initial/loading and lock states must remain synchronous.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void checkSession();
     return () => {
       loginPasswordRef.current = null;
@@ -136,12 +138,11 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
 
 function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, password: string) => void; onError: (message: string | null) => void }) {
   const [submitting, setSubmitting] = useState(false);
-  const [phone, setPhone] = useState("");
-  const [remember, setRemember] = useState(false);
+  const [phone, setPhone] = useState(savedPhone);
+  const [remember, setRemember] = useState(() => Boolean(savedPhone()));
   const alive = useRef(false);
   useEffect(() => {
     alive.current = true;
-    const stored = savedPhone(); setPhone(stored); setRemember(Boolean(stored));
     return () => { alive.current = false; };
   }, []);
 

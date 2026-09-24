@@ -8,11 +8,13 @@ import type { AssetSummary } from "./types";
 export function ProtectedAttachment({ asset, voice }: { asset: AssetSummary; voice: boolean }) {
   // Preserve native streaming/navigation on sessions without a device PIN.
   if (!currentUnlockToken()) return <Attachment asset={asset} voice={voice} url={asset.content_url} />;
-  return <PinAttachment asset={asset} voice={voice} />;
+  return <PinAttachment key={asset.id} asset={asset} voice={voice} />;
 }
 
 function Attachment({ asset, voice, url }: { asset: AssetSummary; voice: boolean; url: string }) {
   if (asset.mime_type.startsWith("image/")) return <a className="image-attachment" href={url} target="_blank" rel="noreferrer">
+    {/* Private/blob media must never be fetched through a server-side image optimizer. */}
+    {/* eslint-disable-next-line @next/next/no-img-element */}
     <img src={url} alt={asset.filename} loading="lazy" />
   </a>;
   if (voice && asset.mime_type.startsWith("audio/")) return <div className="voice-attachment"><audio controls preload="metadata" src={url} /></div>;
@@ -23,7 +25,7 @@ function Attachment({ asset, voice, url }: { asset: AssetSummary; voice: boolean
 
 function PinAttachment({ asset, voice }: { asset: AssetSummary; voice: boolean }) {
   const host = useRef<HTMLDivElement>(null);
-  const [requested, setRequested] = useState(false);
+  const [requested, setRequested] = useState(() => !("IntersectionObserver" in window));
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -31,7 +33,7 @@ function PinAttachment({ asset, voice }: { asset: AssetSummary; voice: boolean }
 
   useEffect(() => {
     if (!preview || !host.current) return;
-    if (!("IntersectionObserver" in window)) { setRequested(true); return; }
+    if (!("IntersectionObserver" in window)) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) { setRequested(true); observer.disconnect(); }
     }, { rootMargin: "100px" });
@@ -45,7 +47,6 @@ function PinAttachment({ asset, voice }: { asset: AssetSummary; voice: boolean }
     let objectUrl: string | null = null;
     const started = accessEpoch();
     const controller = new AbortController();
-    setError(false);
     void (async () => {
       if (asset.size_bytes > 25 * 1024 * 1024 || asset.size_bytes < 1) throw new Error("Invalid attachment size");
       const response = await privateFetch(`/v1/assets/${asset.id}/content`, { credentials: "include", cache: "no-store", signal: controller.signal });
@@ -60,7 +61,7 @@ function PinAttachment({ asset, voice }: { asset: AssetSummary; voice: boolean }
 
   return <div ref={host}>
     {url ? <Attachment asset={asset} voice={voice} url={url} /> : error ?
-      <button type="button" onClick={() => setRetry((v) => v + 1)}>Retry attachment</button> : requested ?
+      <button type="button" onClick={() => { setError(false); setRetry((v) => v + 1); }}>Retry attachment</button> : requested ?
       <span role="status">Loading attachment…</span> :
       <button type="button" onClick={() => setRequested(true)}>Open {asset.filename} · {formatBytes(asset.size_bytes)}</button>}
   </div>;

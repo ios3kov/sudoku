@@ -33,7 +33,6 @@ import {
   utf8String,
   type LocalMlsStateV1,
   type PeerIdentityPin,
-  type PendingApplicationSend,
   type RuntimeSnapshot,
 } from "./openmls-state";
 import {

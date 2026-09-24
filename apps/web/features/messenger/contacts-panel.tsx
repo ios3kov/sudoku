@@ -22,6 +22,8 @@ export function ContactsPanel({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
+  // Load remote contacts on mount; this also shares the explicit refresh loading state.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
 
   async function remove(userId: string) {
