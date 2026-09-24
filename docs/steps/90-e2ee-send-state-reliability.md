@@ -44,7 +44,7 @@ Retry remains idempotent because the same persisted client id and ciphertext are
 
 Encrypted image/file/voice sends now surface an immediate failed pending row if transport fails after upload/encryption and can be retried.
 
-`Remove` is intentionally limited to text pending messages in this step. Removing an already-uploaded encrypted attachment would require explicit object cleanup/retention semantics to avoid orphaned ciphertext assets.
+`Remove` applies to pending text, image/file and voice application messages so a permanently rejected media send cannot block the durable conversation queue. When a completed encrypted upload is removed before any message links it, the existing `cleanup_orphan_assets` worker deletes unlinked ready assets older than 24 hours; no plaintext asset exists.
 
 ## Critical MLS removal invariant
 
