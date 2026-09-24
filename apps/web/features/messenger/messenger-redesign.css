@@ -562,6 +562,12 @@
   transform:translateX(1px);
 }
 
+.voice-preview-play.is-playing::after,
+.voice-message-play.is-playing::after{
+  content:"Ⅱ";
+  transform:none;
+}
+
 .voice-preview-delete::after{
   content:"×";
   font-size:22px;
@@ -572,6 +578,12 @@
   content:"↑";
   font-size:18px;
   font-weight:800;
+}
+
+.voice-preview-send.is-uploading::after{
+  content:attr(data-progress);
+  font-size:10px;
+  letter-spacing:-.02em;
 }
 
 .voice-preview-send:not(:disabled){
