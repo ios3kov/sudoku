@@ -481,7 +481,8 @@ export function EncryptedConversationView({
     try {
       const prepared = await preparePhoto(file, quality);
       if (!lifetime || lifetime.signal.aborted) return;
-      const uploaded = await uploadEncryptedAsset(prepared, setUploadProgress);
+      const uploaded = await uploadEncryptedAsset(prepared, setUploadProgress, lifetime.signal);
+      if (lifetime.signal.aborted) return;
       const messageType = file.type.startsWith("image/") ? "image" : "file";
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
@@ -496,6 +497,7 @@ export function EncryptedConversationView({
       setReplyingToId(null);
       await refreshProjection();
     } catch (uploadError) {
+      if (lifetime?.signal.aborted) return;
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));
@@ -589,12 +591,15 @@ export function EncryptedConversationView({
     setError(null);
     setUploadProgress(0);
     let clientId: string | null = null;
+    const lifetime = photoLifetime.current;
     try {
+      if (!lifetime || lifetime.signal.aborted) return;
       const extension = voiceFileExtension(current.mimeType);
       const file = new File([current.blob], `voice-message.${extension}`, {
         type: current.mimeType,
       });
-      const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
+      const uploaded = await uploadEncryptedAsset(file, setUploadProgress, lifetime.signal);
+      if (lifetime.signal.aborted) return;
       const metadata = {
         ...uploaded.metadata,
         voice: current.presentation,
@@ -613,6 +618,7 @@ export function EncryptedConversationView({
       setReplyingToId(null);
       await refreshProjection();
     } catch (voiceError) {
+      if (lifetime?.signal.aborted) return;
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
       setQueuedCount(adapter.pendingApplicationCount(conversation.id));

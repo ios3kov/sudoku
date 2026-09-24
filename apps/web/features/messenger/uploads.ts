@@ -66,9 +66,17 @@ function putBlob(
   blob: Blob,
   headers: Record<string, string>,
   onProgress: (value: number) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
     const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const finish = (error?: Error) => {
+      signal?.removeEventListener("abort", abort);
+      if (error) reject(error);
+      else resolve();
+    };
     xhr.open("PUT", url, true);
     // Bound the entire PUT, including waiting for the storage response.
     xhr.timeout = 5 * 60 * 1000;
@@ -81,13 +89,18 @@ function putBlob(
       }
     };
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Upload failed: ${xhr.status}`));
+      if (xhr.status >= 200 && xhr.status < 300) finish();
+      else finish(new Error(`Upload failed: ${xhr.status}`));
     };
-    xhr.onerror = () => reject(new Error("Upload network error"));
-    xhr.ontimeout = () => reject(new Error("Upload timed out. Please retry."));
-    xhr.onabort = () => reject(new Error("Upload was interrupted. Please retry."));
-    xhr.send(blob);
+    xhr.onerror = () => finish(new Error("Upload network error"));
+    xhr.ontimeout = () => finish(new Error("Upload timed out. Please retry."));
+    xhr.onabort = () => finish(new DOMException("Upload was interrupted. Please retry.", "AbortError"));
+    signal?.addEventListener("abort", abort, { once: true });
+    try { xhr.send(blob); }
+    catch (error) {
+      signal?.removeEventListener("abort", abort);
+      reject(error);
+    }
   });
 }
 
@@ -137,12 +150,15 @@ export async function uploadAsset(
 export async function uploadEncryptedAsset(
   file: File,
   onProgress: (value: number) => void,
+  signal?: AbortSignal,
 ): Promise<EncryptedAssetUpload> {
+  signal?.throwIfAborted();
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) {
     throw new Error("File must be 25 MB or smaller");
   }
 
   const plaintext = new Uint8Array(await file.arrayBuffer());
+  signal?.throwIfAborted();
   const keyBytes = crypto.getRandomValues(new Uint8Array(32));
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const key = await crypto.subtle.importKey(
@@ -160,8 +176,10 @@ export async function uploadEncryptedAsset(
   const ciphertext = new Uint8Array(ciphertextBuffer);
   const plaintextSha256Hex = await sha256Hex(plaintext);
   const ciphertextSha256Hex = await sha256Hex(ciphertext);
+  signal?.throwIfAborted();
 
   const intentResponse = await fetch("/v1/assets/e2ee-upload-intents", {
+    signal,
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -174,13 +192,16 @@ export async function uploadEncryptedAsset(
     throw new Error("Unable to create encrypted upload");
   }
   const intent = (await intentResponse.json()) as UploadIntent;
+  signal?.throwIfAborted();
   const ciphertextCopy = ownedBytes(ciphertext);
   const ciphertextBlob = new Blob([ciphertextCopy.buffer], { type: E2EE_MIME });
 
-  await putBlob(intent.upload_url, ciphertextBlob, intent.headers, onProgress);
+  await putBlob(intent.upload_url, ciphertextBlob, intent.headers, onProgress, signal);
+  signal?.throwIfAborted();
   onProgress(100);
 
   const completeResponse = await fetch(`/v1/assets/${intent.asset_id}/complete`, {
+    signal,
     method: "POST",
     credentials: "include",
   });
@@ -188,6 +209,7 @@ export async function uploadEncryptedAsset(
     throw new Error("Encrypted upload failed verification");
   }
   const asset = (await completeResponse.json()) as AssetResponse;
+  signal?.throwIfAborted();
   if (!asset.e2ee_ciphertext) {
     throw new Error("Server did not mark attachment as E2EE ciphertext");
   }

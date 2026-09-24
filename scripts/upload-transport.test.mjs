@@ -19,6 +19,7 @@ function harness(outcomes) {
     timeout = 0;
     open(method, url) { this.method = method; this.url = url; }
     setRequestHeader(key, value) { this.headers[key] = value; }
+    abort() { this.aborted = true; this.onabort(); }
     send(blob) {
       puts.push(this);
       assert.equal(this.method, "PUT");
@@ -26,6 +27,7 @@ function harness(outcomes) {
       assert.ok(this.timeout > 0 && this.timeout <= 300000, "PUT must have a finite deadline");
       const outcome = outcomes.shift();
       queueMicrotask(() => {
+        if (typeof outcome === "function") { outcome(this); return; }
         this.upload.onprogress({ lengthComputable: true, loaded: 1, total: 2 });
         if (typeof outcome === "number") { this.status = outcome; this.onload(); }
         else this[`on${outcome}`]?.();
@@ -39,7 +41,7 @@ function harness(outcomes) {
       : { asset_id: "asset", upload_url: "https://storage.invalid/object", headers: { "If-None-Match": "*" } } };
   };
   const context = { exports: {}, crypto: webcrypto, XMLHttpRequest: FakeXHR,
-    Uint8Array, ArrayBuffer, Blob, btoa, atob,
+    Uint8Array, ArrayBuffer, Blob, btoa, atob, DOMException,
     require(name) {
       if (name === "./device-access") return { privateFetch };
       if (name === "./bounded-download") return {};
@@ -48,6 +50,39 @@ function harness(outcomes) {
   vm.runInNewContext(outputText, context);
   return { api: context.exports, requests, puts };
 }
+
+test("already cancelled encrypted upload never reads the file or starts requests", async () => {
+  const { api, requests, puts } = harness([]);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(api.uploadEncryptedAsset({ arrayBuffer() { throw new Error("must not read"); } }, () => {}, controller.signal), { name: "AbortError" });
+  assert.equal(requests.length, 0);
+  assert.equal(puts.length, 0);
+});
+
+test("cancellation during file preparation prevents upload intent", async () => {
+  const { api, requests } = harness([]);
+  const controller = new AbortController();
+  const file = { size: 4, async arrayBuffer() { controller.abort(); return new ArrayBuffer(4); } };
+  await assert.rejects(api.uploadEncryptedAsset(file, () => {}, controller.signal), { name: "AbortError" });
+  assert.equal(requests.length, 0);
+});
+
+test("cancellation aborts active encrypted PUT and prevents completion", { timeout: 2000 }, async () => {
+  const controller = new AbortController();
+  const { api, requests, puts } = harness([() => controller.abort()]);
+  await assert.rejects(api.uploadEncryptedAsset(new File(["bytes"], "file"), () => {}, controller.signal), { name: "AbortError" });
+  assert.equal(puts[0].aborted, true);
+  assert.equal(requests.length, 1);
+});
+
+test("cancel after PUT success still prevents completion", { timeout: 2000 }, async () => {
+  const controller = new AbortController();
+  const { api, requests, puts } = harness([(xhr) => { xhr.status = 200; xhr.onload(); controller.abort(); }]);
+  await assert.rejects(api.uploadEncryptedAsset(new File(["bytes"], "file"), () => {}, controller.signal), { name: "AbortError" });
+  assert.equal(requests.length, 1);
+  assert.equal(puts[0].aborted, undefined, "settled PUT removes its abort listener");
+});
 
 for (const name of ["uploadAsset", "uploadEncryptedAsset"]) {
   for (const [outcome, message] of [["timeout", /timed out/], ["abort", /interrupted/], ["error", /network/], [412, /412/]]) {
