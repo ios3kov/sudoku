@@ -44,8 +44,9 @@ export async function analyzeVoiceBlob(
 
   if (typeof AudioContext === "undefined") return fallback;
 
-  const context = new AudioContext();
+  let context: AudioContext | null = null;
   try {
+    context = new AudioContext();
     const bytes = await blob.arrayBuffer();
     const buffer = await context.decodeAudioData(bytes.slice(0));
     return {
@@ -55,6 +56,6 @@ export async function analyzeVoiceBlob(
   } catch {
     return fallback;
   } finally {
-    void context.close().catch(() => undefined);
+    if (context) void context.close().catch(() => undefined);
   }
 }
