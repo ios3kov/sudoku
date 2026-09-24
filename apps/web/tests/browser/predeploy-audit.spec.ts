@@ -91,6 +91,9 @@ test("transport failure never disables the microphone Stop control", async ({pag
   await expect(page.locator(".voice-button")).toBeEnabled({timeout:1000});
   await page.locator(".voice-button").click();
   await expect.poll(()=>page.evaluate(()=>window.__predeployAudit.media.activeTracks)).toBe(0);
+  await expect(page.getByRole("group",{name:"Voice message preview"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Send voice message"})).toBeDisabled();
+  await expect(page.getByRole("alert")).toContainText("Secure sync is blocked");
   expect(await page.evaluate(()=>window.__predeployAudit.protocol.sends)).toBe(0);
 });
 
