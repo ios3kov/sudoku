@@ -266,8 +266,8 @@ export function VoiceMessagePlayback({
       />
       <button
         type="button"
-        className={`voice-message-play ${playing ? "is-playing" : ""}`}
-        aria-label={playing ? "Pause voice message" : "Play voice message"}
+        className={`voice-message-play ${loading ? "is-loading" : playing ? "is-playing" : ""}`}
+        aria-label={loading ? "Decrypting voice message" : playing ? "Pause voice message" : "Play voice message"}
         disabled={loading}
         onClick={() => void togglePlayback()}
       >
