@@ -6,6 +6,7 @@ import { enqueuePending, listPending, removePending } from "./outbox";
 import type { RealtimeClient } from "./realtime";
 import type { Conversation, CurrentUser, Message, PendingMessage, RealtimeEvent } from "./types";
 import { uploadAsset } from "./uploads";
+import { nativeMediaAvailable, pickNativeAttachment } from "./native-media-access";
 import { ProtectedAttachment } from "./protected-attachment";
 import { GroupSettings } from "./group-settings";
 import { ConversationPreferences } from "./conversation-preferences";
@@ -334,10 +335,7 @@ export function ConversationView({
     }
   }
 
-  async function attach(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
+  async function attachFile(file: File) {
     setError(null);
     if (!navigator.onLine) {
       setError("Attachments require a connection");
@@ -354,6 +352,26 @@ export function ConversationView({
       setError(uploadError instanceof Error ? uploadError.message : "Attachment failed");
     } finally {
       setUploadProgress(null);
+    }
+  }
+
+  async function attach(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) await attachFile(file);
+  }
+
+  async function chooseAttachment() {
+    if (!nativeMediaAvailable()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const file = await pickNativeAttachment();
+      await attachFile(file);
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setError(reason instanceof Error ? reason.message : "Unable to select attachment");
     }
   }
 
@@ -590,7 +608,7 @@ export function ConversationView({
           className={`attach-button ${uploadProgress !== null ? "is-uploading" : ""}`}
           aria-label="Attach file"
           disabled={uploadProgress !== null || recording}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => void chooseAttachment()}
         >
           {uploadProgress === null ? "+" : `${uploadProgress}%`}
         </button>
