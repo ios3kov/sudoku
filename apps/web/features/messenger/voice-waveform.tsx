@@ -44,6 +44,7 @@ export function VoiceWaveform({
         step={1}
         value={Math.round(boundedProgress * 1000)}
         aria-label={label}
+        aria-valuetext={`${Math.round(boundedProgress * 100)}%`}
         disabled={disabled}
         onChange={(event) => onSeek(Number(event.target.value) / 1000)}
       />
