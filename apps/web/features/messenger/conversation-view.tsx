@@ -82,7 +82,9 @@ export function ConversationView({
   const timelineMessages = useMemo(() => messages.map((message) => ({
     ...message, senderId: message.sender_id, createdAt: message.created_at, deleted: Boolean(message.deleted_at),
   })), [messages]);
-  const peerReads = conversation.members.filter((member) => member.id !== user.id).map((member) => member.last_read_sequence);
+  const peerMembers = conversation.members.filter((member) => member.id !== user.id);
+  const peerReads = peerMembers.map((member) => member.last_read_sequence);
+  const peerNames = peerMembers.map((member) => member.display_name);
   const typing = useTypingPresence({
     conversationId: conversation.id,
     currentUserId: user.id,
@@ -541,6 +543,7 @@ export function ConversationView({
               own={message.sender_id === user.id}
               replyMessage={message.reply_to ? messageById.get(message.reply_to) ?? null : null}
               peerReads={peerReads}
+              peerNames={peerNames}
               senderName={conversation.type === "group" && message.sender_id !== user.id ? conversation.members.find((member) => member.id === message.sender_id)?.display_name ?? "Member" : null}
               onReply={() => beginReply(message)}
               onToggleActions={() => setActionMessageId(message.id)}
@@ -618,6 +621,7 @@ function MessageBubble({
   own,
   replyMessage,
   peerReads,
+  peerNames,
   senderName,
   onReply,
   onToggleActions,
@@ -626,6 +630,7 @@ function MessageBubble({
   own: boolean;
   replyMessage: Message | null;
   peerReads: readonly number[];
+  peerNames: readonly string[];
   senderName: string | null;
   onReply: () => void;
   onToggleActions: () => void;
@@ -649,7 +654,7 @@ function MessageBubble({
               {message.reactions.map((reaction) => <span key={reaction.emoji}>{reaction.emoji} {reaction.user_ids.length}</span>)}
             </div>
           ) : null}
-          <MessageMeta createdAt={message.created_at} sequence={message.sequence} own={own} peerReads={peerReads} edited={Boolean(message.edited_at)} />
+          <MessageMeta createdAt={message.created_at} sequence={message.sequence} own={own} peerReads={peerReads} peerNames={peerNames} edited={Boolean(message.edited_at)} />
         </div>
         </MessageInteraction>
         {!deleted ? <button className="message-more-button" type="button" onClick={onToggleActions} aria-label="Message actions" aria-haspopup="dialog">•••</button> : null}
