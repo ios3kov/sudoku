@@ -207,6 +207,16 @@ jobs:
           docker run --rm sudoku-minio-ci --version >/dev/null
           docker run --rm sudoku-mc-ci --version >/dev/null
 
+      - name: Verify conditional uploads against pinned MinIO
+        run: |
+          docker run -d --name sudoku-minio-upload-audit \
+            -p 127.0.0.1:19000:9000 \
+            -e MINIO_ROOT_USER=audit-local \
+            -e MINIO_ROOT_PASSWORD=audit-local-secret \
+            sudoku-minio-ci server /data
+          trap 'docker rm -f sudoku-minio-upload-audit >/dev/null' EXIT
+          python tests/ops/minio_conditional_upload.py
+
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com
