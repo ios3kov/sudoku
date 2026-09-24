@@ -184,6 +184,39 @@ test("native Face ID quick unlock uses the stored device PIN without persisting 
   await expect(page.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
 });
 
+test("failed native biometric enrollment falls back to a working PIN-only session", async ({ page }) => {
+  test.setTimeout(240_000);
+
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "SudokuNativeBiometric", {
+      configurable: true,
+      value: {
+        status: async () => ({ available: true, enrolled: false, type: "faceID" }),
+        enroll: async () => { throw new Error("mock keychain failure"); },
+        clear: async () => ({ available: true, enrolled: false, type: "faceID" }),
+        unlock: async () => { throw new Error("not enrolled"); },
+      },
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await passwordLogin(page, testPhone(2));
+  await page.getByRole("button", { name: "Set PIN", exact: true }).click();
+  await page.getByLabel("Four-digit PIN", { exact: true }).fill("1357");
+  await page.getByLabel("Confirm PIN", { exact: true }).fill("1357");
+  await page.getByLabel("Use Face ID for quick unlock", { exact: true }).check();
+  await page.getByRole("button", { name: "Save PIN", exact: true }).click();
+
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+
+  await page.reload();
+  await revealCurrentPage(page);
+  await expect(page.getByRole("button", { name: "Unlock with Face ID", exact: true })).toHaveCount(0);
+  await page.getByLabel("Device PIN", { exact: true }).fill("1357");
+  await page.getByRole("button", { name: "Unlock", exact: true }).click();
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+});
+
 test("Not now enters the app without enabling a device PIN", async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 390, height: 844 });
