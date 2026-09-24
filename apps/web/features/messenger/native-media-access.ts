@@ -54,6 +54,7 @@ export async function pickNativeAttachment(): Promise<File> {
     || payload.size < 0
     || payload.size > MAX_ATTACHMENT_BYTES
     || typeof payload.base64 !== "string"
+    || payload.base64.length > Math.ceil(MAX_ATTACHMENT_BYTES * 4 / 3) + 8
     || !ALLOWED_MIME_TYPES.has(payload.mimeType)
   ) {
     throw new Error("Native attachment picker returned invalid data");
