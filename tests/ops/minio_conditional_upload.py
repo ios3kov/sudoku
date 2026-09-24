@@ -39,7 +39,10 @@ def main():
             assert http.put(url, content=data, headers=headers).status_code == 200
             assert http.put(url, content=b"replacement", headers=headers).status_code == 412
             unsigned = {k: v for k, v in headers.items() if k != "If-None-Match"}
-            assert http.put(url, content=b"replacement", headers=unsigned).status_code == 403
+            denied = http.put(url, content=b"replacement", headers=unsigned)
+            # Pinned MinIO maps missing signed headers to HTTP 400 AccessDenied.
+            assert denied.status_code == 400, denied.text
+            assert "<Code>AccessDenied</Code>" in denied.text, denied.text
         body = client.get_object(Bucket=bucket, Key=key)["Body"]
         try:
             assert body.read() == data
