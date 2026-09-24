@@ -38,18 +38,23 @@ export function decryptApplicationEvent(
       || !Array.isArray(decoded.assetIds)
       || decoded.assetIds.some((item) => typeof item !== "string")
       || !Array.isArray(decoded.attachments)
-      || decoded.attachments.some((item) => !isEncryptedAttachmentMetadata(item))
     ) {
       throw new Error("Invalid decrypted MLS message event");
     }
+
+    const attachments = decoded.attachments.map((item) => {
+      if (!isEncryptedAttachmentMetadata(item)) {
+        throw new Error("Invalid decrypted MLS message event");
+      }
+      return item;
+    });
     if (
       decoded.messageType !== "voice"
-      && decoded.attachments.some(
-        (item) => (item as { voice?: unknown }).voice !== undefined,
-      )
+      && attachments.some((item) => item.voice !== undefined)
     ) {
       throw new Error("Voice presentation metadata requires a voice message");
     }
+
     return {
       body: decoded.body,
       event: {
@@ -58,7 +63,7 @@ export function decryptApplicationEvent(
         body: decoded.body,
         replyTo: decoded.replyTo,
         assetIds: decoded.assetIds as string[],
-        attachments: decoded.attachments,
+        attachments,
       },
     };
   }
