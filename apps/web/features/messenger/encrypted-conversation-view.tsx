@@ -283,9 +283,11 @@ export function EncryptedConversationView({
 
     setBusy(true);
     setUploadProgress(0);
+    let clientId: string | null = null;
     try {
       const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
       const messageType = file.type.startsWith("image/") ? "image" : "file";
+      clientId = crypto.randomUUID();
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
         messageType,
@@ -293,16 +295,27 @@ export function EncryptedConversationView({
         replyTo: replyingTo?.id ?? null,
         assetIds: [uploaded.asset.id],
         attachments: [uploaded.metadata],
-      });
+      }, clientId);
       setReplyingToId(null);
       await refreshProjection();
     } catch (uploadError) {
-      setError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Encrypted attachment failed",
-      );
-      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+      setQueuedMessages(pendingMessages);
+      setQueuedCount(pendingMessages.length);
+      if (
+        clientId
+        && navigator.onLine
+        && pendingMessages.some((message) => message.id === clientId)
+      ) {
+        setFailedQueuedIds((current) => [...new Set([...current, clientId!])]);
+        setError(null);
+      } else {
+        setError(
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Encrypted attachment failed",
+        );
+      }
     } finally {
       setUploadProgress(null);
       setBusy(false);
@@ -333,12 +346,14 @@ export function EncryptedConversationView({
     if (syncBlocked) { setError("Voice note was not sent: Secure sync is blocked"); return; }
     setBusy(true);
     setUploadProgress(0);
+    let clientId: string | null = null;
     try {
       const extension = voiceFileExtension(mimeType);
       const file = new File(chunks, `voice-${Date.now()}.${extension}`, {
         type: mimeType,
       });
       const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
+      clientId = crypto.randomUUID();
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
         messageType: "voice",
@@ -346,16 +361,27 @@ export function EncryptedConversationView({
         replyTo: replyingTo?.id ?? null,
         assetIds: [uploaded.asset.id],
         attachments: [uploaded.metadata],
-      });
+      }, clientId);
       setReplyingToId(null);
       await refreshProjection();
     } catch (voiceError) {
-      setError(
-        voiceError instanceof Error
-          ? voiceError.message
-          : "Encrypted voice note failed",
-      );
-      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
+      const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
+      setQueuedMessages(pendingMessages);
+      setQueuedCount(pendingMessages.length);
+      if (
+        clientId
+        && navigator.onLine
+        && pendingMessages.some((message) => message.id === clientId)
+      ) {
+        setFailedQueuedIds((current) => [...new Set([...current, clientId!])]);
+        setError(null);
+      } else {
+        setError(
+          voiceError instanceof Error
+            ? voiceError.message
+            : "Encrypted voice note failed",
+        );
+      }
     } finally {
       setUploadProgress(null);
       setBusy(false);
