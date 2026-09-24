@@ -105,7 +105,7 @@ export function EncryptedConversationView({
           current.filter((id) => pendingMessages.some((message) => message.id === id))
         );
         setSyncBlocked(false);
-        setQueuedCount(pendingMessages.length);
+        setQueuedCount(adapter.pendingApplicationCount(conversation.id));
         if (projection.rejectedEventIds.length > 0) {
           setError("Some encrypted updates were rejected");
         } else {
@@ -115,7 +115,7 @@ export function EncryptedConversationView({
         const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
         setSyncBlocked(true);
         setError("Secure sync is blocked");
-        setQueuedCount(pendingMessages.length);
+        setQueuedCount(adapter.pendingApplicationCount(conversation.id));
         setQueuedMessages(pendingMessages);
         setFailedQueuedIds((current) =>
           current.filter((id) => pendingMessages.some((message) => message.id === id))
@@ -215,7 +215,7 @@ export function EncryptedConversationView({
       await refreshProjection();
     } catch {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
-      setQueuedCount(pendingMessages.length);
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       setQueuedMessages(pendingMessages);
       if (!editing && pendingMessages.some((message) => message.id === clientId)) {
         setBody("");
@@ -249,7 +249,7 @@ export function EncryptedConversationView({
     } catch {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
-      setQueuedCount(pendingMessages.length);
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       if (pendingMessages.some((message) => message.id === clientId)) {
         setFailedQueuedIds((current) => [...new Set([...current, clientId])]);
       }
@@ -265,7 +265,7 @@ export function EncryptedConversationView({
       await adapter.discardPendingApplicationSend(clientId);
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
-      setQueuedCount(pendingMessages.length);
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       setFailedQueuedIds((current) => current.filter((id) => id !== clientId));
     } catch {
       setError("Unable to remove queued encrypted message");
@@ -301,7 +301,7 @@ export function EncryptedConversationView({
     } catch (uploadError) {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
-      setQueuedCount(pendingMessages.length);
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       if (
         clientId
         && navigator.onLine
@@ -367,7 +367,7 @@ export function EncryptedConversationView({
     } catch (voiceError) {
       const pendingMessages = adapter.pendingApplicationMessages(conversation.id);
       setQueuedMessages(pendingMessages);
-      setQueuedCount(pendingMessages.length);
+      setQueuedCount(adapter.pendingApplicationCount(conversation.id));
       if (
         clientId
         && navigator.onLine
