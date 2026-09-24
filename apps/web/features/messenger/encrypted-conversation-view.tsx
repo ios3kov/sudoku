@@ -737,6 +737,7 @@ export function EncryptedConversationView({
         visibleCount={visibleCount}
         currentUserId={user.id}
         readSequence={readSequence}
+        knownReadSequence={conversation.last_read_sequence}
         onReadLatest={markVisibleRead}
         childrenBefore={loading ? <p className="muted center">Decrypting…</p> : messages.length === 0 ? (
           <div className="empty-conversations">
