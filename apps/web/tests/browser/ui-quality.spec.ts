@@ -1,4 +1,3 @@
-import { PUZZLE, SOLUTION } from "../../features/sudoku/puzzle";
 import { expect, test, type Page } from "@playwright/test";
 
 async function dragFive(page: Page, progress: number, pointerId: number) {
@@ -199,8 +198,10 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
 
 
 test("solving the last Sudoku cell persists one completion time across reload", async ({ page }) => {
-  const index = PUZZLE.findIndex(value => value === 0);
-  const grid = [...SOLUTION];
+  // Fixed near-complete board for the shipped level-1 puzzle.
+  const solution = "534678912672195348198342567859761423426853791713924856961537284287419635345286179".split("").map(Number);
+  const index = 2;
+  const grid = [...solution];
   grid[index] = 0;
   await page.goto("/");
   await page.evaluate(value => localStorage.setItem("sudoku:level-1:v2", JSON.stringify({
@@ -210,11 +211,11 @@ test("solving the last Sudoku cell persists one completion time across reload", 
   const board = page.getByRole("grid", { name: "Sudoku board" });
   await expect(board.locator("button").nth(index)).toHaveText("");
   await board.locator("button").nth(index).click();
-  await page.locator(".digits").getByRole("button", { name: String(SOLUTION[index]), exact: true }).click();
+  await page.locator(".digits").getByRole("button", { name: String(solution[index]), exact: true }).click();
   const completed = () => page.evaluate(() => JSON.parse(localStorage.getItem("sudoku:level-1:v2")!).completedAt as number | null);
   await expect.poll(completed).toBeGreaterThan(0);
   const first = await completed();
   await page.reload();
-  await expect(board.locator("button").nth(index)).toHaveText(String(SOLUTION[index]));
+  await expect(board.locator("button").nth(index)).toHaveText(String(solution[index]));
   await expect.poll(completed).toBe(first);
 });
