@@ -68,7 +68,7 @@ final class NativeVideoPlayback: NSObject, WKScriptMessageHandlerWithReply {
     func install(into controller: WKUserContentController) {
         controller.addScriptMessageHandler(self, contentWorld: .page, name: Self.handlerName)
         controller.addUserScript(WKUserScript(source: #"""
-        if (location.protocol === "https:" && location.hostname === "sudoku.moscow") {
+        if (location.origin === "https://sudoku.moscow") {
           window.SudokuNativeVideo = {
             play: payload => window.webkit.messageHandlers.sudokuVideoPlayback.postMessage(payload),
             stop: id => window.webkit.messageHandlers.sudokuVideoPlayback.postMessage({action: "stop", id})
@@ -104,6 +104,7 @@ final class NativeVideoPlayback: NSObject, WKScriptMessageHandlerWithReply {
                                replyHandler: @escaping (Any?, String?) -> Void) {
         guard message.name == Self.handlerName, message.frameInfo.isMainFrame,
               let url = message.frameInfo.request.url, url.scheme == "https", url.host == "sudoku.moscow",
+              (url.port == nil || url.port == 443),
               let payload = message.body as? [String: Any],
               let id = payload["id"] as? String, !id.isEmpty, id.count <= 64 else {
             replyHandler(nil, "Video playback unavailable"); return
