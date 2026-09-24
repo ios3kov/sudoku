@@ -201,8 +201,10 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     // delivered with the same client id/ciphertext after reconnect.
     await ownerContext.setOffline(true);
     await sendText(owner, "queued while offline");
-    await expect(owner.getByText("Encrypted message queued for retry", { exact: true }))
-      .toBeVisible();
+    const offlineQueued = owner.locator(".message-bubble.pending").filter({
+      hasText: "queued while offline",
+    });
+    await expect(offlineQueued.getByText("Queued", { exact: true })).toBeVisible();
     await ownerContext.setOffline(false);
 
     await expect(acceptedMessage(owner, "queued while offline")).toBeVisible({
@@ -214,6 +216,65 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await expect(acceptedMessage(peer, "queued while offline")).toBeVisible({
       timeout: 60_000,
     });
+
+    // A transient online failure remains a durable local ciphertext and exposes
+    // an explicit manual Retry action. Retrying must reuse the existing client
+    // id/ciphertext rather than create a second visible message.
+    const messagePattern = "**/v1/conversations/**/messages";
+    let blockedMessagePost = false;
+    await owner.route(messagePattern, async (route) => {
+      if (!blockedMessagePost && route.request().method() === "POST") {
+        blockedMessagePost = true;
+        await route.abort();
+        return;
+      }
+      await route.continue();
+    });
+
+    await sendText(owner, "manual retry state");
+    const failedQueued = owner.locator(".message-bubble.pending").filter({
+      hasText: "manual retry state",
+    });
+    await expect.poll(() => blockedMessagePost).toBe(true);
+    await expect(failedQueued.getByText("Failed", { exact: true })).toBeVisible();
+    await expect(failedQueued.getByRole("button", { name: "Retry failed message" })).toBeVisible();
+
+    await owner.unroute(messagePattern);
+    await failedQueued.getByRole("button", { name: "Retry failed message" }).click();
+    await expect(acceptedMessage(owner, "manual retry state")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(acceptedMessage(owner, "manual retry state")).toHaveCount(1);
+
+    await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(acceptedMessage(peer, "manual retry state")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(acceptedMessage(peer, "manual retry state")).toHaveCount(1);
+
+    // Removing an offline queued text must not send it later and must not break
+    // the MLS generation chain for a subsequent encrypted message.
+    await ownerContext.setOffline(true);
+    await sendText(owner, "removed queued message");
+    const removableQueued = owner.locator(".message-bubble.pending").filter({
+      hasText: "removed queued message",
+    });
+    await expect(removableQueued.getByText("Queued", { exact: true })).toBeVisible();
+    await removableQueued.getByRole("button", { name: "Remove queued message" }).click();
+    await expect(removableQueued).toHaveCount(0);
+    await ownerContext.setOffline(false);
+
+    await expect(acceptedMessage(owner, "removed queued message")).toHaveCount(0);
+    await sendText(owner, "sent after removed queue");
+    await expect(acceptedMessage(owner, "sent after removed queue")).toBeVisible({
+      timeout: 60_000,
+    });
+
+    await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(acceptedMessage(peer, "sent after removed queue")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(acceptedMessage(peer, "removed queued message")).toHaveCount(0);
 
     // Read receipts now follow visible history and are deduplicated. Hold a
     // successful transport response itself to exercise the same queued-refresh
