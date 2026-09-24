@@ -35,7 +35,9 @@ const sizes = jsFiles.map((file) => {
 });
 const totalJsGzip = sizes.reduce((sum, item) => sum + item.gzip, 0);
 const largest = sizes.reduce((max, item) => item.gzip > max.gzip ? item : max, sizes[0]);
-const wasmRaw = fs.existsSync(wasmPath) ? fs.statSync(wasmPath).size : 0;
+if (!fs.existsSync(wasmPath)) throw new Error("Missing OpenMLS WASM artifact; build the pinned browser package first");
+const wasmRaw = fs.statSync(wasmPath).size;
+if (wasmRaw === 0) throw new Error("OpenMLS WASM artifact is empty");
 const serviceWorkerRaw = fs.statSync(swPath).size;
 
 console.log(JSON.stringify({
