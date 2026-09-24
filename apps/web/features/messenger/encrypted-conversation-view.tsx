@@ -16,6 +16,7 @@ import type { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { RealtimeClient } from "./realtime";
 import type { Conversation, CurrentUser, RealtimeEvent, VoiceAttachmentPresentation } from "./types";
 import { uploadEncryptedAsset } from "./uploads";
+import { canPreparePhoto, preparePhoto, type PhotoQuality } from "./photo-preparation";
 import { NATIVE_MEDIA_READY_EVENT, nativeMediaAvailable, pickNativeAttachment } from "./native-media-access";
 import { GroupSettings } from "./group-settings";
 import { SecurityVerification } from "./security-verification";
@@ -93,6 +94,13 @@ export function EncryptedConversationView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionMessageId, setActionMessageId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const photoLifetime = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const lifetime = new AbortController();
+    photoLifetime.current = lifetime;
+    return () => lifetime.abort();
+  }, []);
   const [voiceDraft, setVoiceDraft] = useState<{
     blob: Blob;
     mimeType: string;
@@ -457,7 +465,7 @@ export function EncryptedConversationView({
   }
 
 
-  async function attachFile(file: File) {
+  async function attachFile(file: File, quality: PhotoQuality = "original") {
     if (busy || syncBlocked) return;
     setError(null);
     if (!navigator.onLine) {
@@ -468,8 +476,11 @@ export function EncryptedConversationView({
     setBusy(true);
     setUploadProgress(0);
     let clientId: string | null = null;
+    const lifetime = photoLifetime.current;
     try {
-      const uploaded = await uploadEncryptedAsset(file, setUploadProgress);
+      const prepared = await preparePhoto(file, quality);
+      if (!lifetime || lifetime.signal.aborted) return;
+      const uploaded = await uploadEncryptedAsset(prepared, setUploadProgress);
       const messageType = file.type.startsWith("image/") ? "image" : "file";
       await adapter.sendMessageDurably({
         conversationId: conversation.id,
@@ -508,10 +519,16 @@ export function EncryptedConversationView({
     }
   }
 
+  async function selectAttachment(file: File) {
+    if (busy || syncBlocked) return;
+    if (canPreparePhoto(file)) setSelectedPhoto(file);
+    else await attachFile(file);
+  }
+
   async function attach(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (file) await attachFile(file);
+    if (file) await selectAttachment(file);
   }
 
   async function chooseAttachment() {
@@ -521,7 +538,7 @@ export function EncryptedConversationView({
     }
     try {
       const file = await pickNativeAttachment();
-      await attachFile(file);
+      await selectAttachment(file);
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
       setError(reason instanceof Error ? reason.message : "Unable to select attachment");
@@ -861,6 +878,15 @@ export function EncryptedConversationView({
           ) : null}
         </>}
       />
+      {selectedPhoto ? <MessageActionSheet
+        title="Photo quality"
+        preview="Standard uses less data. Original keeps the selected file unchanged."
+        onClose={() => setSelectedPhoto(null)}
+        actions={[
+          { id: "standard", label: "Send Standard", run: () => { void attachFile(selectedPhoto, "standard"); } },
+          { id: "original", label: "Send Original", run: () => { void attachFile(selectedPhoto, "original"); } },
+        ]}
+      /> : null}
       {actionMessage && !actionMessage.deleted ? <MessageActionSheet
         preview={encryptedPreview(actionMessage)}
         onClose={() => setActionMessageId(null)}
@@ -964,4 +990,3 @@ function encryptedPreview(message: ProjectedEncryptedMessage): string {
   if (message.messageType === "file") return "Encrypted file";
   return (message.body ?? "Message").slice(0, 80);
 }
-

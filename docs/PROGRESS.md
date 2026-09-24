@@ -84,3 +84,7 @@ Earlier audit/progress evidence remains in [the historical index](audits/progres
 
 
 PR #72 is merged as `22e94a87bfbc3b1b40b54f381c263db412b38537`. PR #73 is merged as `ceccb776a645fec5ca671491f9eeb9d0a3648a07`; all five workflows passed on its reviewed head. Accessibility and physical-iPhone acceptance remain open.
+
+## Media storage follow-up — 2026-09-24
+
+[Step95](steps/95-media-storage-and-compression.md) adds the Russian private-S3, sender-side compression and non-destructive archive workstream to the production plan. The first repository slice is JPEG Standard/Original preparation before E2EE; voice/video optimization, provider selection, tiering and production migration remain open.

@@ -190,6 +190,22 @@ UX:
 - better media viewer;
 - accessibility labels, Dynamic Type and VoiceOver pass.
 
+## Media storage and compression — production workstream
+
+Product direction confirmed on 2026-09-24. Implementation is tracked in [Step95](95-media-storage-and-compression.md).
+
+- [ ] Evaluate private S3 storage in a Russian region, starting with Selectel; verify region, access controls, availability, billing and costs for 100 GB / 1 TB including downloads and a separate backup.
+- [ ] Compress media on the sender device before E2EE encryption. Offer Standard / Original photo quality; tune voice recording next; implement video transcoding separately with device performance/quality acceptance.
+- [ ] Move encrypted objects off the application server disk while keeping application authorization, short-lived signed access and original metadata/keys inside MLS messages.
+- [ ] Evaluate cheaper storage for old media (90 days is a candidate threshold, not an enabled expiry rule). Compare total costs and retrieval latency before enabling tiering. Do not automatically delete linked media by age.
+- [ ] Introduce quotas, usage/budget alerts, failed-upload cleanup and explicit unavailable/restoring states where the storage class requires them.
+- [ ] Verify a consistent database/object backup and restoration, with bounded backup retention and replay of deletions after recovery.
+- [ ] Test migration by copying ciphertext, verifying object checksums and counts, switching reads with rollback available, and retaining the source until acceptance.
+
+Provider trust does not replace E2EE. No provider-side plaintext compression or thumbnails. No public bucket, user metadata in object keys, or permanent public object URLs. Original means the bytes selected by the client; native Photos already converts selected images to JPEG, which must not be described as an archival original.
+
+Paid provisioning, production credentials/configuration changes, migrations, data transfers and releases require explicit authorization after a concrete reviewed plan. Repository work does not authorize them.
+
 ## P2 — Native reliability
 
 ### Native APNs
