@@ -814,7 +814,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
   async sendMessageDurably(
     input: OutboundPlaintext,
     clientId = crypto.randomUUID(),
-    onPrepared?: () => void,
+    onPrepared?: (clientId: string) => void,
   ): Promise<Message> {
     const event: EncryptedEventRecord["event"] = {
       kind: "message",
@@ -1542,7 +1542,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     event: EncryptedEventRecord["event"],
     serverType: "text" | "image" | "file" | "voice",
     assetIds: string[],
-    onPrepared?: () => void,
+    onPrepared?: (clientId: string) => void,
   ): Promise<Message> {
     return this.enqueue(async () => {
       this.assertReady();
@@ -1590,7 +1590,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         throw new Error("Encrypted client id is already queued for another conversation");
       }
 
-      onPrepared?.();
+      onPrepared?.(clientId);
       const delivered = await this.flushPendingApplicationSends();
       const result = delivered.get(clientId);
       if (!result) {
