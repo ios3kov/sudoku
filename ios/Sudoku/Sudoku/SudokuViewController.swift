@@ -7,6 +7,8 @@ final class SudokuViewController: UIViewController {
     private static let appURL = URL(string: "https://sudoku.moscow/")!
     private static let trustedHost = "sudoku.moscow"
     private static let contactHandlerName = "sudokuContacts"
+    private static let biometricHandlerName = "sudokuBiometric"
+    private static let mediaHandlerName = "sudokuMedia"
 
     private lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
@@ -16,13 +18,21 @@ final class SudokuViewController: UIViewController {
 
         let controller = WKUserContentController()
         controller.add(self, name: Self.contactHandlerName)
-        controller.addUserScript(
-            WKUserScript(
-                source: Self.contactBridgeScript,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: true
+        controller.add(self, name: Self.biometricHandlerName)
+        controller.add(self, name: Self.mediaHandlerName)
+        for source in [
+            Self.contactBridgeScript,
+            Self.biometricBridgeScript,
+            Self.mediaBridgeScript,
+        ] {
+            controller.addUserScript(
+                WKUserScript(
+                    source: source,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
             )
-        )
+        }
         configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -35,7 +45,10 @@ final class SudokuViewController: UIViewController {
     }()
 
     private let privacyCover = PrivacyCoverView()
+    private let biometricPinVault = BiometricPinVault()
+    private let mediaPicker = NativeMediaPicker()
     private var pendingContactRequestID: String?
+    private var pendingMediaRequestID: String?
     private var webContentLoaded = false
 
     override func viewDidLoad() {
@@ -69,9 +82,10 @@ final class SudokuViewController: UIViewController {
     }
 
     deinit {
-        webView.configuration.userContentController.removeScriptMessageHandler(
-            forName: Self.contactHandlerName
-        )
+        let controller = webView.configuration.userContentController
+        controller.removeScriptMessageHandler(forName: Self.contactHandlerName)
+        controller.removeScriptMessageHandler(forName: Self.biometricHandlerName)
+        controller.removeScriptMessageHandler(forName: Self.mediaHandlerName)
     }
 
     func showPrivacyCover() {
@@ -159,6 +173,176 @@ final class SudokuViewController: UIViewController {
         )
     }
 
+    private func handleBiometricRequest(
+        requestID: String,
+        operation: String,
+        body: [String: Any]
+    ) {
+        switch operation {
+        case "status":
+            resolveBiometric(requestID: requestID, status: biometricPinVault.status())
+
+        case "enroll":
+            guard let pin = body["pin"] as? String else {
+                rejectBiometric(requestID: requestID, message: "Missing PIN")
+                return
+            }
+            do {
+                try biometricPinVault.store(pin: pin)
+                resolveBiometric(requestID: requestID, status: biometricPinVault.status())
+            } catch {
+                rejectBiometric(
+                    requestID: requestID,
+                    message: error.localizedDescription
+                )
+            }
+
+        case "clear":
+            biometricPinVault.clear()
+            resolveBiometric(requestID: requestID, status: biometricPinVault.status())
+
+        case "unlock":
+            biometricPinVault.unlock(reason: "Unlock private messages") { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    switch result {
+                    case .success(let pin):
+                        self.webView.callAsyncJavaScript(
+                            "window.__sudokuNativeBiometricResolve(id, value);",
+                            arguments: [
+                                "id": requestID,
+                                "value": ["pin": pin],
+                            ],
+                            in: nil,
+                            in: .page,
+                            completionHandler: nil
+                        )
+                    case .failure(let error):
+                        if let laError = error as? LAError,
+                           [.userCancel, .appCancel, .systemCancel, .userFallback]
+                            .contains(laError.code) {
+                            self.cancelBiometric(requestID: requestID)
+                        } else {
+                            self.rejectBiometric(
+                                requestID: requestID,
+                                message: error.localizedDescription
+                            )
+                        }
+                    }
+                }
+            }
+
+        default:
+            rejectBiometric(requestID: requestID, message: "Unsupported biometric operation")
+        }
+    }
+
+    private func resolveBiometric(
+        requestID: String,
+        status: BiometricPinVault.Status
+    ) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeBiometricResolve(id, value);",
+            arguments: [
+                "id": requestID,
+                "value": [
+                    "available": status.available,
+                    "enrolled": status.enrolled,
+                    "type": status.type,
+                ],
+            ],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
+    private func cancelBiometric(requestID: String) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeBiometricCancel(id);",
+            arguments: ["id": requestID],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
+    private func rejectBiometric(requestID: String, message: String) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeBiometricReject(id, message);",
+            arguments: [
+                "id": requestID,
+                "message": message,
+            ],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
+    private func presentMediaPicker(requestID: String) {
+        guard pendingMediaRequestID == nil else {
+            rejectMedia(requestID: requestID, message: "Attachment picker is already open")
+            return
+        }
+
+        pendingMediaRequestID = requestID
+        mediaPicker.present(from: self) { [weak self] result in
+            guard let self else { return }
+            guard self.pendingMediaRequestID == requestID else { return }
+            self.pendingMediaRequestID = nil
+
+            switch result {
+            case .success(.none):
+                self.cancelMedia(requestID: requestID)
+            case .success(.some(let file)):
+                self.webView.callAsyncJavaScript(
+                    "window.__sudokuNativeMediaResolve(id, value);",
+                    arguments: [
+                        "id": requestID,
+                        "value": [
+                            "name": file.name,
+                            "mimeType": file.mimeType,
+                            "size": file.data.count,
+                            "base64": file.data.base64EncodedString(),
+                        ],
+                    ],
+                    in: nil,
+                    in: .page,
+                    completionHandler: nil
+                )
+            case .failure(let error):
+                self.rejectMedia(
+                    requestID: requestID,
+                    message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func cancelMedia(requestID: String) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeMediaCancel(id);",
+            arguments: ["id": requestID],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
+    private func rejectMedia(requestID: String, message: String) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeMediaReject(id, message);",
+            arguments: [
+                "id": requestID,
+                "message": message,
+            ],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
     private static let contactBridgeScript = #"""
     (() => {
       if (location.protocol !== "https:" || location.hostname !== "sudoku.moscow") return;
@@ -198,6 +382,93 @@ final class SudokuViewController: UIViewController {
       };
 
       window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+    })();
+    """#
+
+
+    private static let biometricBridgeScript = #"""
+    (() => {
+      if (location.protocol !== "https:" || location.hostname !== "sudoku.moscow") return;
+
+      const pending = new Map();
+      let sequence = 0;
+      const call = (op, extra = {}) => new Promise((resolve, reject) => {
+        const id = String(++sequence);
+        pending.set(id, { resolve, reject });
+        window.webkit.messageHandlers.sudokuBiometric.postMessage({ id, op, ...extra });
+      });
+
+      window.SudokuNativeBiometric = {
+        status() { return call("status"); },
+        enroll(pin) { return call("enroll", { pin }); },
+        clear() { return call("clear"); },
+        unlock() { return call("unlock"); }
+      };
+
+      window.__sudokuNativeBiometricResolve = (id, value) => {
+        const item = pending.get(id);
+        if (!item) return;
+        pending.delete(id);
+        item.resolve(value);
+      };
+
+      window.__sudokuNativeBiometricCancel = (id) => {
+        const item = pending.get(id);
+        if (!item) return;
+        pending.delete(id);
+        item.reject(new DOMException("User canceled", "AbortError"));
+      };
+
+      window.__sudokuNativeBiometricReject = (id, message) => {
+        const item = pending.get(id);
+        if (!item) return;
+        pending.delete(id);
+        item.reject(new Error(message || "Biometric unlock failed"));
+      };
+
+      window.dispatchEvent(new Event("sudoku:native-biometric-ready"));
+    })();
+    """#
+
+    private static let mediaBridgeScript = #"""
+    (() => {
+      if (location.protocol !== "https:" || location.hostname !== "sudoku.moscow") return;
+
+      const pending = new Map();
+      let sequence = 0;
+
+      window.SudokuNativeMedia = {
+        pickAttachment() {
+          return new Promise((resolve, reject) => {
+            const id = String(++sequence);
+            pending.set(id, { resolve, reject });
+            window.webkit.messageHandlers.sudokuMedia.postMessage({ id });
+          });
+        }
+      };
+
+      window.__sudokuNativeMediaResolve = (id, value) => {
+        const item = pending.get(id);
+        if (!item) return;
+        pending.delete(id);
+        item.resolve(value);
+      };
+
+      window.__sudokuNativeMediaCancel = (id) => {
+        const item = pending.get(id);
+        if (!item) return;
+        pending.delete(id);
+        item.reject(new DOMException("User canceled", "AbortError"));
+      };
+
+      window.__sudokuNativeMediaReject = (id, message) => {
+        const item = pending.get(id);
+        if (!item) return;
+        pending.delete(id);
+        item.reject(new Error(message || "Native attachment picker failed"));
+      };
+
+      window.dispatchEvent(new Event("sudoku:native-media-ready"));
     })();
     """#
 }
@@ -256,7 +527,6 @@ extension SudokuViewController: WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard message.name == Self.contactHandlerName else { return }
         guard message.frameInfo.isMainFrame else { return }
         guard let sourceURL = message.frameInfo.request.url,
               sourceURL.scheme == "https",
@@ -269,7 +539,27 @@ extension SudokuViewController: WKScriptMessageHandler {
             return
         }
 
-        presentContactPicker(requestID: requestID)
+        switch message.name {
+        case Self.contactHandlerName:
+            presentContactPicker(requestID: requestID)
+
+        case Self.biometricHandlerName:
+            guard let operation = body["op"] as? String else {
+                rejectBiometric(requestID: requestID, message: "Missing biometric operation")
+                return
+            }
+            handleBiometricRequest(
+                requestID: requestID,
+                operation: operation,
+                body: body
+            )
+
+        case Self.mediaHandlerName:
+            presentMediaPicker(requestID: requestID)
+
+        default:
+            return
+        }
     }
 }
 
