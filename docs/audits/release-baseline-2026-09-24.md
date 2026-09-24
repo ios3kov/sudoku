@@ -52,3 +52,11 @@ Local boto3/Moto experiment passed: condition present in SigV4 signed headers, i
 ## Provider verification gate
 
 The pinned MinIO source (`RELEASE.2025-10-15T17-29-55Z`, `cmd/object-handlers.go`) installs a PUT precondition callback for If-None-Match. CI now starts an isolated container from the already-built pinned image and exercises real signed HTTP requests for legacy and encrypted MIME types: first upload, repeat rejection, omission of the signed condition, unchanged stored bytes and simultaneous creators. The container exposes only loopback port 19000, uses disposable credentials/data and is removed on step exit. Local lint/syntax checks are not a runtime pass; wait for this CI step. Browser CORS acceptance remains separate.
+
+## Recovery and regression coverage checkpoint
+
+Added a real loopback HTTP regression: a server begins a response and stalls; aborting fetch interrupts the bounded reader, releases its lock, and a subsequent request returns the complete expected bytes. Six bounded-download tests and the 40 existing access/recovery/storage tests pass together (46 total). Added four persistent bundle-budget regressions for missing, empty, nonempty valid-sized and oversized encryption artifacts; all pass locally and are wired into CI. These are functional checks, not performance measurements.
+
+Source review of encrypted attachment teardown confirms it aborts the current request, invalidates the generation, releases object URLs and clears file references. Completion also checks generation after WebCrypto, which cannot itself be aborted. This observation plus the loopback regression does not replace real background/memory-pressure testing on iPhone.
+
+For head `9c2bb7e`, GitHub API integration tests passed; the full workflow was still building OpenMLS when inspected. Do not treat this intermediate checkpoint as full green or as a MinIO runtime result.

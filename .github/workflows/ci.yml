@@ -105,7 +105,7 @@ jobs:
         run: node --experimental-strip-types --test scripts/refresh-queue.test.mjs
       - name: Pre-deployment lifecycle and storage regressions
         run: |
-          node --test scripts/bounded-download.test.mjs
+          node --test scripts/bounded-download.test.mjs scripts/bundle-budget.test.mjs
           node --experimental-strip-types --test scripts/realtime-client.test.mjs scripts/session-concealment.test.mjs scripts/browser-state-store.test.mjs
           python -m unittest discover -s tests/ops
       - name: Web typecheck
