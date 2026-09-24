@@ -97,6 +97,7 @@ async def create_upload_intent(
         "Bucket": settings.s3_bucket,
         "Key": storage_key,
         "ContentType": payload.mime_type,
+        "IfNoneMatch": "*",
         "Metadata": {"sha256": payload.sha256_hex.lower()},
     }
     upload_url = s3_presign_client().generate_presigned_url(
@@ -110,6 +111,7 @@ async def create_upload_intent(
         upload_url=upload_url,
         headers={
             "Content-Type": payload.mime_type,
+            "If-None-Match": "*",
             "x-amz-meta-sha256": payload.sha256_hex.lower(),
         },
         expires_in=UPLOAD_TTL_SECONDS,
@@ -144,6 +146,7 @@ async def create_e2ee_upload_intent(
         "Bucket": settings.s3_bucket,
         "Key": storage_key,
         "ContentType": E2EE_CIPHERTEXT_MIME,
+        "IfNoneMatch": "*",
         "Metadata": {"sha256": digest, "e2ee": "1"},
     }
     upload_url = s3_presign_client().generate_presigned_url(
@@ -157,6 +160,7 @@ async def create_e2ee_upload_intent(
         upload_url=upload_url,
         headers={
             "Content-Type": E2EE_CIPHERTEXT_MIME,
+            "If-None-Match": "*",
             "x-amz-meta-sha256": digest,
             "x-amz-meta-e2ee": "1",
         },
