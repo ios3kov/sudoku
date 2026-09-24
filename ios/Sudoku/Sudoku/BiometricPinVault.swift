@@ -49,8 +49,6 @@ final class BiometricPinVault {
             type = "faceID"
         case .touchID:
             type = "touchID"
-        case .opticID:
-            type = "opticID"
         case .none:
             type = "none"
         @unknown default:
