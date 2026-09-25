@@ -180,6 +180,8 @@ jobs:
         run: npm run build:web
       - name: Web performance budget
         run: node scripts/check-web-bundle-budget.mjs
+      - name: Install Chromium for controlled messenger performance
+        run: npx playwright install --with-deps chromium
       - name: Measure controlled messenger performance
         env:
           AUDIT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
