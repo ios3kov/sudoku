@@ -80,3 +80,10 @@ PR #86 merged as `603ca095129c22337fb3d4f3042be6494f968bda` after all four appli
 **REL-010 — Medium, fixed locally:** encrypted conversation cleanup aborted photo preparation but did not cancel an active upload; file and voice continuations could reach message submission after the screen unmounted. Pass the existing screen-lifetime signal through encrypted upload preparation, intent/completion fetches and the storage PUT. Recheck cancellation before durable message submission and suppress cancelled-screen error handling. Remove PUT abort listeners when requests settle. WebCrypto already in progress cannot be interrupted; cancellation prevents subsequent network work when it finishes.
 
 Four additional transport regressions cover cancellation before reading, during file reading, during PUT, and immediately after successful PUT (including listener cleanup). Together with the eight prior cases, 12 tests pass locally. These are controlled cancellation tests, not physical background acceptance. Cancellation cannot retract a request already processed by a server or a message already submitted to the durable outbox. Orphan cleanup handles uploaded but unlinked assets under its existing policy. Legacy conversation cancellation remains outside this encrypted-flow fix.
+
+
+## Technical audit pass 7 — deterministic repository security gate
+
+On 2026-09-25 a reusable read-only security scanner was added on branch `security/audit-scanner-2026-09-25` together with focused scanner tests and a blocking CI step. The scanner is architecture-aware rather than a generic regex-only check: it resolves FastAPI router prefixes, checks route-local authentication/rate-limit signals, scans current files and Git history for high-confidence secrets, reviews client/server boundary hazards and verifies core production invariants such as E2EE enforcement, same-origin mutation checks, secure cookies, Argon2/CSPRNG use, log redaction and security headers.
+
+The first full CI execution is pending at this point in the audit. No scanner finding is considered a confirmed vulnerability until manually reviewed against the route/configuration semantics. No deployment occurred.
