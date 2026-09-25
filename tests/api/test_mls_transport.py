@@ -131,9 +131,9 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_mls_key_packages_reject_unrelated_authenticated_user() -> None:
-    suffix = uuid.uuid4().hex[:10]
-    target_phone = f"+155500{suffix[:5]}1"
-    attacker_phone = f"+155500{suffix[:5]}2"
+    suffix = str(uuid.uuid4().int % 100000).zfill(5)
+    target_phone = f"+155500{suffix}1"
+    attacker_phone = f"+155500{suffix}2"
     password = "correct horse battery staple"
 
     async with SessionFactory() as db:
