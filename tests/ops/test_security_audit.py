@@ -101,6 +101,25 @@ async def private(auth=Depends(get_auth_context)):
             audit.run(history=False)
             self.assertTrue(any(route["path"] == "/v1/private" for route in audit.routes))
 
+    def test_flags_conversation_member_contact_disclosure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write(
+                root,
+                "apps/api/app/routes/messaging_support.py",
+                """
+def members(user):
+    return ConversationMemberResponse(
+        id=user.id,
+        display_name=user.display_name,
+        phone_e164=user.phone_e164,
+        role="member",
+        last_read_sequence=0,
+    )
+""",
+            )
+            self.assertIn("conversation-member-pii", self.rules(root))
+
     def test_workflow_flags_mutable_action_and_missing_permissions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
