@@ -74,3 +74,30 @@ export function rememberPhone(phone: string) {
 """
     audit.check_sinks({"apps/web/features/messenger/device-access.ts": source}, out)
     assert "client.crypto-webstorage" not in ids(out)
+
+
+def test_shared_rate_limit_helper_counts_as_route_guard():
+    out = []
+    source = """
+from fastapi import APIRouter, Depends
+router = APIRouter(prefix="/v1/auth/device-access")
+
+async def check_password():
+    await enforce_login_rate_limit("ip", "user")
+
+@router.post("/password")
+async def password_unlock(auth = Depends(get_session_context)):
+    await check_password()
+    return {}
+"""
+    audit.check_routes({"apps/api/app/routes/device_access.py": source}, out)
+    assert "route.rate-limit" not in ids(out)
+
+
+def test_special_security_config_files_are_scanned(tmp_path):
+    (tmp_path / ".gitignore").write_text(".env\n.env.*\n", encoding="utf-8")
+    caddy = tmp_path / "Caddyfile.production"
+    caddy.write_text('header { Strict-Transport-Security "max-age=1" }\n', encoding="utf-8")
+    scanned = dict(audit.files(tmp_path))
+    assert ".gitignore" in scanned
+    assert "Caddyfile.production" in scanned
