@@ -370,7 +370,19 @@ async def finalize_membership_change(
         return
     if change.status != "pending":
         raise HTTPException(403, "MLS membership transition cannot be finalized")
-    if change.kind not in {"device_add", "device_remove"} and change.requested_by != auth.user.id:
+    if change.kind in {"device_add", "device_remove"}:
+        participant = (
+            await db.execute(
+                select(ConversationMember.user_id).where(
+                    ConversationMember.conversation_id == change.conversation_id,
+                    ConversationMember.user_id == auth.user.id,
+                    ConversationMember.e2ee_state != "pending_add",
+                )
+            )
+        ).scalar_one_or_none()
+        if participant is None:
+            raise HTTPException(403, "MLS membership transition cannot be finalized")
+    elif change.requested_by != auth.user.id:
         raise HTTPException(403, "MLS membership transition cannot be finalized")
 
     conversation = (
