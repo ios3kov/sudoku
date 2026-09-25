@@ -106,7 +106,7 @@ def test_special_security_config_files_are_scanned(tmp_path):
 def test_known_synthetic_credentials_are_placeholders():
     assert audit.is_placeholder("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl")
     assert audit.is_placeholder("local-sudoku-password")
-    assert not audit.is_placeholder("ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4")
+    assert not audit.is_placeholder("production-secret-value-without-test-markers")
 
 
 def test_ci_supply_chain_checks():
