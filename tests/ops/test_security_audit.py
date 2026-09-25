@@ -107,3 +107,19 @@ def test_known_synthetic_credentials_are_placeholders():
     assert audit.is_placeholder("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl")
     assert audit.is_placeholder("local-sudoku-password")
     assert not audit.is_placeholder("ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4")
+
+
+def test_ci_supply_chain_checks():
+    out = []
+    workflow = """
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+"""
+    audit.check_ci_workflows({".github/workflows/ci.yml": workflow}, out)
+    assert "ci.permissions" in ids(out)
+    assert "ci.mutable-action-ref" in ids(out)
