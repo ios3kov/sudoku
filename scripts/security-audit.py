@@ -74,13 +74,24 @@ def check_secrets(root,fs,out,history):
     if ".env" not in fs.get(".gitignore",""):
         add(out,"git.envignore","medium",".gitignore",1,".env is not ignored","Ignore .env and .env.* except examples.")
     if history:
-        patch=git(root,"log","--all","--format=","-p","--no-ext-diff","--no-textconv")
+        patch=git(root,"log","--all","--format=@@COMMIT:%H","-p","--no-ext-diff","--no-textconv")
         for name,rx in SECRET.items():
             for m in rx.finditer(patch):
                 ls=patch.rfind("\n",0,m.start())+1
                 v=m.group(0)
                 if patch[ls:m.start()].startswith("+") and not PLACEHOLDER.search(v):
-                    add(out,"history.secret."+name,"critical","git-history",0,"Secret-like value remains in history "+mask(v),"Rotate immediately; rewrite history if required.")
+                    commit_pos=patch.rfind("@@COMMIT:",0,m.start())
+                    commit_end=patch.find("\n",commit_pos)
+                    commit=patch[commit_pos+9:commit_end].strip() if commit_pos>=0 and commit_end>=0 else "unknown"
+                    diff_pos=patch.rfind("diff --git a/",0,m.start())
+                    diff_end=patch.find("\n",diff_pos)
+                    historical_path="unknown"
+                    if diff_pos>=0 and diff_end>=0:
+                        header=patch[diff_pos:diff_end]
+                        pm=re.match(r"diff --git a/(.+?) b/",header)
+                        if pm: historical_path=pm.group(1)
+                    where="git-history:"+historical_path+"@"+commit[:12]
+                    add(out,"history.secret."+name,"critical",where,0,"Secret-like value remains in history "+mask(v),"Rotate immediately; rewrite history if required.")
 
 def route_decorators(fn):
     out=[]
