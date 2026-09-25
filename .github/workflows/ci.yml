@@ -55,7 +55,15 @@ jobs:
         working-directory: apps/api
         run: python -m compileall -q app alembic
       - name: Python lint
-        run: ruff check apps/api/app apps/api/alembic tests/api tests/browser tests/ops
+        run: ruff check apps/api/app apps/api/alembic tests/api tests/browser tests/ops scripts/security-audit.py
+      - name: Security audit scanner tests
+        run: pytest -q tests/ops/test_security_audit.py
+      - name: Deterministic security audit
+        run: |
+          git fetch --unshallow 2>/dev/null || git fetch --all --tags
+          python scripts/security-audit.py . \
+            --report /tmp/security-audit-report.md \
+            --json /tmp/security-audit-report.json
       - name: Python dependency audit
         run: pip-audit --local
       - name: Legacy phone + singleton-admin migration upgrade regression
