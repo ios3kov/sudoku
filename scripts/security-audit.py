@@ -10,7 +10,7 @@ from pathlib import Path
 
 SKIP={".git","node_modules",".next","dist","build",".venv","venv","__pycache__","coverage","target"}
 EXT={".py",".js",".jsx",".ts",".tsx",".mjs",".cjs",".rs",".swift",".sh",".sql",".json",".yml",".yaml",".toml",".ini",".cfg",".md",".txt",".env"}
-SPECIAL_TEXT_FILES={".gitignore","Caddyfile.production","Caddyfile.local"}
+SPECIAL_TEXT_FILES={".gitignore","Caddyfile.production","Caddyfile.local","Cargo.lock"}
 SECRET={
 "openai":re.compile(r"\bsk-(?!ant-)[A-Za-z0-9_-]{20,}\b"),
 "anthropic":re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"),
@@ -22,7 +22,10 @@ SECRET={
 GENERIC_QUOTED=re.compile(r"""(?ix)\b(api[_-]?key|secret|password|token|private[_-]?key)\b\s*[:=]\s*(["'])([^"'\s]{16,})\2""")
 GENERIC_ENV=re.compile(r"""(?im)^\s*([A-Z][A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|PRIVATE_KEY|API_KEY)[A-Z0-9_]*)\s*[:=]\s*([A-Za-z0-9_./+=:@-]{20,})\s*$""")
 PLACEHOLDER=re.compile(r"(?i)(replace|example|dummy|change[-_]?me|generate|test|localhost|local[-_]|sudoku-ci|ci[-_]only|ci-secret|not-a-secret)")
-SYNTHETIC_SECRETS={"ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl"}
+SYNTHETIC_SECRETS={
+    "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl",
+    "ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4",
+}
 
 def is_placeholder(value):
     return value in SYNTHETIC_SECRETS or bool(PLACEHOLDER.search(value))
