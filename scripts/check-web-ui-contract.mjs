@@ -49,7 +49,7 @@ for (const { source } of sources) {
       .split(/\s+/)
       .filter((name) => /^[a-zA-Z][\w-]*$/.test(name))
       .forEach((name) => classes.add(name));
-    for (const literal of match[1].matchAll(/["']([a-zA-Z][\w-]*)["']/g)) {
+    for (const literal of match[1].matchAll(/[?:]\s*["']\s*([a-zA-Z][\w-]*)\s*["']/g)) {
       classes.add(literal[1]);
     }
   }

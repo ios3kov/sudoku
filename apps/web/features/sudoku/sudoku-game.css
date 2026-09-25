@@ -172,5 +172,3 @@
 .sudoku-game .result-stats span { font-family:"Chakra Petch",sans-serif; text-transform:uppercase; font-size:9px; letter-spacing:.1em; color:var(--muted); }
 .sudoku-game .result-stats strong { font-family:"Share Tech Mono",monospace; font-size:18px; text-transform:uppercase; }
 @media(max-height:650px) { .sudoku-game.is-menu .sudoku-shell { gap:12px; } .sudoku-game .sudoku-home-header .sudoku-logo { display:block; width:40px; height:40px; } .sudoku-game .sudoku-home-header .sudoku-brand { gap:6px; } }
-/* Contract aliases for screen-state tokens emitted by the component. */
-.sudoku-game.game, .sudoku-game.menu { display:block; }

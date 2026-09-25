@@ -98,3 +98,18 @@ test("resolves component CSS imports relative to their importing file", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /3 classes checked/);
 });
+
+test("screen comparison values are not classes, but conditional classes are checked", () => {
+  const source = 'export const View = () => <main className={`page${screen === "menu" ? " is-menu" : ""}${screen !== "game" ? " is-home" : ""}`} />;';
+  const result = checkFixture({
+    "apps/web/components/view.tsx": source,
+    "apps/web/app/globals.css": ".page {} .is-menu {} .is-home {}",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const missing = checkFixture({
+    "apps/web/components/view.tsx": source,
+    "apps/web/app/globals.css": ".page {} .is-menu {}",
+  });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /is-home/);
+});

@@ -63,7 +63,7 @@ export function HomeClient() {
   const privateActive = mode === "messenger-lock";
 
   return (
-    <div className={`home-reveal-stage${privateActive ? " private-active" : ""}`}>
+    <div className="home-reveal-stage">
       <div
         className={`private-reveal-layer${privateActive ? " is-active" : ""}`}
         aria-hidden={privateActive ? undefined : true}
