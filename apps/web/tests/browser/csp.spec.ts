@@ -48,7 +48,7 @@ test("document CSP uses fresh nonces and blocks unsanctioned inline scripts", as
   const scriptNonces = await page.locator("script").evaluateAll((scripts) =>
     scripts
       .map((script) => (script as HTMLScriptElement).nonce)
-      .filter((nonce) => nonce.length > 0),
+      .filter((nonce): nonce is string => Boolean(nonce)),
   );
   expect(scriptNonces.length).toBeGreaterThan(0);
   expect([...new Set(scriptNonces)]).toEqual([pageNonce]);
