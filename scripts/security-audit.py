@@ -21,7 +21,7 @@ SECRET={
 }
 GENERIC_QUOTED=re.compile(r"""(?ix)\b(api[_-]?key|secret|password|token|private[_-]?key)\b\s*[:=]\s*(["'])([^"'\s]{16,})\2""")
 GENERIC_ENV=re.compile(r"""(?im)^\s*([A-Z][A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|PRIVATE_KEY|API_KEY)[A-Z0-9_]*)\s*[:=]\s*([A-Za-z0-9_./+=:@-]{20,})\s*$""")
-PLACEHOLDER=re.compile(r"(?i)(replace|example|dummy|change[-_]?me|generate|test|localhost|local[-_]|sudoku-ci|ci[-_]only|ci-secret|not-a-secret)")
+PLACEHOLDER=re.compile(r"(?i)(\breplace\b|\bexample\b|\bdummy\b|\bchange[-_]?me\b|\bgenerate\b|\blocalhost\b|\blocal[-_]|sudoku-ci|ci[-_]only|ci-secret|not-a-secret)")
 SYNTHETIC_SECRETS={
     "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl",
     "ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4",
