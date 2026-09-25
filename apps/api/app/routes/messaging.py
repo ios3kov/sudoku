@@ -612,7 +612,7 @@ async def create_message(
         sequence=sequence,
         type=payload.type,
         body_text=None if conversation.encryption_required else body,
-        envelope=payload.envelope if conversation.encryption_required else None,
+        envelope=payload.envelope.model_dump() if conversation.encryption_required and payload.envelope is not None else None,
         encryption_version=1 if conversation.encryption_required else 0,
         reply_to=payload.reply_to,
     )
