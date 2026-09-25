@@ -14,6 +14,9 @@
     }
 
     @api path /v1/*
+    request_body @api {
+        max_size 24MB
+    }
     reverse_proxy @api api:8000
 
     reverse_proxy web:3000
