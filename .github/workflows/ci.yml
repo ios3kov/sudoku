@@ -166,7 +166,10 @@ jobs:
           PUBLIC_ORIGIN=http://127.0.0.1:3000 SECURE_COOKIES=false PYTHONPATH=apps/api \
             uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port 8000 >/tmp/sudoku-api-e2e.log 2>&1 &
           API_PID=$!
-          API_PROXY_TARGET=http://127.0.0.1:8000 \
+          CSP_ASSET_ORIGIN=http://127.0.0.1:9000 \
+            CSP_WEBSOCKET_ORIGIN=ws://127.0.0.1:3000 \
+            CSP_UPGRADE_INSECURE_REQUESTS=false \
+            API_PROXY_TARGET=http://127.0.0.1:8000 \
             npm --workspace @sudoku/web run start -- --hostname 127.0.0.1 --port 3000 >/tmp/sudoku-web-e2e.log 2>&1 &
           WEB_PID=$!
           cleanup() { kill "$WEB_PID" "$API_PID" 2>/dev/null || true; }
@@ -277,6 +280,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Validate Caddy configuration
+        run: |
+          docker run --rm \
+            -e APP_DOMAIN=sudoku.example.com \
+            -v "$PWD/infra/caddy/Caddyfile.production:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm \
+            -v "$PWD/infra/caddy/Caddyfile.local:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com
@@ -298,6 +311,16 @@ jobs:
               config = json.load(handle)
 
           services = config["services"]
+          web_env = services["web"].get("environment", {})
+          expected_csp_env = {
+              "CSP_ASSET_ORIGIN": "https://assets.sudoku.example.com",
+              "CSP_WEBSOCKET_ORIGIN": "wss://sudoku.example.com",
+              "CSP_UPGRADE_INSECURE_REQUESTS": "true",
+          }
+          for key, expected in expected_csp_env.items():
+              if str(web_env.get(key, "")).lower() != expected.lower():
+                  raise SystemExit(f"unexpected production web {key}: {web_env.get(key)!r}")
+
           caddy_ports = sorted(str(item["published"]) for item in services["caddy"].get("ports", []))
           if caddy_ports != ["443", "80"]:
               raise SystemExit(f"unexpected production Caddy published ports: {caddy_ports}")
