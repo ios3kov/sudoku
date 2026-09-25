@@ -378,6 +378,12 @@ async def test_e2ee_device_add_and_revoke_require_durable_rekey() -> None:
         )
         assert before_add_control.status_code == 201, before_add_control.text
 
+        fresh_before_welcome = await peer_new_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{peer_new_device}/transport-events"
+        )
+        assert fresh_before_welcome.status_code == 200, fresh_before_welcome.text
+        assert all(item["kind"] != "message" for item in fresh_before_welcome.json())
+
         add_control = await owner_client.post(
             f"/v1/e2ee/conversations/{conversation_id}/control-batches",
             json={
@@ -410,10 +416,46 @@ async def test_e2ee_device_add_and_revoke_require_durable_rekey() -> None:
             },
         )
         assert add_control.status_code == 201, add_control.text
+
+        fresh_after_welcome = await peer_new_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{peer_new_device}/transport-events"
+        )
+        assert fresh_after_welcome.status_code == 200, fresh_after_welcome.text
+        assert [item["kind"] for item in fresh_after_welcome.json()] == ["mls_control"]
+        assert fresh_after_welcome.json()[0]["control"]["kind"] == "welcome"
+
         add_finalized = await owner_client.post(
             f"/v1/e2ee/membership-changes/{add_change['id']}/finalize"
         )
         assert add_finalized.status_code == 204, add_finalized.text
+
+        after_add_message = await owner_client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "type": "text",
+                "body": None,
+                "envelope": {
+                    "version": 1,
+                    "protocol": "mls-rfc9420",
+                    "kind": "application",
+                    "ciphertext": base64.b64encode(b"after-device-add").decode(),
+                },
+                "asset_ids": [],
+            },
+        )
+        assert after_add_message.status_code == 201, after_add_message.text
+        fresh_after_add = await peer_new_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{peer_new_device}/transport-events"
+        )
+        assert fresh_after_add.status_code == 200, fresh_after_add.text
+        fresh_message_ids = {
+            item["message_id"]
+            for item in fresh_after_add.json()
+            if item["kind"] == "message"
+        }
+        assert before_add_control.json()["id"] not in fresh_message_ids
+        assert after_add_message.json()["id"] in fresh_message_ids
 
         revoked = await peer_new_client.delete(
             f"/v1/sessions/{peer_old_device}"

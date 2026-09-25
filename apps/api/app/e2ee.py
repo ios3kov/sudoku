@@ -1383,11 +1383,59 @@ async def list_transport_events(
         ConversationTransportEvent.kind == "mls_control",
         control_assigned,
     )
+
+    # A user can be an established conversation member while this exact device
+    # is completely fresh. Do not expose application ciphertext from epochs
+    # before the device joined: that state was deleted and cannot be recovered
+    # by reload. The first assigned Welcome (or first sent control for an
+    # original creator device) is the durable per-device join boundary.
     if is_member:
-        visibility = or_(
-            ConversationTransportEvent.kind == "message",
-            visibility,
+        welcome_sequence = await db.scalar(
+            select(func.min(ConversationTransportEvent.sequence))
+            .join(
+                MlsControlEvent,
+                MlsControlEvent.id == ConversationTransportEvent.control_event_id,
+            )
+            .where(
+                ConversationTransportEvent.conversation_id == conversation_id,
+                ConversationTransportEvent.kind == "mls_control",
+                MlsControlEvent.kind == "welcome",
+                exists(
+                    select(MlsControlRecipient.event_id).where(
+                        MlsControlRecipient.event_id == MlsControlEvent.id,
+                        MlsControlRecipient.user_id == auth.user.id,
+                        MlsControlRecipient.device_id == device_id,
+                    )
+                ),
+            )
         )
+        sender_sequence = await db.scalar(
+            select(func.min(ConversationTransportEvent.sequence))
+            .join(
+                MlsControlEvent,
+                MlsControlEvent.id == ConversationTransportEvent.control_event_id,
+            )
+            .where(
+                ConversationTransportEvent.conversation_id == conversation_id,
+                ConversationTransportEvent.kind == "mls_control",
+                MlsControlEvent.sender_user_id == auth.user.id,
+                MlsControlEvent.sender_device_id == device_id,
+            )
+        )
+        join_candidates = [
+            int(item)
+            for item in (welcome_sequence, sender_sequence)
+            if item is not None
+        ]
+        if join_candidates:
+            device_join_sequence = min(join_candidates)
+            visibility = or_(
+                and_(
+                    ConversationTransportEvent.kind == "message",
+                    ConversationTransportEvent.sequence > device_join_sequence,
+                ),
+                visibility,
+            )
 
     rows = (
         await db.execute(

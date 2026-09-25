@@ -381,6 +381,37 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     }
 
     await verifyActiveComposition(owner, peer, sendText, openConversation, unlockPrivate);
+
+    // A new browser context models a true reinstall: no local OpenMLS state and
+    // no prior session cookie. The established device performs the durable
+    // device-add transition; the fresh device never receives old ciphertext.
+    const freshPeerContext = await browser.newContext();
+    const freshPeer = await freshPeerContext.newPage();
+    try {
+      await observeRealtimeSocket(freshPeer);
+      await login(freshPeer, PEER_PHONE);
+      await expect(freshPeer.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
+      await expect(freshPeer.getByText("Preparing secure messaging on this device.", { exact: true })).toBeVisible();
+
+      await reopenMessenger(owner);
+      await expect(
+        freshPeer.getByText(
+          "Secure messaging is ready. Older encrypted history may be unavailable on this device.",
+          { exact: true },
+        ),
+      ).toBeVisible({ timeout: 60_000 });
+
+      await openConversation(freshPeer, "Browser Owner");
+      await expect(acceptedMessage(freshPeer, "persisted before reload")).toHaveCount(0);
+
+      await openConversation(owner, "Browser Peer");
+      await sendText(owner, "sent after fresh device add");
+      await expect(acceptedMessage(freshPeer, "sent after fresh device add")).toBeVisible({
+        timeout: 60_000,
+      });
+    } finally {
+      await freshPeerContext.close();
+    }
   } finally {
     // Close both browser contexts concurrently. On cold CI runners the MLS
     // scenario can legitimately consume most of the test budget; serial

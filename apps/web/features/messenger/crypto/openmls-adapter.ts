@@ -59,6 +59,13 @@ export class PeerIdentityChangedError extends Error {
   }
 }
 
+export class DeviceIdentityConflictError extends Error {
+  constructor() {
+    super("This secure device identity no longer matches the active session");
+    this.name = "DeviceIdentityConflictError";
+  }
+}
+
 // React Strict Mode and fast remounts can initialize the same authenticated
 // device more than once in one browser tab. Serialize by durable state key so
 // only one initializer can create/persist a fresh MLS identity at a time.
@@ -146,6 +153,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         pendingKeyPackagesB64: [],
         transportCursors: {},
         trackedConversations: [],
+        historyUnavailableConversations: [],
       };
       this.assertActive();
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
@@ -158,10 +166,17 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     this.identity = identity;
     this.localState = state;
 
-    await messengerApi.registerMlsDevice(
-      this.options.deviceId,
-      bytesToBase64(identity.publicKeyBytes()),
-    );
+    try {
+      await messengerApi.registerMlsDevice(
+        this.options.deviceId,
+        bytesToBase64(identity.publicKeyBytes()),
+      );
+    } catch (error) {
+      if ((error as Error & { status?: number }).status === 409) {
+        throw new DeviceIdentityConflictError();
+      }
+      throw error;
+    }
     this.assertActive();
     await this.flushPendingKeyPackages();
     await this.flushPendingOutboundTransition();
@@ -996,6 +1011,32 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       ids.add(this.localState!.pendingOutboundTransition.conversationId);
     }
     return [...ids].sort();
+  }
+
+  historyUnavailableConversationIds(): string[] {
+    this.assertReady();
+    return [...this.localState!.historyUnavailableConversations].sort();
+  }
+
+  async markHistoryUnavailable(conversationId: string): Promise<void> {
+    if (!conversationId) throw new Error("Conversation id is required");
+    await this.enqueue(async () => {
+      this.assertReady();
+      if (this.localState!.historyUnavailableConversations.includes(conversationId)) {
+        return;
+      }
+      const previous = [...this.localState!.historyUnavailableConversations];
+      this.localState!.historyUnavailableConversations = uniqueIds([
+        ...previous,
+        conversationId,
+      ]);
+      try {
+        await this.persistCurrentState();
+      } catch (error) {
+        this.localState!.historyUnavailableConversations = previous;
+        throw error;
+      }
+    });
   }
 
   projectConversation(conversationId: string): EncryptedProjectionResult {
