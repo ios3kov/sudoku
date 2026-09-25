@@ -48,7 +48,7 @@ test("CSP blocks a parser-inserted untrusted inline script", async ({ page }) =>
     const response = await route.fetch();
     const html = await response.text();
     const injected =
-      '<script>window.__sudokuUntrustedInlineRan = true;<\\/script>';
+      '<script>window.__sudokuUntrustedInlineRan = true;</script>';
     await route.fulfill({
       response,
       body: html.replace("</head>", `${injected}</head>`),
