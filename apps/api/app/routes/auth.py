@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,7 @@ from ..rate_limit import enforce_ip_rate_limit, enforce_login_rate_limit, enforc
 from ..mls_lifecycle import schedule_mls_device_change
 from ..schemas import InviteAcceptRequest, InviteCreateRequest, InviteCreateResponse, LoginRequest, SessionResponse, UpdatePhoneRequest, UserResponse
 from ..security import (
+    DUMMY_PASSWORD_HASH,
     generate_invite_secret,
     generate_session_secret,
     hash_password,
@@ -128,7 +130,9 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
     client_ip = request.client.host if request.client else "unknown"
     await enforce_login_rate_limit(client_ip, identifier)
 
-    succeeded = bool(user and user.status == "active" and verify_password(user.password_hash, payload.password))
+    candidate_hash = user.password_hash if user is not None and user.status == "active" else DUMMY_PASSWORD_HASH
+    password_valid = await run_in_threadpool(verify_password, candidate_hash, payload.password)
+    succeeded = bool(user is not None and user.status == "active" and password_valid)
     db.add(
         LoginAttempt(
             identifier_hash=identifier_audit_hash(identifier),
@@ -210,7 +214,7 @@ async def update_phone(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "phone-update", 6, 3600)
-    if not verify_password(auth.user.password_hash, payload.password):
+    if not await run_in_threadpool(verify_password, auth.user.password_hash, payload.password):
         raise HTTPException(status_code=403, detail="Invalid account password")
     try:
         phone = normalize_phone_e164(payload.phone)
@@ -380,7 +384,7 @@ async def accept_invite(payload: InviteAcceptRequest, request: Request, response
         phone_e164=phone,
         phone_verified_at=datetime.now(UTC),
         display_name=payload.display_name.strip(),
-        password_hash=hash_password(payload.password),
+        password_hash=await run_in_threadpool(hash_password, payload.password),
         status="active",
     )
     db.add(user)
