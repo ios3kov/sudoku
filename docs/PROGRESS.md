@@ -1,5 +1,19 @@
 # Progress
 
+## Verified application-level restore baseline — 2026-09-25
+
+Current verified repository baseline: `effa0e03349d7ec04f88350b166bffec7e65aad8`.
+
+PR #100 added application-level verification to the isolated restore audit. Post-merge exact-main workflows are green:
+- `ci #720` — run 36175072493;
+- `device-access #403` — run 36175072562;
+- `beat-runtime #405` — run 36175072546;
+- `api-shutdown #387` — run 36175072498.
+
+The Infra shard restored the disposable PostgreSQL dump and encrypted object bytes, then a fresh application process successfully performed phone/password login, listed the restored E2EE conversation, read the restored ciphertext message, fetched restored asset metadata, obtained the authorization-gated signed content redirect and downloaded ciphertext whose SHA-256 matched the pre-backup bytes. The retained artifact is `restore-audit-36175072493-1`.
+
+This is synthetic/disposable recovery evidence, not a restore of the latest real production backup. Production remains unchanged. Remaining release gates are the production-aligned isolated restore of the latest real backup, physical/two-account iPhone acceptance and final production preflight/backup/rollback under explicit deployment authorization.
+
 ## CI efficiency follow-up verified — 2026-09-25
 
 Current repository main: `3beb8851586a117bfde34948c5c210a6c6ac3be0`.
