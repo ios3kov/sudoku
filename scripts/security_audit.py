@@ -356,6 +356,10 @@ class Audit:
             "apps/api/app/routes/messaging.py": ["E2EE conversation requires ciphertext envelope and forbids plaintext body", "ciphertext-only assets"],
             "apps/api/app/realtime.py": ['websocket.headers.get("origin")', "EXPECTED_ORIGIN", "MAX_CLIENT_FRAME_CHARS"],
             "apps/api/app/observability.py": ["_redact_sensitive", "Request/message bodies are never logged"],
+            "apps/web/public/sw.js": ['url.pathname.startsWith("/v1/")', "const isStatic"],
+            "apps/web/features/messenger/crypto/browser-state-store.ts": ['{ name: "AES-GCM", length: 256 }, false', "crypto.subtle.encrypt", "crypto.subtle.decrypt"],
+            "ios/Sudoku/Sudoku/SudokuViewController.swift": ["limitsNavigationsToAppBoundDomains = true", "isAllowedExternalURL", "message.frameInfo.isMainFrame", "trustedHost"],
+            "ios/Sudoku/Sudoku/BiometricBridge.swift": ["message.frameInfo.isMainFrame", "isAllowedSignedPayload", 'sourceURL.host == "sudoku.moscow"'],
         }
         for rel, markers in expected.items():
             path = self.root / rel
