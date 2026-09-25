@@ -1383,9 +1383,53 @@ async def list_transport_events(
         ConversationTransportEvent.kind == "mls_control",
         control_assigned,
     )
+
+    # A user can be an established conversation member while this exact device
+    # is completely fresh. Keep the join boundary inside the transport SELECT:
+    # this preserves the fixed query budget while preventing pre-Welcome
+    # application ciphertext from reaching a device that no longer has the old
+    # MLS epoch state.
     if is_member:
+        join_event = aliased(ConversationTransportEvent)
+        joined_by_welcome = exists(
+            select(join_event.sequence)
+            .join(
+                MlsControlEvent,
+                MlsControlEvent.id == join_event.control_event_id,
+            )
+            .where(
+                join_event.conversation_id == conversation_id,
+                join_event.kind == "mls_control",
+                join_event.sequence < ConversationTransportEvent.sequence,
+                MlsControlEvent.kind == "welcome",
+                exists(
+                    select(MlsControlRecipient.event_id).where(
+                        MlsControlRecipient.event_id == MlsControlEvent.id,
+                        MlsControlRecipient.user_id == auth.user.id,
+                        MlsControlRecipient.device_id == device_id,
+                    )
+                ),
+            )
+        )
+        joined_by_sender = exists(
+            select(join_event.sequence)
+            .join(
+                MlsControlEvent,
+                MlsControlEvent.id == join_event.control_event_id,
+            )
+            .where(
+                join_event.conversation_id == conversation_id,
+                join_event.kind == "mls_control",
+                join_event.sequence < ConversationTransportEvent.sequence,
+                MlsControlEvent.sender_user_id == auth.user.id,
+                MlsControlEvent.sender_device_id == device_id,
+            )
+        )
         visibility = or_(
-            ConversationTransportEvent.kind == "message",
+            and_(
+                ConversationTransportEvent.kind == "message",
+                or_(joined_by_welcome, joined_by_sender),
+            ),
             visibility,
         )
 

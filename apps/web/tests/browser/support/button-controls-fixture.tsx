@@ -302,6 +302,11 @@ function NewChatFixture() {
   return <Frame onClose={() => setOpen(false)}>{open ? <NewChat
     adapter={adapter}
     onCreated={(conversation) => setCreated(conversation.id)}
+    onOpenDirect={async (userId) => {
+      const pending = await api.createDirect(userId, true);
+      const ready = await adapter.bootstrapConversation(pending);
+      setCreated(ready.id);
+    }}
     onCancel={() => setOpen(false)}
   /> : <p>new chat closed</p>}{created ? <p>created {created}</p> : null}</Frame>;
 }
@@ -309,7 +314,10 @@ function NewChatFixture() {
 function ContactsFixture() {
   const [open, setOpen] = useState(true);
   return <Frame onClose={() => setOpen(false)}>{open
-    ? <ContactsPanel onClose={() => setOpen(false)} />
+    ? <ContactsPanel
+        onClose={() => setOpen(false)}
+        onOpenChat={async () => undefined}
+      />
     : <p>contacts closed</p>}</Frame>;
 }
 

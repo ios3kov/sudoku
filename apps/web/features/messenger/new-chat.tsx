@@ -16,10 +16,12 @@ type Mode = "direct" | "group";
 
 export function NewChat({
   onCreated,
+  onOpenDirect,
   onCancel,
   adapter,
 }: {
   onCreated: (conversation: Conversation) => void;
+  onOpenDirect: (userId: string) => Promise<void>;
   onCancel: () => void;
   adapter: OpenMlsProtocolAdapter | null;
 }) {
@@ -61,17 +63,11 @@ export function NewChat({
   async function createDirect(user: DirectoryUser) {
     setError(null);
     setCreating(true);
-    let pending: Conversation | null = null;
     try {
       if (!adapter) throw new Error("Secure messaging is not ready");
-      pending = await messengerApi.createDirect(user.id, true);
-      onCreated(await adapter.bootstrapConversation(pending));
+      await onOpenDirect(user.id);
     } catch (error) {
-      if (pending) {
-        onCreated(pending);
-      } else {
-        setError(error instanceof Error ? error.message : "Unable to create secure chat");
-      }
+      setError(error instanceof Error ? error.message : "Unable to create secure chat");
     } finally {
       setCreating(false);
     }
