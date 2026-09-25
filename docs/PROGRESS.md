@@ -1,5 +1,17 @@
 # Progress
 
+## iPhone Messenger production remediation plan — 2026-09-25
+
+[Step112](steps/112-iphone-messenger-production-remediation-plan.md) consolidates physical-iPhone QA issues #101–#116 into the next production program.
+
+Execution order is fixed:
+1. Wave 1: P0 correctness — fresh-device MLS recovery (#108), contact-to-chat (#116), PIN first-attempt reliability (#111).
+2. Wave 2: Messenger product UX — navigation/Sudoku escape, modern PIN, smart phone input, display name, Contacts/admin invite, remove Face ID.
+3. Wave 3: native iOS lifecycle polish — status bar, startup preloader, privacy cover and hold-5 gesture.
+4. One exact-SHA integration candidate -> full automated gates -> physical iPhone acceptance -> TestFlight.
+
+No further manual QA is useful while #108/#116 block the normal secure-chat path. Production changes require a new exact-SHA release gate after remediation.
+
 ## Release runbook ready — 2026-09-25
 
 The verified executable candidate remains `effa0e03349d7ec04f88350b166bffec7e65aad8`; exact-main application verification on that SHA passed `ci #720`, `device-access #403`, `beat-runtime #405` and `api-shutdown #387`. [Step111](steps/111-production-release-runbook.md) records the proven production sequence: fresh backup on the current production checkout, off-host verification, exact-SHA checkout, hardened preflight, Compose build/up, nonce-CSP live smoke and rollback boundary.
