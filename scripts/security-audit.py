@@ -211,11 +211,24 @@ def check_invariants(fs,out):
     auth_route=fs.get("apps/api/app/routes/auth.py","")
     if 'REQUIRE_E2EE_NEW_CONVERSATIONS: "true"' not in compose:
         add(out,"invariant.e2ee-prod","critical","compose.production.yaml",1,"Production E2EE gate missing","Force E2EE for new conversations.")
-    for h in ("Strict-Transport-Security","Content-Security-Policy","X-Content-Type-Options","X-Frame-Options","Referrer-Policy"):
-        if h not in caddy: add(out,"invariant.header","high","infra/caddy/Caddyfile.production",1,"Missing "+h,"Restore production security header.")
-    csp=re.search(r'Content-Security-Policy\s+"([^"]+)"',caddy)
-    if csp and "script-src" in csp.group(1) and "'unsafe-inline'" in csp.group(1):
+    proxy=fs.get("apps/web/proxy.ts","")
+    caddy_active="\n".join(line for line in caddy.splitlines() if not line.lstrip().startswith("#"))
+    for h in ("Strict-Transport-Security","X-Content-Type-Options","X-Frame-Options","Referrer-Policy"):
+        if h not in caddy_active: add(out,"invariant.header","high","infra/caddy/Caddyfile.production",1,"Missing "+h,"Restore production security header.")
+    caddy_csp=re.search(r'Content-Security-Policy\\s+"([^"]+)"',caddy_active)
+    proxy_csp_owned=(
+        'const CSP_HEADER = "Content-Security-Policy"' in proxy
+        and "requestHeaders.set(CSP_HEADER, contentSecurityPolicy)" in proxy
+        and "response.headers.set(CSP_HEADER, contentSecurityPolicy)" in proxy
+        and re.search(r"`script-src[^`]*'nonce-\\$\\{nonce\\}'`",proxy) is not None
+    )
+    if not caddy_csp and not proxy_csp_owned:
+        add(out,"invariant.header","high","apps/web/proxy.ts",1,"Missing Content-Security-Policy owner","Generate CSP in Next.js proxy.ts or restore an active Caddy CSP header.")
+    if caddy_csp and "script-src" in caddy_csp.group(1) and "'unsafe-inline'" in caddy_csp.group(1):
         add(out,"invariant.csp-unsafe-inline","medium","infra/caddy/Caddyfile.production",1,"CSP allows unsafe-inline scripts","Prefer nonce/hash-based Next.js scripts; keep this as a reviewed exception only if required.")
+    proxy_script=re.search(r"`script-src([^`]*)`",proxy)
+    if proxy_script and "'unsafe-inline'" in proxy_script.group(1):
+        add(out,"invariant.csp-unsafe-inline","medium","apps/web/proxy.ts",1,"CSP allows unsafe-inline scripts","Use a nonce/hash-based script policy; keep unsafe-inline out of script-src.")
     if "origin != self.expected_origin" not in middleware:
         add(out,"invariant.same-origin","critical","apps/api/app/middleware.py",1,"Exact-origin mutation gate missing","Require exact PUBLIC_ORIGIN.")
     if "secure_cookies: bool = Field(default=True" not in config:
