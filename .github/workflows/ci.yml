@@ -127,9 +127,10 @@ jobs:
       - name: Retain generated OpenMLS browser package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: mls-wasm-${{ github.run_id }}-${{ github.run_attempt }}
+          name: mls-wasm-${{ github.run_id }}
           path: apps/web/generated/mls-wasm/
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
       - name: Rust dependency audit
         run: |
@@ -146,7 +147,7 @@ jobs:
       - name: Restore generated OpenMLS browser package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: mls-wasm-${{ github.run_id }}-${{ github.run_attempt }}
+          name: mls-wasm-${{ github.run_id }}
           path: apps/web/generated/mls-wasm
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: "22" }
@@ -239,7 +240,7 @@ jobs:
       - name: Restore generated OpenMLS browser package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: mls-wasm-${{ github.run_id }}-${{ github.run_attempt }}
+          name: mls-wasm-${{ github.run_id }}
           path: apps/web/generated/mls-wasm
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v5.6.0
         with: { python-version: "3.13", cache: pip }
