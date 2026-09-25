@@ -113,3 +113,10 @@ Private conversation content now uses MLS/RFC 9420 through the pinned OpenMLS br
 - Browsers without Contact Picker use manual E.164 contact entry.
 - Changing a phone identity clears verification and inbound contact edges; other users must resync the new verified number.
 - Self-migrated phone identities can authenticate but are excluded from contact discovery until explicit out-of-band verification.
+
+
+## Deterministic repository security gate
+
+CI runs `scripts/security-audit.py` as an additional read-only security layer. It scans current source plus Git history for high-confidence secrets, verifies route-level auth/rate-limit signals and core production security invariants, and reports dangerous client/server sinks. The scanner emits Markdown and JSON and is regression-tested in `tests/ops/test_security_audit.py`.
+
+This gate complements `pip-audit`, `npm audit`, `cargo audit`, integration/E2E coverage and human review. A clean scanner result is not evidence that authorization, E2EE or deployment infrastructure is fully secure.
