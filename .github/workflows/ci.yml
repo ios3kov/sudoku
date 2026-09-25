@@ -5,10 +5,12 @@ on:
   pull_request:
 permissions:
   contents: read
+
 jobs:
-  test:
+  api_security:
+    name: API + security
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17-alpine
@@ -100,6 +102,15 @@ jobs:
       - name: API integration tests
         env: { PYTHONPATH: apps/api }
         run: pytest -q tests/api
+      - name: Operations unit regressions
+        run: python -m unittest discover -s tests/ops
+
+  crypto:
+    name: OpenMLS + Rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: "22" }
       - name: Test and build pinned OpenMLS browser package
@@ -114,9 +125,17 @@ jobs:
         run: |
           cargo +1.91.0 install cargo-audit --version 0.22.2 --locked
           cargo +1.91.0 audit --file packages/mls-wasm/Cargo.lock
+
+  web_static:
+    name: Web build + static regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: "22" }
       - name: Install web dependencies
         run: |
-          cd "$GITHUB_WORKSPACE"
           test -s package-lock.json
           node -e "const l=require('./package-lock.json'); if ((l.lockfileVersion ?? 0) < 1) process.exit(1)"
           npm ci --no-audit --no-fund
@@ -136,11 +155,10 @@ jobs:
         run: node --experimental-strip-types --test scripts/sudoku-saved-game.test.mjs
       - name: Messenger refresh queue regression
         run: node --experimental-strip-types --test scripts/refresh-queue.test.mjs
-      - name: Pre-deployment lifecycle and storage regressions
+      - name: Web lifecycle and storage regressions
         run: |
           node --test scripts/bounded-download.test.mjs scripts/bundle-budget.test.mjs scripts/upload-transport.test.mjs
           node --experimental-strip-types --test scripts/realtime-client.test.mjs scripts/session-concealment.test.mjs scripts/browser-state-store.test.mjs
-          python -m unittest discover -s tests/ops
       - name: Web typecheck
         run: npm --workspace @sudoku/web run typecheck
       - name: Web production build
@@ -149,15 +167,96 @@ jobs:
         run: npm run build:web
       - name: Web performance budget
         run: node scripts/check-web-bundle-budget.mjs
+      - name: Measure controlled messenger performance
+        env:
+          AUDIT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          mkdir -p audit-performance
+          for sample in 1 2 3; do
+            node scripts/profile-messenger.mjs "audit-performance/profile-${sample}.json"
+          done
+          node scripts/check-web-bundle-budget.mjs > audit-performance/bundle.json
+      - name: Retain web performance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: audit-performance/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  browser_e2e:
+    name: Browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_DB: sudoku, POSTGRES_USER: sudoku, POSTGRES_PASSWORD: sudoku-ci }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sudoku -d sudoku" --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://sudoku:sudoku-ci@127.0.0.1:5432/sudoku
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PUBLIC_ORIGIN: https://sudoku.test
+      SESSION_COOKIE_NAME: sudoku_session
+      SESSION_TTL_DAYS: "30"
+      SECURE_COOKIES: "true"
+      S3_BUCKET: sudoku-assets
+      S3_REGION: us-east-1
+      S3_ENDPOINT_URL: http://127.0.0.1:9000
+      S3_PUBLIC_ENDPOINT_URL: http://127.0.0.1:9000
+      S3_ACCESS_KEY_ID: sudoku-ci
+      S3_SECRET_ACCESS_KEY: sudoku-ci-secret
+      WEB_PUSH_ALLOWED_HOSTS: push.apple.com,fcm.googleapis.com,push.services.mozilla.com
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v5.6.0
+        with: { python-version: "3.13", cache: pip }
+      - name: Install API + browser test dependencies
+        run: |
+          python -m pip install --require-hashes -r apps/api/requirements.lock
+          grep -E '^[a-zA-Z0-9_.-]+==' apps/api/requirements.lock | sed 's/ \\$//' > /tmp/api-runtime-constraints.txt
+          python -m pip install -c /tmp/api-runtime-constraints.txt -e "./apps/api[test]"
+          python -m pip check
+      - name: Start S3 test service
+        run: |
+          moto_server -H 127.0.0.1 -p 9000 >/tmp/moto-s3.log 2>&1 &
+          python - <<'PY'
+          import time, boto3
+          s3=boto3.client("s3",endpoint_url="http://127.0.0.1:9000",region_name="us-east-1",aws_access_key_id="sudoku-ci",aws_secret_access_key="sudoku-ci-secret")
+          for _ in range(60):
+              try: s3.list_buckets(); break
+              except Exception: time.sleep(1)
+          else: raise SystemExit("S3 test service did not start")
+          s3.create_bucket(Bucket="sudoku-assets")
+          PY
+      - name: Migrate database
+        working-directory: apps/api
+        run: alembic upgrade head
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: "22" }
+      - name: Install web dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build domain declarations
+        run: npm --workspace @sudoku/domain run build
+      - name: Web production build
+        env:
+          API_PROXY_TARGET: http://127.0.0.1:8000
+        run: npm run build:web
       - name: Install Chromium for browser acceptance
         run: npx playwright install --with-deps chromium
       - name: Seed browser acceptance users
-        env:
-          PYTHONPATH: apps/api
+        env: { PYTHONPATH: apps/api }
         run: python tests/browser/seed_users.py
       - name: Reset browser-test rate limits
-        env:
-          PYTHONPATH: apps/api
+        env: { PYTHONPATH: apps/api }
         run: python tests/browser/reset_rate_limits.py
       - name: Browser E2E acceptance
         env:
@@ -184,7 +283,6 @@ jobs:
                   raise SystemExit(f"browser acceptance service did not start: {url}")
           PY
           npm --workspace @sudoku/web run test:browser
-
       - name: Retain browser failure evidence
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -194,16 +292,61 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-      - name: Measure controlled messenger performance
-        env:
-          AUDIT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  infra:
+    name: Infra + restore + images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_DB: sudoku, POSTGRES_USER: sudoku, POSTGRES_PASSWORD: sudoku-ci }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sudoku -d sudoku" --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://sudoku:sudoku-ci@127.0.0.1:5432/sudoku
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PUBLIC_ORIGIN: https://sudoku.test
+      SESSION_COOKIE_NAME: sudoku_session
+      SESSION_TTL_DAYS: "30"
+      SECURE_COOKIES: "true"
+      S3_BUCKET: sudoku-assets
+      S3_REGION: us-east-1
+      S3_ENDPOINT_URL: http://127.0.0.1:9000
+      S3_PUBLIC_ENDPOINT_URL: http://127.0.0.1:9000
+      S3_ACCESS_KEY_ID: sudoku-ci
+      S3_SECRET_ACCESS_KEY: sudoku-ci-secret
+      WEB_PUSH_ALLOWED_HOSTS: push.apple.com,fcm.googleapis.com,push.services.mozilla.com
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v5.6.0
+        with: { python-version: "3.13", cache: pip }
+      - name: Install API + infrastructure test dependencies
         run: |
-          mkdir -p audit-performance
-          for sample in 1 2 3; do
-            node scripts/profile-messenger.mjs "audit-performance/profile-${sample}.json"
-          done
-          node scripts/check-web-bundle-budget.mjs > audit-performance/bundle.json
-
+          python -m pip install --require-hashes -r apps/api/requirements.lock
+          grep -E '^[a-zA-Z0-9_.-]+==' apps/api/requirements.lock | sed 's/ \\$//' > /tmp/api-runtime-constraints.txt
+          python -m pip install -c /tmp/api-runtime-constraints.txt -e "./apps/api[test]"
+          python -m pip check
+      - name: Start S3 test service
+        run: |
+          moto_server -H 127.0.0.1 -p 9000 >/tmp/moto-s3.log 2>&1 &
+          python - <<'PY'
+          import time, boto3
+          s3=boto3.client("s3",endpoint_url="http://127.0.0.1:9000",region_name="us-east-1",aws_access_key_id="sudoku-ci",aws_secret_access_key="sudoku-ci-secret")
+          for _ in range(60):
+              try: s3.list_buckets(); break
+              except Exception: time.sleep(1)
+          else: raise SystemExit("S3 test service did not start")
+          s3.create_bucket(Bucket="sudoku-assets")
+          PY
+      - name: Migrate database
+        working-directory: apps/api
+        run: alembic upgrade head
       - name: Validate production operations scripts
         run: |
           bash -n \
@@ -238,7 +381,6 @@ jobs:
             exit 1
           fi
           rm -f .env.production.ci .env.production.bad
-
       - name: Build pinned MinIO infrastructure images
         run: |
           docker build \
@@ -253,7 +395,6 @@ jobs:
           test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' sudoku-mc-ci)" = "RELEASE.2025-08-13T08-35-41Z"
           docker run --rm sudoku-minio-ci --version >/dev/null
           docker run --rm sudoku-mc-ci --version >/dev/null
-
       - name: Verify conditional uploads against pinned MinIO
         env:
           AUDIT_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
@@ -267,16 +408,14 @@ jobs:
           trap 'docker rm -f sudoku-minio-upload-audit >/dev/null' EXIT
           python tests/ops/minio_conditional_upload.py
           python tests/ops/isolated_restore_audit.py
-
-      - name: Retain audit measurements
+      - name: Retain restore audit measurements
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: audit-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          name: restore-audit-${{ github.run_id }}-${{ github.run_attempt }}
           path: audit-performance/
           if-no-files-found: ignore
           retention-days: 14
-
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com
@@ -293,15 +432,12 @@ jobs:
           docker compose -f compose.yaml -f compose.production.yaml config --format json > /tmp/production-compose.json
           python - <<'PY'
           import json
-
           with open("/tmp/production-compose.json", encoding="utf-8") as handle:
               config = json.load(handle)
-
           services = config["services"]
           caddy_ports = sorted(str(item["published"]) for item in services["caddy"].get("ports", []))
           if caddy_ports != ["443", "80"]:
               raise SystemExit(f"unexpected production Caddy published ports: {caddy_ports}")
-
           for service_name in ("postgres", "redis", "minio", "minio-init", "api", "worker", "beat", "web"):
               ports = services[service_name].get("ports", [])
               if ports:
@@ -322,10 +458,32 @@ jobs:
             echo "local origin leaked into production config" >&2
             exit 1
           fi
-
       - name: Build production application images
         run: |
           docker build --file apps/api/Dockerfile --tag sudoku-api-ci .
           docker build --file apps/web/Dockerfile --tag sudoku-web-ci .
           test "$(docker inspect --format '{{.Config.User}}' sudoku-api-ci)" = "sudoku"
           test "$(docker inspect --format '{{.Config.User}}' sudoku-web-ci)" = "node"
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [api_security, crypto, web_static, browser_e2e, infra]
+    steps:
+      - name: Require all parallel CI shards
+        env:
+          API_SECURITY: ${{ needs.api_security.result }}
+          CRYPTO: ${{ needs.crypto.result }}
+          WEB_STATIC: ${{ needs.web_static.result }}
+          BROWSER_E2E: ${{ needs.browser_e2e.result }}
+          INFRA: ${{ needs.infra.result }}
+        run: |
+          printf 'api_security=%s\ncrypto=%s\nweb_static=%s\nbrowser_e2e=%s\ninfra=%s\n' \
+            "$API_SECURITY" "$CRYPTO" "$WEB_STATIC" "$BROWSER_E2E" "$INFRA"
+          test "$API_SECURITY" = success
+          test "$CRYPTO" = success
+          test "$WEB_STATIC" = success
+          test "$BROWSER_E2E" = success
+          test "$INFRA" = success
