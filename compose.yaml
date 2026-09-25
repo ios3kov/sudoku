@@ -167,6 +167,8 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      APP_DOMAIN: ${APP_DOMAIN:-localhost:8080}
+      ASSET_PUBLIC_ORIGIN: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
     restart: unless-stopped
 
   caddy:
