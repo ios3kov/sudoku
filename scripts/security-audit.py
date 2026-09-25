@@ -111,9 +111,11 @@ def check_sinks(fs,out):
                 add(out,"client.paid-api","critical",path,line_of(text,m.start()),"Paid API called from browser","Proxy through authenticated server.")
             for m in re.finditer(r"(NEXT_PUBLIC_|VITE_|REACT_APP_)[A-Z0-9_]*(SECRET|PRIVATE|TOKEN|PASSWORD|KEY)",text):
                 add(out,"client.public-secret","critical",path,line_of(text,m.start()),"Browser-exposed secret-like env name","Keep secrets server-side.")
-            if any(x in path.lower() for x in ("/crypto/","openmls","e2ee","biometric","device-pin","device_access")):
-                for m in re.finditer(r"\b(?:localStorage|sessionStorage)\b",text):
-                    add(out,"client.crypto-webstorage","high",path,line_of(text,m.start()),"Security/crypto state touches Web Storage","Do not persist raw secrets in local/session storage.")
+            for m in re.finditer(r"\b(?:localStorage|sessionStorage)\b",text):
+                lo=max(0,m.start()-240); hi=min(len(text),m.end()+240)
+                context=text[lo:hi].lower()
+                if re.search(r"\b(token|secret|private[_-]?key|pin|unlock|mls|crypto[_-]?state|session[_-]?key)\b",context):
+                    add(out,"client.crypto-webstorage","high",path,line_of(text,m.start()),"Sensitive security state may touch Web Storage","Do not persist raw secrets, unlock capabilities or MLS state in local/session storage.")
         if path.endswith(".py"):
             for id,sev,rx,fix in (
                 ("python.eval","critical",re.compile(r"(?<![\w.])(?:eval|exec)\s*\("),"Remove dynamic code execution."),
