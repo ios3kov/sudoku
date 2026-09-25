@@ -37,10 +37,31 @@ test("document CSP uses a fresh nonce and no unsafe-inline script allowance", as
   }
 });
 
-test("CSP blocks an untrusted inline script", async ({ page }) => {
+test("CSP blocks a parser-inserted untrusted inline script", async ({ page }) => {
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    if (!request.isNavigationRequest() || request.resourceType() !== "document") {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const html = await response.text();
+    const injected =
+      '<script>window.__sudokuUntrustedInlineRan = true;<\\/script>';
+    await route.fulfill({
+      response,
+      body: html.replace("</head>", `${injected}</head>`),
+    });
+  });
+
   await page.goto("/");
-  await page.addScriptTag({ content: "window.__sudokuUntrustedInlineRan = true;" }).catch(() => undefined);
-  await expect
-    .poll(() => page.evaluate(() => Boolean((window as typeof window & { __sudokuUntrustedInlineRan?: boolean }).__sudokuUntrustedInlineRan)))
-    .toBe(false);
+  const ran = await page.evaluate(
+    () =>
+      Boolean(
+        (window as typeof window & { __sudokuUntrustedInlineRan?: boolean })
+          .__sudokuUntrustedInlineRan,
+      ),
+  );
+  expect(ran).toBe(false);
 });
