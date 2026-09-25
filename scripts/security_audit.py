@@ -352,6 +352,7 @@ class Audit:
     def check_invariants(self) -> None:
         expected = {
             "apps/api/app/middleware.py": ["SameOriginMutationMiddleware", "Cache-Control", "no-store"],
+            "apps/api/app/schemas.py": ["MAX_E2EE_MESSAGE_BYTES", "class E2eeEnvelopeRequest", 'kind: Literal["application"]'],
             "apps/api/app/deps.py": ["Session.revoked_at.is_(None)", "Session.expires_at > now", "pin_allows"],
             "apps/api/app/routes/messaging.py": ["E2EE conversation requires ciphertext envelope and forbids plaintext body", "ciphertext-only assets"],
             "apps/api/app/realtime.py": ['websocket.headers.get("origin")', "EXPECTED_ORIGIN", "MAX_CLIENT_FRAME_CHARS"],
