@@ -9,6 +9,9 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 
 _PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 _DEVICE_PIN_CONTEXT = "sudoku-device-pin:v1:"
+# Fixed Argon2id verifier used to keep unknown/inactive-account login timing close to real accounts.
+# It is not a credential and never authenticates a user.
+DUMMY_PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$HoiosE7ghuoDOzBBPimMAw$DvYE3U2quNZVA4eKChHK+16KILQagt69OwOUif+P8xM"
 
 
 @dataclass(frozen=True)
