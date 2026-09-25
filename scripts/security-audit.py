@@ -160,6 +160,23 @@ def check_ci_workflows(fs,out):
             add(out,"ci.mutable-action-ref","medium",path,1,"Actions use mutable version refs: "+detail,"For higher supply-chain assurance, pin external actions to reviewed full commit SHAs and update them deliberately.")
 
 
+def check_dependency_reproducibility(fs,out):
+    if "apps/api/pyproject.toml" in fs:
+        python_locks=(
+            "apps/api/requirements.lock",
+            "apps/api/requirements.txt",
+            "apps/api/uv.lock",
+            "apps/api/poetry.lock",
+            "uv.lock",
+        )
+        if not any(path in fs for path in python_locks):
+            add(out,"supply.python-unlocked","medium","apps/api/pyproject.toml",1,"Production Python dependencies are range-constrained but not locked","Commit a resolver-generated production lock and install from it in CI/Docker while keeping pip-audit on the resolved set.")
+    if "package-lock.json" not in fs:
+        add(out,"supply.node-unlocked","high","package.json",1,"Node production dependencies have no package-lock","Commit package-lock.json and use npm ci.")
+    if "packages/mls-wasm/Cargo.toml" in fs and "packages/mls-wasm/Cargo.lock" not in fs:
+        add(out,"supply.rust-unlocked","high","packages/mls-wasm/Cargo.toml",1,"Rust/OpenMLS dependencies have no Cargo.lock","Commit Cargo.lock and build with --locked.")
+
+
 def check_sinks(fs,out):
     for path,text in fs.items():
         if path.startswith("apps/web/") and "/tests/" not in path:
@@ -248,7 +265,7 @@ def main():
     ap.add_argument("--json",default="security-audit-report.json")
     ap.add_argument("--no-history",action="store_true")
     a=ap.parse_args(); root=Path(a.path).resolve(); fs=dict(files(root)); out=[]
-    check_secrets(root,fs,out,not a.no_history); check_routes(fs,out); check_ci_workflows(fs,out); check_sinks(fs,out); check_invariants(fs,out)
+    check_secrets(root,fs,out,not a.no_history); check_routes(fs,out); check_ci_workflows(fs,out); check_dependency_reproducibility(fs,out); check_sinks(fs,out); check_invariants(fs,out)
     c=reports(out,root/a.report,root/a.json)
     print(json.dumps({"summary":{"total":sum(c.values()),**c}},ensure_ascii=False))
     raise SystemExit(2 if c["critical"] or c["high"] else (1 if c["medium"] else 0))
