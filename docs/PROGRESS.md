@@ -1,5 +1,23 @@
 # Progress
 
+## Verified parallel CI + nonce CSP baseline — 2026-09-25
+
+Current verified repository baseline: `8fead74e3a3ac95487b7a6d29f25f057591805a9`.
+
+PR #93 merged as `ac145152a8a06f90031eb75d074b3df3e34667e1` and split the serial release workflow into parallel API/security, OpenMLS/Rust, web, Browser E2E and infra/restore/image shards while preserving the final `ci / test` gate. PR #95 merged as `8fead74e3a3ac95487b7a6d29f25f057591805a9` and added explicit CSP/nonce regression coverage plus scanner hardening.
+
+Post-merge GitHub Actions on this exact main SHA are green:
+- [ci 36163328436](https://github.com/ios3kov/sudoku/actions/runs/36163328436)
+- [device-access 36163328513](https://github.com/ios3kov/sudoku/actions/runs/36163328513)
+- [beat-runtime 36163328457](https://github.com/ios3kov/sudoku/actions/runs/36163328457)
+- [api-shutdown 36163328630](https://github.com/ios3kov/sudoku/actions/runs/36163328630)
+
+The document CSP is generated per response by Next.js `proxy.ts` with a fresh nonce. `script-src` uses the nonce plus `strict-dynamic` and `wasm-unsafe-eval` and does not allow generic script `unsafe-inline`. Browser E2E now verifies nonce rotation between document responses, nonce propagation to Next scripts and blocking of a parser-inserted inline script without a nonce. The deterministic security scanner no longer accepts a Caddy comment as evidence that CSP is configured. `style-src 'unsafe-inline'` remains an explicit tracked exception.
+
+**Not released.** Production remains on its separately deployed baseline. Remaining release gates are physical/two-device iPhone acceptance, VoiceOver and media-quality checks, real-device performance profiling, a production-aligned isolated restore drill with application-level login/message/media verification, deployment preflight with fresh backup/rollback evidence, and separate explicit production deployment authorization. CI restore coverage remains synthetic/disposable and does not by itself prove production disaster recovery.
+
+See [Step106](steps/106-parallel-ci-csp-regression.md).
+
 ## Python runtime lock follow-up — 2026-09-25 (awaiting CI)
 
 Generated `apps/api/requirements.lock` with uv 0.12.19 for CPython 3.13/Linux x86_64. Docker installs hashed runtime requirements before installing the application without dependency resolution. CI installs the same runtime lock and constrains test-extra installation to those runtime versions, then runs pip check. Hash-verified target downloads passed (including the http-ece source distribution); this is not proof of a Linux image build. Eleven scanner tests pass locally. Build-system/test dependencies are not fully locked. Full candidate CI is required; the previously green application candidate remains `afec35c` until then. Production unchanged.

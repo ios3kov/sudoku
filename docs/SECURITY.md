@@ -88,7 +88,9 @@ The native shell does not change the core threat model: endpoint compromise, mal
 
 ## Production runtime hardening
 
-- Production Caddy adds HSTS, CSP, frame denial, no-referrer, COOP/CORP, nosniff and a restrictive Permissions-Policy.
+- Production Caddy adds HSTS, frame denial, no-referrer, COOP/CORP, nosniff and a restrictive Permissions-Policy; it forwards the web application's dynamic CSP instead of owning a static script policy.
+- Next.js `proxy.ts` generates a fresh CSP nonce for every matched document response. `script-src` uses `'self'`, the response nonce, `'strict-dynamic'` and `'wasm-unsafe-eval'`; generic script `'unsafe-inline'` is not permitted.
+- `style-src 'unsafe-inline'` remains a reviewed compatibility exception and is not treated as permission for inline scripts.
 - Browser network egress under CSP is limited to the application origin, the dedicated encrypted-object subdomain and the same-host secure WebSocket.
 - API/Web containers run as non-root users; production Compose drops Linux capabilities and sets `no-new-privileges`.
 - MinIO is not directly published in production; browsers use the TLS `assets.<APP_DOMAIN>` endpoint and a dedicated least-privilege application user.
@@ -117,6 +119,6 @@ Private conversation content now uses MLS/RFC 9420 through the pinned OpenMLS br
 
 ## Deterministic repository security gate
 
-CI runs `scripts/security-audit.py` as an additional read-only security layer. It scans current source plus Git history for high-confidence secrets, verifies route-level auth/rate-limit signals and core production security invariants, and reports dangerous client/server sinks. The scanner emits Markdown and JSON and is regression-tested in `tests/ops/test_security_audit.py`.
+CI runs `scripts/security-audit.py` as an additional read-only security layer. It scans current source plus Git history for high-confidence secrets, verifies route-level auth/rate-limit signals and core production security invariants, and reports dangerous client/server sinks. The scanner emits Markdown and JSON and is regression-tested in `tests/ops/test_security_audit.py`. CSP ownership is accepted only from an active Caddy header or the nonce-based Next.js proxy path; comments cannot satisfy the invariant.
 
 This gate complements `pip-audit`, `npm audit`, `cargo audit`, integration/E2E coverage and human review. A clean scanner result is not evidence that authorization, E2EE or deployment infrastructure is fully secure.
