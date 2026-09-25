@@ -354,6 +354,19 @@ class Audit:
                 self.add("cors-wildcard-header", "low", rel, None, "Object storage accepts any CORS request header from its allowed origin.", "Reduce to required upload headers after compatibility verification.")
 
     def check_invariants(self) -> None:
+        main_api = self.root / "apps/api/app/main.py"
+        if main_api.exists():
+            main_text = main_api.read_text(errors="ignore")
+            if re.search(r"ReadinessResponse\([\s\S]{0,300}(?:postgres|redis|object_storage)\s*=", main_text):
+                self.add(
+                    "readiness-topology-disclosure",
+                    "medium",
+                    self.rel(main_api),
+                    None,
+                    "Public readiness response exposes individual backend dependency status.",
+                    "Return only ready/not_ready externally; keep component health in internal metrics/logs.",
+                )
+
         member_support = self.root / "apps/api/app/routes/messaging_support.py"
         if member_support.exists():
             support_text = member_support.read_text(errors="ignore")
