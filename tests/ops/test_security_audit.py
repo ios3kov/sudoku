@@ -123,3 +123,20 @@ jobs:
     audit.check_ci_workflows({".github/workflows/ci.yml": workflow}, out)
     assert "ci.permissions" in ids(out)
     assert "ci.mutable-action-ref" in ids(out)
+
+
+def test_dependency_lock_checks():
+    out = []
+    audit.check_dependency_reproducibility(
+        {
+            "apps/api/pyproject.toml": "[project]\ndependencies=[]\n",
+            "package.json": "{}",
+            "package-lock.json": "{}",
+            "packages/mls-wasm/Cargo.toml": "[package]\nname='x'\n",
+            "packages/mls-wasm/Cargo.lock": "",
+        },
+        out,
+    )
+    assert "supply.python-unlocked" in ids(out)
+    assert "supply.node-unlocked" not in ids(out)
+    assert "supply.rust-unlocked" not in ids(out)
