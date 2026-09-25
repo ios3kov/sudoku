@@ -71,9 +71,4 @@ async def readiness(response: Response, db: AsyncSession = Depends(get_db)) -> R
     ready = postgres_ok and redis_ok and storage_ok
     if not ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    return ReadinessResponse(
-        status="ready" if ready else "not_ready",
-        postgres=postgres_ok,
-        redis=redis_ok,
-        object_storage=storage_ok,
-    )
+    return ReadinessResponse(status="ready" if ready else "not_ready")
