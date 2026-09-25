@@ -21,7 +21,11 @@ SECRET={
 }
 GENERIC_QUOTED=re.compile(r"""(?ix)\b(api[_-]?key|secret|password|token|private[_-]?key)\b\s*[:=]\s*(["'])([^"'\s]{16,})\2""")
 GENERIC_ENV=re.compile(r"""(?im)^\s*([A-Z][A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|PRIVATE_KEY|API_KEY)[A-Z0-9_]*)\s*[:=]\s*([A-Za-z0-9_./+=:@-]{20,})\s*$""")
-PLACEHOLDER=re.compile(r"(?i)(replace|example|dummy|changeme|generate|test|localhost|sudoku-ci|ci-secret|not-a-secret)")
+PLACEHOLDER=re.compile(r"(?i)(replace|example|dummy|change[-_]?me|generate|test|localhost|local[-_]|sudoku-ci|ci[-_]only|ci-secret|not-a-secret)")
+SYNTHETIC_SECRETS={"ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl"}
+
+def is_placeholder(value):
+    return value in SYNTHETIC_SECRETS or bool(PLACEHOLDER.search(value))
 
 @dataclass
 class Finding:
@@ -54,15 +58,15 @@ def check_secrets(root,fs,out,history):
         for name,rx in SECRET.items():
             for m in rx.finditer(text):
                 v=m.group(0)
-                if not PLACEHOLDER.search(v):
+                if not is_placeholder(v):
                     add(out,"secret."+name,"critical",path,line_of(text,m.start()),"Potential live secret "+mask(v),"Rotate and move to runtime secret storage.")
         for m in GENERIC_QUOTED.finditer(text):
             v=m.group(3)
-            if not PLACEHOLDER.search(v):
+            if not is_placeholder(v):
                 add(out,"secret.generic","high",path,line_of(text,m.start()),"Hard-coded secret-like string "+mask(v),"Move to secret storage and rotate if exposed.")
         for m in GENERIC_ENV.finditer(text):
             v=m.group(2)
-            if PLACEHOLDER.search(v):
+            if is_placeholder(v):
                 continue
             severity="medium" if path.startswith((".github/","tests/","apps/web/tests/")) else "high"
             add(out,"secret.env-literal",severity,path,line_of(text,m.start()),"Committed secret-like environment value "+mask(v),"Use a generated test value or runtime secret; rotate if this credential was ever live.")
@@ -79,7 +83,7 @@ def check_secrets(root,fs,out,history):
             for m in rx.finditer(patch):
                 ls=patch.rfind("\n",0,m.start())+1
                 v=m.group(0)
-                if patch[ls:m.start()].startswith("+") and not PLACEHOLDER.search(v):
+                if patch[ls:m.start()].startswith("+") and not is_placeholder(v):
                     commit_pos=patch.rfind("@@COMMIT:",0,m.start())
                     commit_end=patch.find("\n",commit_pos)
                     commit=patch[commit_pos+9:commit_end].strip() if commit_pos>=0 and commit_end>=0 else "unknown"
