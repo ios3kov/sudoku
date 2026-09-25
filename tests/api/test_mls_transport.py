@@ -128,6 +128,101 @@ async def test_mls_key_packages_are_single_use_and_replay_protected() -> None:
         assert len(rows) == 2
         assert all(row.claimed_at is not None for row in rows)
 
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_mls_key_packages_reject_unrelated_authenticated_user() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    target_phone = f"+155500{suffix[:5]}1"
+    attacker_phone = f"+155500{suffix[:5]}2"
+    password = "correct horse battery staple"
+
+    async with SessionFactory() as db:
+        target = User(
+            phone_e164=target_phone,
+            phone_verified_at=datetime.now().astimezone(),
+            display_name="MLS Target",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        attacker = User(
+            phone_e164=attacker_phone,
+            phone_verified_at=datetime.now().astimezone(),
+            display_name="MLS Attacker",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add_all([target, attacker])
+        await db.commit()
+        await db.refresh(target)
+        target_user_id = target.id
+
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as target_client:
+        login = await target_client.post(
+            "/v1/auth/login",
+            json={"phone": target_phone, "password": password, "device_name": "target-device"},
+        )
+        assert login.status_code == 200, login.text
+        sessions = await target_client.get("/v1/sessions")
+        target_device_id = uuid.UUID(next(item["id"] for item in sessions.json() if item["current"]))
+        identity = base64.b64encode(b"Q" * 32).decode()
+        key_package = b"restricted-key-package-" + uuid.uuid4().bytes
+        assert (
+            await target_client.put(
+                f"/v1/e2ee/devices/{target_device_id}",
+                json={"identity_public_key_b64": identity},
+            )
+        ).status_code == 204
+        assert (
+            await target_client.put(
+                f"/v1/e2ee/devices/{target_device_id}/key-packages",
+                json={
+                    "device_id": str(target_device_id),
+                    "key_packages_b64": [base64.b64encode(key_package).decode()],
+                },
+            )
+        ).status_code == 204
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as attacker_client:
+        login = await attacker_client.post(
+            "/v1/auth/login",
+            json={"phone": attacker_phone, "password": password, "device_name": "attacker-device"},
+        )
+        assert login.status_code == 200, login.text
+
+        listed = await attacker_client.get(f"/v1/e2ee/users/{target_user_id}/devices")
+        claimed = await attacker_client.post(
+            f"/v1/e2ee/users/{target_user_id}/devices/{target_device_id}/key-package/claim"
+        )
+
+        assert listed.status_code == 403
+        assert claimed.status_code == 403
+
+    async with SessionFactory() as db:
+        from app.models import MlsKeyPackage
+
+        remaining = (
+            await db.execute(
+                select(MlsKeyPackage).where(
+                    MlsKeyPackage.user_id == target_user_id,
+                    MlsKeyPackage.device_id == target_device_id,
+                    MlsKeyPackage.claimed_at.is_(None),
+                )
+            )
+        ).scalars().all()
+        assert len(remaining) == 1
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_mls_control_event_snapshot_survives_membership_removal_and_ack() -> None:
     suffix = uuid.uuid4().hex[:10]
