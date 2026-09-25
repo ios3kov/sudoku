@@ -167,6 +167,9 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      CSP_ASSET_ORIGIN: ${CSP_ASSET_ORIGIN:-http://localhost:9000}
+      CSP_WEBSOCKET_ORIGIN: ${CSP_WEBSOCKET_ORIGIN:-ws://localhost:8080}
+      CSP_UPGRADE_INSECURE_REQUESTS: "false"
     restart: unless-stopped
 
   caddy:
