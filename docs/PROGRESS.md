@@ -1,5 +1,11 @@
 # Progress
 
+## Release runbook ready — 2026-09-25
+
+The verified executable candidate remains `effa0e03349d7ec04f88350b166bffec7e65aad8`; exact-main application verification on that SHA passed `ci #720`, `device-access #403`, `beat-runtime #405` and `api-shutdown #387`. [Step111](steps/111-production-release-runbook.md) records the proven production sequence: fresh backup on the current production checkout, off-host verification, exact-SHA checkout, hardened preflight, Compose build/up, nonce-CSP live smoke and rollback boundary.
+
+Production is still unchanged. The only release gates not executable from repository CI are the physical iPhone/two-account acceptance and an isolated restore of the latest real production backup. Deployment requires separate explicit operator authorization.
+
 ## Verified application-level restore baseline — 2026-09-25
 
 Current verified repository baseline: `effa0e03349d7ec04f88350b166bffec7e65aad8`.
