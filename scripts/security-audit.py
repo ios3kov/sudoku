@@ -143,6 +143,23 @@ def check_routes(fs,out):
                 if sensitive and method in {"post","put","patch","delete"} and not rate:
                     add(out,"route.rate-limit","medium",path,fn.lineno,method.upper()+" "+(absolute or fn.name)+" has no local rate limit","Add user/IP/account bucket or documented shared guard.")
 
+def check_ci_workflows(fs,out):
+    for path,text in fs.items():
+        if not path.startswith(".github/workflows/") or not path.endswith((".yml",".yaml")):
+            continue
+        if not re.search(r"(?m)^permissions:\s*$",text):
+            add(out,"ci.permissions","medium",path,1,"Workflow does not declare explicit GITHUB_TOKEN permissions","Declare the minimum permissions explicitly, normally contents: read.")
+        mutable=[]
+        for m in re.finditer(r"(?m)^\s*-?\s*uses:\s*([^\s#]+)@([^\s#]+)",text):
+            action,ref=m.group(1),m.group(2)
+            if action.startswith("./") or re.fullmatch(r"[0-9a-fA-F]{40}",ref):
+                continue
+            mutable.append(action+"@"+ref)
+        if mutable:
+            detail=", ".join(sorted(set(mutable)))
+            add(out,"ci.mutable-action-ref","medium",path,1,"Actions use mutable version refs: "+detail,"For higher supply-chain assurance, pin external actions to reviewed full commit SHAs and update them deliberately.")
+
+
 def check_sinks(fs,out):
     for path,text in fs.items():
         if path.startswith("apps/web/") and "/tests/" not in path:
@@ -231,7 +248,7 @@ def main():
     ap.add_argument("--json",default="security-audit-report.json")
     ap.add_argument("--no-history",action="store_true")
     a=ap.parse_args(); root=Path(a.path).resolve(); fs=dict(files(root)); out=[]
-    check_secrets(root,fs,out,not a.no_history); check_routes(fs,out); check_sinks(fs,out); check_invariants(fs,out)
+    check_secrets(root,fs,out,not a.no_history); check_routes(fs,out); check_ci_workflows(fs,out); check_sinks(fs,out); check_invariants(fs,out)
     c=reports(out,root/a.report,root/a.json)
     print(json.dumps({"summary":{"total":sum(c.values()),**c}},ensure_ascii=False))
     raise SystemExit(2 if c["critical"] or c["high"] else (1 if c["medium"] else 0))
