@@ -168,6 +168,9 @@ def check_invariants(fs,out):
         add(out,"invariant.ios-app-bound-domains","high","ios/Sudoku/Sudoku/Info.plist",1,"WKAppBoundDomains missing","Keep the native shell limited to approved domains.")
     if biometric and (".biometryCurrentSet" not in biometric or "kSecAttrTokenIDSecureEnclave" not in biometric):
         add(out,"invariant.ios-biometric-key","high","ios/Sudoku/Sudoku/BiometricKeyStore.swift",1,"Secure Enclave biometric binding weakened","Keep P-256 key in Secure Enclave and bind it to current biometric set.")
+    e2ee=fs.get("apps/api/app/e2ee.py","")
+    if e2ee and e2ee.count("await require_key_package_access(db, auth.user.id, user_id)") < 2:
+        add(out,"invariant.mls-key-package-acl","high","apps/api/app/e2ee.py",1,"MLS KeyPackage discovery/claim peer ACL missing","Require self, synced-contact or shared-conversation authorization before device listing and prekey claim.")
 
 def reports(out,md,jp):
     rank={"critical":0,"high":1,"medium":2,"info":3}
