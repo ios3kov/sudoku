@@ -73,6 +73,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
+  const directOpenRequests = useRef(new Map<string, Promise<void>>());
   const concealCallbacks = useRef({onHide, onLoggedOut});
   useEffect(() => { concealCallbacks.current = {onHide, onLoggedOut}; }, [onHide, onLoggedOut]);
   const revokeLocalSession = useCallback(() => {
@@ -446,6 +447,45 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     });
   }
 
+  async function openDirectConversation(userId: string): Promise<void> {
+    const existing = directOpenRequests.current.get(userId);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    const request = (async () => {
+      const adapter = e2eeRef.current;
+      if (!adapter) throw new Error("Secure messaging is not ready");
+
+      let conversation = await messengerApi.createDirect(userId, true);
+      addConversation(conversation);
+      setShowContacts(false);
+      setCreating(false);
+
+      if (!conversation.e2ee_ready && conversation.created_by === user.id) {
+        try {
+          conversation = await adapter.bootstrapConversation(conversation);
+          updateConversation(conversation);
+          setSecureSetupError(null);
+        } catch (error) {
+          setSecureSetupError(
+            error instanceof Error ? error.message : "Unable to finish secure setup",
+          );
+        }
+      }
+    })();
+
+    directOpenRequests.current.set(userId, request);
+    try {
+      await request;
+    } finally {
+      if (directOpenRequests.current.get(userId) === request) {
+        directOpenRequests.current.delete(userId);
+      }
+    }
+  }
+
   const visibleConversations = conversations.filter((conversation) =>
     conversationTitle(conversation, user.id)
       .toLocaleLowerCase()
@@ -557,7 +597,9 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               ?? (
                 selected.e2ee_ready && !selectedTracked
                   ? "Preparing secure messaging on this device."
-                  : "This encrypted conversation is unavailable until the local MLS state is ready."
+                  : !selected.e2ee_ready && selected.created_by !== user.id
+                    ? "Secure conversation setup is pending on the creator device."
+                    : "This encrypted conversation is unavailable until the local MLS state is ready."
               )}
           </p>
         </section>
@@ -604,6 +646,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         {creating ? (
           <NewChat
             onCreated={addConversation}
+            onOpenDirect={openDirectConversation}
             onCancel={() => setCreating(false)}
             adapter={e2eeOperational ? e2eeAdapter : null}
           />
@@ -712,7 +755,12 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           onCurrentRevoked={revokeLocalSession}
           onPhoneUpdated={(phone) => onUserUpdated({ ...user, phone_e164: phone })}
         /> : null}
-        {showContacts ? <ContactsPanel onClose={() => setShowContacts(false)} /> : null}
+        {showContacts ? (
+          <ContactsPanel
+            onClose={() => setShowContacts(false)}
+            onOpenChat={openDirectConversation}
+          />
+        ) : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
           {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}

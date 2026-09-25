@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import UTC, datetime
 
@@ -5,9 +6,9 @@ import httpx
 import pytest
 from app.db import SessionFactory
 from app.main import app
-from app.models import User, UserContact
+from app.models import Conversation, User, UserContact
 from app.security import hash_password
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 ORIGIN = "https://sudoku.test"
@@ -136,6 +137,65 @@ async def test_contact_sync_controls_directory_and_new_conversations() -> None:
         assert old_contact.json() == []
         new_contact = await client.get("/v1/users?q=Stranger")
         assert [item["id"] for item in new_contact.json()] == [str(stranger.id)]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_direct_chat_create_is_idempotent_for_both_participants() -> None:
+    seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 100000
+    owner = await create_user(seed, "Direct Owner")
+    peer = await create_user(seed + 1, "Direct Peer")
+
+    async with SessionFactory() as db:
+        db.add_all([
+            UserContact(owner_user_id=owner.id, contact_user_id=peer.id),
+            UserContact(owner_user_id=peer.id, contact_user_id=owner.id),
+        ])
+        await db.commit()
+
+    payload_for_peer = {
+        "type": "direct",
+        "title": None,
+        "member_ids": [str(peer.id)],
+        "encryption_required": True,
+    }
+    payload_for_owner = {
+        "type": "direct",
+        "title": None,
+        "member_ids": [str(owner.id)],
+        "encryption_required": True,
+    }
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url=ORIGIN, headers=HEADERS
+    ) as owner_client, httpx.AsyncClient(
+        transport=transport, base_url=ORIGIN, headers=HEADERS
+    ) as peer_client:
+        await phone_login(owner_client, owner)
+        await phone_login(peer_client, peer)
+
+        first, second = await asyncio.gather(
+            owner_client.post("/v1/conversations", json=payload_for_peer),
+            owner_client.post("/v1/conversations", json=payload_for_peer),
+        )
+        assert first.status_code == 201, first.text
+        assert second.status_code == 201, second.text
+        conversation_id = first.json()["id"]
+        assert second.json()["id"] == conversation_id
+
+        # The other participant can resolve/open the same pending direct row.
+        reused = await peer_client.post("/v1/conversations", json=payload_for_owner)
+        assert reused.status_code == 201, reused.text
+        assert reused.json()["id"] == conversation_id
+
+    direct_key = ":".join(sorted([str(owner.id), str(peer.id)]))
+    async with SessionFactory() as db:
+        count = await db.scalar(
+            select(func.count())
+            .select_from(Conversation)
+            .where(Conversation.direct_key == direct_key)
+        )
+        assert int(count or 0) == 1
 
 
 @pytest.mark.asyncio(loop_scope="session")

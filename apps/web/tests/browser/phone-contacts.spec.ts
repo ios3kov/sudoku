@@ -103,7 +103,7 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
 });
 
 
-test("Contacts panel lists and removes an allowed contact", async ({ page }) => {
+test("Contacts panel opens or creates a direct chat and still allows removal", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(3));
 
@@ -115,9 +115,24 @@ test("Contacts panel lists and removes an allowed contact", async ({ page }) => 
   await panel.getByRole("button", { name: "Add contact", exact: true }).click();
   await expect(panel.getByText(testPhone(5), { exact: true })).toBeVisible();
 
-  await panel.getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(panel.getByText(testPhone(5), { exact: true })).toHaveCount(0);
-
-  await panel.getByRole("button", { name: "Close", exact: true }).click();
+  const contactRow = panel.locator(".settings-row").filter({ hasText: testPhone(5) });
+  await contactRow.getByRole("button", { name: /Open chat with/ }).click();
   await expect(panel).toHaveCount(0);
+  await expect(
+    page.getByText("End-to-end encrypted", { exact: true })
+      .or(page.getByText("Secure setup pending", { exact: true })),
+  ).toBeVisible({ timeout: 60_000 });
+
+  const back = page.getByRole("button", { name: "Back to conversations" })
+    .or(page.getByRole("button", { name: "Back", exact: true }));
+  await back.click();
+
+  await page.getByRole("button", { name: "Contacts", exact: true }).click();
+  const reopened = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  const reopenedRow = reopened.locator(".settings-row").filter({ hasText: testPhone(5) });
+  await reopenedRow.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(reopened.getByText(testPhone(5), { exact: true })).toHaveCount(0);
+
+  await reopened.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(reopened).toHaveCount(0);
 });
