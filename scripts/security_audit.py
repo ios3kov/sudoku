@@ -308,6 +308,21 @@ class Audit:
                              "Pin actions to reviewed immutable SHAs; Dependabot can maintain them.")
 
     def check_runtime(self) -> None:
+        base_compose = self.root / "compose.yaml"
+        if base_compose.exists():
+            base_text = base_compose.read_text(errors="ignore")
+            for match in re.finditer(r"(?m)^\s*image:\s*([^\s#]+)", base_text):
+                image_ref = match.group(1)
+                if "@sha256:" not in image_ref:
+                    self.add(
+                        "mutable-container-image",
+                        "medium",
+                        self.rel(base_compose),
+                        base_text.count("\n", 0, match.start()) + 1,
+                        f"Container image {image_ref} is selected by a mutable tag rather than an immutable digest.",
+                        "Pin production base images to reviewed sha256 digests and let Dependabot update them.",
+                    )
+
         prod = self.root / "compose.production.yaml"
         if not prod.exists():
             self.add("prod-compose-missing", "high", "compose.production.yaml", None, "Production Compose overlay is missing.", "Version production isolation/hardening.")
