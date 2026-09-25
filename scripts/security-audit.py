@@ -151,6 +151,18 @@ def check_invariants(fs,out):
         add(out,"invariant.auth-primitives","critical","apps/api/app/security.py",1,"Expected CSPRNG/Argon2 primitives missing","Use CSPRNG sessions and Argon2id.")
     if "_redact_sensitive" not in obs or 'logging.getLogger("uvicorn.access").disabled = True' not in obs:
         add(out,"invariant.logging","high","apps/api/app/observability.py",1,"Expected log privacy controls missing","Keep bodies/secrets out of access logs and redact keys.")
+    ios=fs.get("ios/Sudoku/Sudoku/SudokuViewController.swift","")
+    plist=fs.get("ios/Sudoku/Sudoku/Info.plist","")
+    biometric=fs.get("ios/Sudoku/Sudoku/BiometricKeyStore.swift","")
+    if ios:
+        if "limitsNavigationsToAppBoundDomains = true" not in ios or 'private static let trustedHost = "sudoku.moscow"' not in ios:
+            add(out,"invariant.ios-webview-origin","high","ios/Sudoku/Sudoku/SudokuViewController.swift",1,"Native WebView origin boundary weakened","Keep app-bound domains and explicit trusted-host navigation checks.")
+        if "message.frameInfo.isMainFrame" not in ios or "sourceURL.host == Self.trustedHost" not in ios:
+            add(out,"invariant.ios-bridge-origin","high","ios/Sudoku/Sudoku/SudokuViewController.swift",1,"Native contact bridge lacks frame/origin validation","Validate main frame and trusted HTTPS origin before native actions.")
+    if plist and "<key>WKAppBoundDomains</key>" not in plist:
+        add(out,"invariant.ios-app-bound-domains","high","ios/Sudoku/Sudoku/Info.plist",1,"WKAppBoundDomains missing","Keep the native shell limited to approved domains.")
+    if biometric and (".biometryCurrentSet" not in biometric or "kSecAttrTokenIDSecureEnclave" not in biometric):
+        add(out,"invariant.ios-biometric-key","high","ios/Sudoku/Sudoku/BiometricKeyStore.swift",1,"Secure Enclave biometric binding weakened","Keep P-256 key in Secure Enclave and bind it to current biometric set.")
 
 def reports(out,md,jp):
     rank={"critical":0,"high":1,"medium":2,"info":3}
