@@ -9,6 +9,11 @@ final class SudokuViewController: UIViewController {
     private static let trustedHost = "sudoku.moscow"
     private static let contactHandlerName = "sudokuContacts"
 
+    static func isAllowedExternalURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return ["https", "mailto", "tel"].contains(scheme)
+    }
+
     private lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
@@ -327,8 +332,7 @@ extension SudokuViewController: WKNavigationDelegate {
         }
 
         if navigationAction.navigationType == .linkActivated,
-           let scheme = url.scheme,
-           ["https", "mailto", "tel"].contains(scheme) {
+           Self.isAllowedExternalURL(url) {
             UIApplication.shared.open(url)
         }
 
@@ -347,7 +351,8 @@ extension SudokuViewController: WKUIDelegate {
            url.scheme == "https",
            url.host == Self.trustedHost {
             webView.load(URLRequest(url: url))
-        } else if let url = navigationAction.request.url {
+        } else if let url = navigationAction.request.url,
+                  Self.isAllowedExternalURL(url) {
             UIApplication.shared.open(url)
         }
         return nil
