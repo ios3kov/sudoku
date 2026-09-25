@@ -63,3 +63,16 @@ This step does not close the release gate. The following remain required:
 ## Notes
 
 The security improvement is specifically about replacing inline script allowance with a dynamic nonce model for application pages. It does not claim that style CSP is final, and it does not prove native-device behavior or production runtime behavior until the manual gates above are completed.
+
+
+## Automated CSP regression
+
+The follow-up browser regression `apps/web/tests/browser/csp-nonce.spec.ts` validates the runtime CSP contract directly:
+
+- HTML responses contain a `script-src` nonce plus `strict-dynamic` and `wasm-unsafe-eval`.
+- `script-src` does not contain `'unsafe-inline'`.
+- Next.js document scripts carry the response nonce.
+- An arbitrary dynamically inserted inline script without the nonce is blocked.
+- Separate HTML responses receive different nonces.
+
+This regression covers the browser-visible nonce contract. It does not replace physical Safari/iPhone acceptance or production-origin smoke testing.
