@@ -106,8 +106,6 @@ class CreateConversationRequest(BaseModel):
 class ConversationMemberResponse(BaseModel):
     id: uuid.UUID
     display_name: str
-    phone_e164: str | None
-    email: str | None
     role: str
     last_read_sequence: int
 
