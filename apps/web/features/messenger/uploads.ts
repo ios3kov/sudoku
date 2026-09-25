@@ -107,14 +107,19 @@ function putBlob(
 export async function uploadAsset(
   file: File,
   onProgress: (value: number) => void,
+  signal?: AbortSignal,
 ): Promise<AssetResponse> {
+  signal?.throwIfAborted();
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) {
     throw new Error("File must be 25 MB or smaller");
   }
   const bytes = await file.arrayBuffer();
+  signal?.throwIfAborted();
   const sha256 = toHex(await crypto.subtle.digest("SHA-256", bytes));
+  signal?.throwIfAborted();
 
   const intentResponse = await fetch("/v1/assets/upload-intents", {
+    signal,
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -134,17 +139,21 @@ export async function uploadAsset(
   }
   const intent = (await intentResponse.json()) as UploadIntent;
 
-  await putBlob(intent.upload_url, file, intent.headers, onProgress);
+  await putBlob(intent.upload_url, file, intent.headers, onProgress, signal);
+  signal?.throwIfAborted();
   onProgress(100);
 
   const completeResponse = await fetch(`/v1/assets/${intent.asset_id}/complete`, {
+    signal,
     method: "POST",
     credentials: "include",
   });
   if (!completeResponse.ok) {
     throw new Error("Uploaded file failed verification");
   }
-  return (await completeResponse.json()) as AssetResponse;
+  const asset = (await completeResponse.json()) as AssetResponse;
+  signal?.throwIfAborted();
+  return asset;
 }
 
 export async function uploadEncryptedAsset(
