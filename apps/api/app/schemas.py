@@ -85,9 +85,6 @@ class HealthResponse(BaseModel):
 
 class ReadinessResponse(BaseModel):
     status: str
-    postgres: bool
-    redis: bool
-    object_storage: bool
 
 
 class UserDirectoryItem(BaseModel):
