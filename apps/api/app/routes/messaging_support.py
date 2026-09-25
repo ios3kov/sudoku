@@ -96,8 +96,6 @@ async def conversation_members_response(
         ConversationMemberResponse(
             id=user.id,
             display_name=user.display_name,
-            phone_e164=user.phone_e164,
-            email=user.email,
             role=role,
             last_read_sequence=last_read_sequence,
         )
