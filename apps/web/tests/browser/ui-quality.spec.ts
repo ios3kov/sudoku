@@ -42,11 +42,10 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await ensureSudokuGame(page);
 
   await expect(page.getByRole("grid", { name: "Sudoku board" })).toBeVisible();
-  await expect(page.locator(".sudoku-logo")).toBeVisible();
-  await expect(page.locator(".sudoku-brand")).toContainText("9×9");
-  await expect(page.getByText("Time", { exact: true })).toBeVisible();
+  await expect(page.locator(".sudoku-header-actions")).toContainText("SUDOKU.MOSCOW");
+  await expect(page.getByText("Timer", { exact: true })).toBeVisible();
   await expect(page.getByText("Mistakes", { exact: true })).toBeVisible();
-  await expect(page.getByText("Progress", { exact: true })).toBeVisible();
+  await expect(page.getByText("Difficulty", { exact: true })).toBeVisible();
 
   const digitButtons = page.locator(".digits .digit");
   await expect(digitButtons).toHaveCount(9);
@@ -56,12 +55,12 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
       return { top: Math.round(rect.top), left: rect.left, right: rect.right };
     }),
   );
-  expect(new Set(digitBoxes.map((box) => box.top)).size).toBe(1);
+  expect(new Set(digitBoxes.map((box) => box.top)).size).toBe(3);
 
   const boardBox = await page.getByRole("grid", { name: "Sudoku board" }).boundingBox();
   expect(boardBox).not.toBeNull();
   expect(Math.abs((digitBoxes.at(-1)?.right ?? 0) - (boardBox?.x ?? 0) - (boardBox?.width ?? 0))).toBeLessThanOrEqual(2);
-  expect(Math.abs((digitBoxes[0]?.left ?? 0) - (boardBox?.x ?? 0))).toBeLessThanOrEqual(2);
+  expect(digitBoxes[0]!.left).toBeGreaterThan(boardBox!.x);
 
   const initialOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -124,16 +123,18 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await expect(editableCell).toHaveText("");
 
   await expect(editableCell).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "Clear", exact: true }).click();
-  await expect(page.locator('[role="gridcell"][aria-selected="true"]')).toHaveCount(0);
-  await editableCell.click();
+  // Erase preserves selection; the redesigned toolbar has no Clear control.
 
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await page.getByRole("button", { name: "2", exact: true }).click();
   await expect(editableCell).toContainText("2");
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await page.getByRole("button", { name: "Menu", exact: true }).click();
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(editableCell).toContainText("2");
+  await expect(page.locator('[role="gridcell"][aria-selected="true"]')).toHaveCount(0);
+  await editableCell.click();
+  await page.getByRole("button", { name: "Erase", exact: true }).click();
   await expect(editableCell).toHaveText("");
 
   const givenCell = page.locator('[role="gridcell"].given').first();
@@ -222,7 +223,7 @@ test("solving the last Sudoku cell freezes the saved timer across reload", async
     }));
   }, { solution, givens });
   await page.goto("/");
-  await page.getByRole("button", { name: "Continue saved game · 9×9", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   const board = page.getByRole("grid", { name: "Sudoku board" });
   await expect(board.locator("button").nth(index)).toHaveText("");
   await board.locator("button").nth(index).click();
@@ -231,7 +232,7 @@ test("solving the last Sudoku cell freezes the saved timer across reload", async
   await expect.poll(async () => (await saved()).values).toEqual(solution);
   const elapsed = (await saved()).elapsedSeconds;
   await page.reload();
-  await page.getByRole("button", { name: "Continue saved game · 9×9", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(board.locator("button").nth(index)).toHaveText(String(solution[index]));
   // Cross two timer ticks: a completed board must not resume timing on reload.
   await page.waitForTimeout(2200);
