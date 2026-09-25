@@ -61,9 +61,26 @@ jobs:
       - name: Deterministic security audit
         run: |
           git fetch --unshallow 2>/dev/null || git fetch --all --tags
+          set +e
           python scripts/security-audit.py . \
-            --report /tmp/security-audit-report.md \
-            --json /tmp/security-audit-report.json
+            --report security-audit-report.md \
+            --json security-audit-report.json
+          code=$?
+          set -e
+          cat security-audit-report.md
+          if [ "$code" -ge 2 ]; then
+            exit "$code"
+          fi
+      - name: Retain security audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            security-audit-report.md
+            security-audit-report.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Python dependency audit
         run: pip-audit --local
       - name: Legacy phone + singleton-admin migration upgrade regression
