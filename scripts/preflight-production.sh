@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 ENV_FILE="${ENV_FILE:-.env.production}"
 SKIP_DNS="${SKIP_DNS:-0}"
+EXPECTED_GIT_SHA="${EXPECTED_GIT_SHA:-}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [[ "$ENV_FILE" != /* ]]; then
@@ -15,12 +16,26 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-for command in docker python3 getent stat; do
+for command in docker python3 getent stat git; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "Required command not found: $command" >&2
     exit 1
   }
 done
+
+if [[ ! "$EXPECTED_GIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "EXPECTED_GIT_SHA must be set to the exact 40-character release commit SHA" >&2
+  exit 1
+fi
+actual_git_sha="$(git rev-parse HEAD)"
+if [[ "$actual_git_sha" != "$EXPECTED_GIT_SHA" ]]; then
+  echo "Release SHA mismatch: expected=$EXPECTED_GIT_SHA actual=$actual_git_sha" >&2
+  exit 1
+fi
+if ! git diff --quiet --ignore-submodules -- || ! git diff --cached --quiet --ignore-submodules --; then
+  echo "Tracked repository changes are present; refusing production preflight" >&2
+  exit 1
+fi
 
 compose_version="$(docker compose version --short 2>/dev/null | sed 's/^v//')"
 python3 - "$compose_version" <<'PYVERSION'

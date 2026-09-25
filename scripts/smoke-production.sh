@@ -6,7 +6,7 @@ if [[ -z "$APP_DOMAIN" ]]; then
   echo "Usage: APP_DOMAIN=chat.example.com $0 [chat.example.com]" >&2
   exit 2
 fi
-for command in curl getent grep awk mktemp; do
+for command in curl getent grep awk mktemp tr; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "Required command not found: $command" >&2
     exit 1
@@ -16,8 +16,9 @@ done
 origin="https://${APP_DOMAIN}"
 assets_origin="https://assets.${APP_DOMAIN}"
 app_headers="$(mktemp)"
+app_headers_2="$(mktemp)"
 asset_headers="$(mktemp)"
-trap 'rm -f "$app_headers" "$asset_headers"' EXIT
+trap 'rm -f "$app_headers" "$app_headers_2" "$asset_headers"' EXIT
 
 retry_curl() {
   local attempts="${1:-30}"
@@ -49,25 +50,75 @@ assert_no_server_header() {
   fi
 }
 
+header_value() {
+  local file="$1"
+  local wanted="$2"
+  awk -v wanted="$wanted" '
+    BEGIN { IGNORECASE=1 }
+    {
+      line=$0
+      sub(/\r$/, "", line)
+      pos=index(line, ":")
+      if (pos > 0 && tolower(substr(line, 1, pos - 1)) == tolower(wanted)) {
+        value=substr(line, pos + 1)
+        sub(/^[[:space:]]+/, "", value)
+        print value
+        exit
+      }
+    }
+  ' "$file"
+}
+
+script_src_directive() {
+  printf '%s\n' "$1" | tr ';' '\n' | awk '{$1=$1} /^script-src / { print; exit }'
+}
+
 echo "[smoke] DNS"
 getent ahosts "$APP_DOMAIN" >/dev/null
 getent ahosts "assets.$APP_DOMAIN" >/dev/null
 
 echo "[smoke] HTTPS application"
 retry_curl 30 --fail --output /dev/null --dump-header "$app_headers" "$origin/"
-for header in \
-  strict-transport-security \
-  content-security-policy \
-  x-content-type-options \
-  x-frame-options \
-  referrer-policy \
-  cross-origin-opener-policy \
-  cross-origin-resource-policy \
-  permissions-policy; do
-  require_header "$app_headers" "$header"
+retry_curl 30 --fail --output /dev/null --dump-header "$app_headers_2" "$origin/"
+for file in "$app_headers" "$app_headers_2"; do
+  for header in \
+    strict-transport-security \
+    content-security-policy \
+    x-nonce \
+    x-content-type-options \
+    x-frame-options \
+    referrer-policy \
+    cross-origin-opener-policy \
+    cross-origin-resource-policy \
+    permissions-policy; do
+    require_header "$file" "$header"
+  done
+  assert_no_server_header "$file"
 done
-assert_no_server_header "$app_headers"
-csp="$(grep -i '^content-security-policy:' "$app_headers" | head -n 1 | tr -d '\r')"
+
+csp="$(header_value "$app_headers" content-security-policy)"
+csp_2="$(header_value "$app_headers_2" content-security-policy)"
+nonce="$(header_value "$app_headers" x-nonce)"
+nonce_2="$(header_value "$app_headers_2" x-nonce)"
+script_src="$(script_src_directive "$csp")"
+script_src_2="$(script_src_directive "$csp_2")"
+
+if [[ -z "$nonce" || -z "$nonce_2" || "$nonce" == "$nonce_2" ]]; then
+  echo "CSP nonce is missing or did not rotate between document responses" >&2
+  exit 1
+fi
+for pair in "$script_src|$nonce" "$script_src_2|$nonce_2"; do
+  directive="${pair%%|*}"
+  expected_nonce="${pair#*|}"
+  if [[ "$directive" != *"'nonce-$expected_nonce'"* || "$directive" != *"'strict-dynamic'"* || "$directive" != *"'wasm-unsafe-eval'"* ]]; then
+    echo "CSP script-src is missing the response nonce or required strict runtime directives" >&2
+    exit 1
+  fi
+  if [[ "$directive" == *"'unsafe-inline'"* ]]; then
+    echo "CSP script-src must not allow unsafe-inline" >&2
+    exit 1
+  fi
+done
 if [[ "$csp" != *"https://assets.$APP_DOMAIN"* || "$csp" != *"wss://$APP_DOMAIN"* ]]; then
   echo "CSP connect-src does not include the expected asset and secure WebSocket origins" >&2
   exit 1

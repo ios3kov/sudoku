@@ -397,10 +397,21 @@ jobs:
           REQUIRE_E2EE_NEW_CONVERSATIONS=true
           EOF
           chmod 600 .env.production.ci
-          SKIP_DNS=1 ENV_FILE=.env.production.ci bash scripts/preflight-production.sh
+          CI_EXPECTED_SHA="$(git rev-parse HEAD)"
+          SKIP_DNS=1 ENV_FILE=.env.production.ci EXPECTED_GIT_SHA="$CI_EXPECTED_SHA" bash scripts/preflight-production.sh
+          if SKIP_DNS=1 ENV_FILE=.env.production.ci EXPECTED_GIT_SHA=0000000000000000000000000000000000000000 bash scripts/preflight-production.sh; then
+            echo "preflight accepted the wrong release SHA" >&2
+            exit 1
+          fi
+          printf '\n' >> README.md
+          if SKIP_DNS=1 ENV_FILE=.env.production.ci EXPECTED_GIT_SHA="$CI_EXPECTED_SHA" bash scripts/preflight-production.sh; then
+            echo "preflight accepted a dirty tracked working tree" >&2
+            exit 1
+          fi
+          git checkout -- README.md
           cp .env.production.ci .env.production.bad
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=bad:password:with:reserved:characters:1234567890/' .env.production.bad
-          if SKIP_DNS=1 ENV_FILE=.env.production.bad bash scripts/preflight-production.sh; then
+          if SKIP_DNS=1 ENV_FILE=.env.production.bad EXPECTED_GIT_SHA="$CI_EXPECTED_SHA" bash scripts/preflight-production.sh; then
             echo "preflight accepted an unsafe POSTGRES_PASSWORD" >&2
             exit 1
           fi
