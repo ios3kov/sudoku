@@ -39,6 +39,19 @@ test("document CSP uses fresh nonces and blocks unsanctioned inline scripts", as
   expect(nonceFromCsp(secondCsp)).toBe(secondHeaderNonce);
   expect(secondHeaderNonce).not.toBe(firstHeaderNonce);
 
+  await page.route("http://127.0.0.1:3000/", async (route) => {
+    const original = await route.fetch();
+    const html = await original.text();
+    expect(html).toContain("</body>");
+    await route.fulfill({
+      response: original,
+      body: html.replace(
+        "</body>",
+        '<script>window.__cspParserInlineExecuted = true</script></body>',
+      ),
+    });
+  });
+
   const response = await page.goto("/");
   expect(response).not.toBeNull();
   const pageCsp = response!.headers()["content-security-policy"] ?? "";
@@ -53,17 +66,12 @@ test("document CSP uses fresh nonces and blocks unsanctioned inline scripts", as
   expect(scriptNonces.length).toBeGreaterThan(0);
   expect([...new Set(scriptNonces)]).toEqual([pageNonce]);
 
-  await page.evaluate(() => {
-    delete (window as Window & { __cspInlineExecuted?: boolean }).__cspInlineExecuted;
-    const script = document.createElement("script");
-    script.textContent = "window.__cspInlineExecuted = true";
-    document.head.appendChild(script);
-  });
-  await page.waitForTimeout(50);
-
   expect(
     await page.evaluate(() =>
-      Boolean((window as Window & { __cspInlineExecuted?: boolean }).__cspInlineExecuted),
+      Boolean(
+        (window as Window & { __cspParserInlineExecuted?: boolean })
+          .__cspParserInlineExecuted,
+      ),
     ),
   ).toBe(false);
 });
