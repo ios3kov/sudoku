@@ -1,6 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateGamePuzzle,countGameSolutions,createSudokuGame,applySudokuAction,parseSudokuGame,isSudokuGameComplete,sudokuBoxDimensions} from '../dist/index.js';
+import {generateGamePuzzle,countGameSolutions,createSudokuGame,applySudokuAction,parseSudokuGame,isSudokuGameComplete,isSudokuGameLost,sudokuBoxDimensions} from '../dist/index.js';
+
+test('Challenge ends at three mistakes, survives reload and cannot undo a loss', () => {
+  let game = createSudokuGame(generateGamePuzzle(4, 'easy', 87), 'challenge');
+  const index = game.values.indexOf(0);
+  const wrong = game.puzzle.solution[index] % 4 + 1;
+  game = applySudokuAction(game, {type:'digit', index, value:wrong, notes:true});
+  assert.equal(game.mistakes, 0);
+  for (let n = 1; n <= 3; n++) {
+    game = applySudokuAction(game, {type:'digit', index, value:wrong});
+    assert.equal(game.mistakes, n);
+    if (n < 3) game = applySudokuAction(game, {type:'undo'});
+  }
+  assert.equal(isSudokuGameLost(game), true);
+  game = parseSudokuGame(JSON.parse(JSON.stringify(game)));
+  assert.equal(isSudokuGameLost(game), true);
+  for (const action of [{type:'undo'}, {type:'clear'}, {type:'tick',seconds:3}, {type:'digit',index,value:game.puzzle.solution[index]}]) {
+    assert.equal(applySudokuAction(game, action), game);
+  }
+});
+
+test('Free and legacy games remain playable after three mistakes; invalid modes rejected', () => {
+  const game = createSudokuGame(generateGamePuzzle(4, 'easy', 87));
+  game.mistakes = 4;
+  assert.equal(isSudokuGameLost(game), false);
+  delete game.mode;
+  assert.ok(parseSudokuGame(game));
+  assert.equal(isSudokuGameLost(game), false);
+  assert.equal(parseSudokuGame({...game,mode:'ranked'}), null);
+});
 
 for (const size of [4,6,9]) for(const difficulty of ['easy','medium','hard']) {
   test(`${size} ${difficulty}: deterministic, valid and uniquely solvable`,()=>{

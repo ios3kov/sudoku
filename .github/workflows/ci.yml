@@ -36,8 +36,8 @@ jobs:
       S3_SECRET_ACCESS_KEY: sudoku-ci-secret
       WEB_PUSH_ALLOWED_HOSTS: push.apple.com,fcm.googleapis.com,push.services.mozilla.com
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v5.6.0
         with: { python-version: "3.13", cache: pip }
       - name: Install API + tests
         run: python -m pip install -e "./apps/api[test]"
@@ -77,7 +77,7 @@ jobs:
           fi
       - name: Retain security audit evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: security-audit-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -96,7 +96,7 @@ jobs:
       - name: API integration tests
         env: { PYTHONPATH: apps/api }
         run: pytest -q tests/api
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: "22" }
       - name: Test and build pinned OpenMLS browser package
         run: |
@@ -183,7 +183,7 @@ jobs:
 
       - name: Retain browser failure evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: browser-failure-${{ github.run_id }}-${{ github.run_attempt }}
           path: apps/web/test-results/
@@ -207,17 +207,21 @@ jobs:
             scripts/restore-production.sh \
             scripts/preflight-production.sh \
             scripts/smoke-production.sh
-          cat > .env.production.ci <<'EOF'
+          POSTGRES_CI_SECRET=$(python -c 'import secrets; print(secrets.token_urlsafe(48))')
+          MINIO_ROOT_CI_SECRET=$(python -c 'import secrets; print(secrets.token_urlsafe(48))')
+          S3_CI_SECRET=$(python -c 'import secrets; print(secrets.token_urlsafe(48))')
+          VAPID_CI_PRIVATE=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')
+          cat > .env.production.ci <<EOF
           APP_DOMAIN=sudoku.test
-          POSTGRES_PASSWORD=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+          POSTGRES_PASSWORD=$POSTGRES_CI_SECRET
           MINIO_ROOT_USER=ci-minio-root
-          MINIO_ROOT_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          MINIO_ROOT_PASSWORD=$MINIO_ROOT_CI_SECRET
           S3_BUCKET=sudoku-assets
           S3_REGION=us-east-1
           S3_ACCESS_KEY_ID=ci-minio-app
-          S3_SECRET_ACCESS_KEY=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          S3_SECRET_ACCESS_KEY=$S3_CI_SECRET
           VAPID_PUBLIC_KEY=BGtkbcjrO12YMoDuq2sCQeHlu47uPx3SHTgFKZFYiBW8Qr0D9vgyZSZPdw6_4ZFEI9Snk1VEAj2qTYI1I1YxBXE
-          VAPID_PRIVATE_KEY=I0_d0vnesxbBSUmlDdOKibGo6vEXRO-Vu88QlSlm5j0
+          VAPID_PRIVATE_KEY=$VAPID_CI_PRIVATE
           VAPID_SUBJECT=mailto:ci@sudoku.test
           REQUIRE_E2EE_NEW_CONVERSATIONS=true
           EOF
@@ -262,7 +266,7 @@ jobs:
 
       - name: Retain audit measurements
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: audit-performance-${{ github.run_id }}-${{ github.run_attempt }}
           path: audit-performance/
@@ -272,7 +276,7 @@ jobs:
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com
-          POSTGRES_PASSWORD: ci-production-password
+          POSTGRES_PASSWORD: ci-db
           MINIO_ROOT_USER: ci-minio
           MINIO_ROOT_PASSWORD: ci-minio-password
           S3_ACCESS_KEY_ID: ci-key

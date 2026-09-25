@@ -2,6 +2,7 @@
  * see THIRD_PARTY_NOTICES.md. Difficulty is a clue-density target, not a rating. */
 export type SudokuSize = 4 | 6 | 9;
 export type SudokuDifficulty = "easy" | "medium" | "hard";
+export type SudokuMode = "free" | "challenge";
 export interface GamePuzzle {
     size: SudokuSize;
     difficulty: SudokuDifficulty;
@@ -15,6 +16,7 @@ interface GameSnapshot {
 }
 export interface SudokuGame extends GameSnapshot {
     version: 1;
+    mode?: SudokuMode;
     puzzle: GamePuzzle;
     mistakes: number;
     hints: number;
@@ -127,12 +129,14 @@ export function generateGamePuzzle(size: SudokuSize = 9, difficulty: SudokuDiffi
     }
     return { size, difficulty, seed, givens, solution };
 }
-export function createSudokuGame(puzzle: GamePuzzle): SudokuGame {
-    return { version: 1, puzzle: structuredClone(puzzle), values: [...puzzle.givens], notes: puzzle.givens.map(() => []), mistakes: 0, hints: 0, elapsedSeconds: 0, paused: false, history: [], future: [] };
+export function createSudokuGame(puzzle: GamePuzzle, mode: SudokuMode = "free"): SudokuGame {
+    return { version: 1, mode, puzzle: structuredClone(puzzle), values: [...puzzle.givens], notes: puzzle.givens.map(() => []), mistakes: 0, hints: 0, elapsedSeconds: 0, paused: false, history: [], future: [] };
 }
+export function isSudokuGameLost(game: SudokuGame): boolean { return game.mode === "challenge" && game.mistakes >= 3; }
 export function isSudokuGameComplete(game: SudokuGame): boolean { return game.values.every((v, i) => v === game.puzzle.solution[i]); }
 function snapshot(game: GameSnapshot): GameSnapshot { return { values: [...game.values], notes: game.notes.map(n => [...n]) }; }
 export function applySudokuAction(game: SudokuGame, action: SudokuAction): SudokuGame {
+    if (isSudokuGameLost(game)) return game;
     const complete = isSudokuGameComplete(game);
     if (action.type === "pause" || action.type === "resume")
         return { ...game, paused: action.type === "pause" };
@@ -192,6 +196,7 @@ export function applySudokuAction(game: SudokuGame, action: SudokuAction): Sudok
 export function parseSudokuGame(input: unknown): SudokuGame | null {
     try {
         const g = input as SudokuGame, p = g.puzzle;
+        if (g.mode !== undefined && g.mode !== "free" && g.mode !== "challenge") return null;
         if (g.version !== 1 || ![4, 6, 9].includes(p.size) || !["easy", "medium", "hard"].includes(p.difficulty) || !Number.isSafeInteger(p.seed) || p.seed < 0 || p.seed > 0xffffffff)
             return null;
         const validValues = (v: unknown): v is number[] => Array.isArray(v) && v.length === p.size * p.size && v.every(n => Number.isInteger(n) && n >= 0 && n <= p.size);

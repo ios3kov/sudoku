@@ -1,3 +1,7 @@
+@font-face { font-family:"Chakra Petch"; font-style:normal; font-weight:600; font-display:swap; src:url("/fonts/chakra-petch-600.ttf") format("truetype"); }
+@font-face { font-family:"Chakra Petch"; font-style:normal; font-weight:700; font-display:swap; src:url("/fonts/chakra-petch-700.ttf") format("truetype"); }
+@font-face { font-family:"Share Tech Mono"; font-style:normal; font-weight:400; font-display:swap; src:url("/fonts/share-tech-mono.ttf") format("truetype"); }
+@font-face { font-family:"Plus Jakarta Sans"; font-style:normal; font-weight:400; font-display:swap; src:url("/fonts/plus-jakarta-sans-400.ttf") format("truetype"); }
 /* The game owns a fixed viewport; only its content pane may scroll at large text sizes. */
 .sudoku-game.page { height:100dvh; min-height:0; padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); overflow:hidden; }
 .sudoku-game .sudoku-shell { height:100%; min-height:0; max-width:500px; display:flex; flex-direction:column; gap:8px; }
@@ -41,3 +45,130 @@
 
 .sudoku-header-actions { display:flex; align-items:center; gap:4px; flex:none; margin-left:auto; font-size:clamp(14px,.85rem,22px); }
 .sudoku-game .sudoku-identity { display:block; line-height:1.35; color:var(--muted); }
+
+/* Tactical palette is deliberately scoped to the public game surface. */
+.sudoku-game {
+  --bg:#1a1a1a; --surface:#212123; --surface-2:#27272a;
+  --text:#fff; --muted:#a1a1aa; --line:#3a3a3d;
+  --accent:#ff8a00; --accent-strong:#ff981a; --accent-soft:#382918;
+  --danger:#ff7777;
+  color:var(--text); background:var(--bg);
+  --game-width:min(356px,100%,calc(100dvh - 370px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+}
+.sudoku-game .sudoku-shell { width:var(--game-width); max-width:390px; justify-content:center; }
+.sudoku-game .game-content { flex:0 1 auto; gap:12px; }
+.sudoku-status-announcement { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.sudoku-game .board,.sudoku-game .controls { margin-top:0; margin-bottom:0; }
+.sudoku-game .sudoku-topbar { align-items:center; }
+.sudoku-game .sudoku-brand h1 { text-transform:uppercase; letter-spacing:.12em; font-size:22px; }
+.sudoku-game .sudoku-home-header { justify-content:center; }
+.sudoku-game .sudoku-home-header .sudoku-brand { flex-direction:column; text-align:center; gap:14px; }
+.sudoku-game .sudoku-home-header .sudoku-logo { width:64px; height:64px; margin:0; }
+.sudoku-game .sudoku-topbar:not(.sudoku-home-header) .sudoku-brand h1 { font-size:15px; letter-spacing:.05em; }
+.sudoku-game .sudoku-brand .sudoku-identity { text-transform:uppercase; letter-spacing:.1em; font-size:10px; }
+.sudoku-game .sudoku-logo { box-shadow:none; background:#fff url("/sudoku-brand.svg") center/contain no-repeat; }
+.sudoku-game .sudoku-header-actions button { color:var(--muted); min-height:44px; padding:6px; font-size:12px; text-transform:uppercase; }
+.sudoku-game .sudoku-header-actions { width:100%; display:grid; grid-template-columns:44px 1fr 44px; margin:0; padding-bottom:8px; border-bottom:1px solid #323235; }
+.sudoku-game .sudoku-header-actions strong { text-align:center; font-size:14px; letter-spacing:.22em; }
+.sudoku-game .sudoku-header-actions button { font-size:22px; }
+.sudoku-game .sudoku-header-actions button:first-child { color:var(--accent); }
+.sudoku-game .sudoku-stats { border:0; background:transparent; gap:6px; border-radius:0; }
+.sudoku-game .sudoku-stats>div { border:1px solid #323235; border-radius:8px; padding:9px 4px; background:var(--surface); }
+.sudoku-game .sudoku-stats span { letter-spacing:.14em; font-size:9px; }
+.sudoku-game .sudoku-stats strong { color:var(--accent); font-family:ui-monospace,monospace; font-size:17px; letter-spacing:.06em; }
+.sudoku-game .status { color:var(--muted); text-transform:uppercase; letter-spacing:.16em; font-size:10px; }
+.sudoku-game .board { width:100%; min-width:0; border:2px solid #52525b; border-radius:6px; background:#222225; }
+.sudoku-game .board .cell { background:#1a1a1c; color:#ffb45c; aspect-ratio:1; font-variant-numeric:tabular-nums; }
+.sudoku-game .board .cell.given { color:#fff; }
+.sudoku-game .board .cell.related { background:#242426; }
+.sudoku-game .board .cell.same { background:#3b2d1e; }
+.sudoku-game .board .cell.box-right { border-right-color:#52525b; }
+.sudoku-game .board .cell.box-bottom { border-bottom-color:#52525b; }
+.sudoku-game .board .cell.selected { background:#ff8a00; color:#101012; box-shadow:inset 0 0 0 2px #ffb45c; }
+.sudoku-game .board .cell.invalid { background:#4b2023; color:#ff9090; }
+.sudoku-game .controls { width:100%; align-self:center; display:grid; grid-template-columns:23% repeat(3,minmax(0,1fr)); gap:6px; }
+.sudoku-game .digits { grid-column:2 / 5; grid-row:1 / 4; gap:6px; }
+.sudoku-game .digit { background:#2b2b2e; border:1px solid #3a3a3d; border-radius:7px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:48px; color:#fff; }
+.sudoku-game .actions { display:contents; }
+.sudoku-game .action { min-height:44px; padding:3px; border-radius:5px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:#e4e4e7; }
+.sudoku-game .action:nth-child(1) { grid-area:2 / 1; }
+.sudoku-game .action:nth-child(2) { grid-area:3 / 1; }
+.sudoku-game .action:nth-child(3) { grid-area:1 / 1; }
+.sudoku-game .action.active { background:var(--accent); color:#101012; border-color:var(--accent); }
+.sudoku-game .primary-button { background:var(--accent); color:#101012; border:1px solid var(--accent); text-transform:uppercase; letter-spacing:.16em; font-weight:800; }
+.sudoku-game .secondary-button { color:var(--text); background:var(--surface); }
+.sudoku-game .sudoku-menu { padding:18px 8px; }
+.sudoku-game .sudoku-menu h2 { text-transform:uppercase; letter-spacing:.12em; font-size:21px; }
+.sudoku-game .sudoku-menu legend { color:var(--muted); text-transform:uppercase; letter-spacing:.14em; font-size:11px; }
+.sudoku-game button:focus-visible,.sudoku-game summary:focus-visible { outline:2px solid #ffb45c; outline-offset:2px; }
+@media(max-height:650px) { .sudoku-game { --game-width:min(356px,100%,calc(100dvh - 370px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); } }
+
+/* Typography from the supplied prototype; sm=640px and md=768px. */
+.sudoku-game { font-family:"Plus Jakarta Sans",sans-serif; }
+.sudoku-game button,.sudoku-game h1,.sudoku-game h2,.sudoku-game legend,.sudoku-game .sudoku-header-actions,.sudoku-game .sudoku-stats { font-family:"Chakra Petch",sans-serif; }
+.sudoku-game .sudoku-header-actions strong { font-size:12px; font-weight:700; letter-spacing:.22em; }
+.sudoku-game .sudoku-stats span { font-size:8.5px; font-weight:600; letter-spacing:.2em; line-height:1; }
+.sudoku-game .sudoku-stats strong { font-family:"Chakra Petch",sans-serif; font-size:11px; font-weight:700; letter-spacing:.05em; line-height:1; margin-top:4px; }
+.sudoku-game .sudoku-stats>div:nth-child(2) strong { font-family:"Share Tech Mono",monospace; font-size:14px; font-weight:400; letter-spacing:.1em; text-shadow:0 0 12px #ff8a008c; }
+.sudoku-game .board .cell { font-family:"Chakra Petch",sans-serif; font-size:14px; font-weight:700; line-height:1; }
+.sudoku-game .digit { font-family:"Chakra Petch",sans-serif; font-size:20px; font-weight:700; line-height:1; }
+.sudoku-game .action { font-size:9px; font-weight:700; letter-spacing:.05em; line-height:1; }
+@media(min-width:640px) {
+  .sudoku-game .sudoku-header-actions strong { font-size:14px; }
+  .sudoku-game .sudoku-stats span { font-size:9px; }
+  .sudoku-game .sudoku-stats strong { font-size:12px; }
+  .sudoku-game .sudoku-stats>div:nth-child(2) strong { font-size:16px; }
+  .sudoku-game .board .cell { font-size:16px; }
+  .sudoku-game .digit { font-size:24px; }
+}
+@media(min-width:768px) { .sudoku-game .board .cell { font-size:18px; } }
+
+/* Components adapted from the supplied MainMenu / GameplayScreen / dialog sources. */
+.sudoku-game { --game-width:min(356px,100%,calc(100dvh - 310px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); }
+.sudoku-game.is-menu .sudoku-shell { width:min(356px,100%); gap:24px; }
+.sudoku-game.is-menu .sudoku-home-header { padding-top:12px; }
+.sudoku-game .sudoku-brand h1 { color:var(--accent); text-shadow:0 0 18px #ff8a0045; }
+.sudoku-game .sudoku-brand .sudoku-identity { letter-spacing:.28em; margin-top:10px; }
+.sudoku-game .sudoku-menu { padding:0; gap:12px; }
+.sudoku-game .sudoku-menu fieldset { padding:14px; background:var(--surface); border:1px solid #ffffff0d; border-radius:12px; }
+.sudoku-game .sudoku-menu legend { padding:0 4px; }
+.sudoku-game .sudoku-menu h2 { font-size:14px; text-align:center; }
+.sudoku-game .mode-card { width:100%; min-height:clamp(118px,17vh,154px); padding:12px; background:#222224; border:1px solid #ffffff0d; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; box-shadow:0 8px 14px #0002; }
+.sudoku-game .mode-card:hover { background:#28282b; border-color:#ff8a0066; }
+.sudoku-game .mode-card strong { font-size:14px; letter-spacing:.16em; text-transform:uppercase; color:#fff; }
+.sudoku-game .mode-card>span:not(.mode-emblem) { color:var(--muted); font-size:10px; letter-spacing:.12em; text-transform:uppercase; }
+.sudoku-game .mode-card small { font-family:"Share Tech Mono",monospace; font-size:9px; letter-spacing:.08em; padding:3px 8px; border:1px solid #ff8a0033; background:#ff8a001a; color:var(--accent); border-radius:4px; text-transform:uppercase; }
+.sudoku-game .mode-emblem { width:40px; height:32px; border:2px solid var(--accent); border-radius:24px; display:grid; place-items:center; color:var(--accent); margin-bottom:3px; }
+.sudoku-game svg { width:20px; height:20px; flex:none; }
+.sudoku-game .challenge .mode-emblem { background:var(--accent); color:#101012; box-shadow:0 0 15px #ff8a0066; }
+.sudoku-game .challenge strong { color:var(--accent); text-shadow:0 0 12px #ff8a0045; }
+.sudoku-game .challenge small { color:#d4d4d8; background:#ffffff0d; border-color:#ffffff1a; }
+.sudoku-game .sudoku-header-actions button { display:grid; place-items:center; border:0; background:transparent; }
+.sudoku-game .sudoku-stats>div { height:44px; padding:6px 4px; border-color:#ffffff0d; align-content:center; }
+.sudoku-game .sudoku-stats>div:nth-child(2) { background:#1c1c1f; }
+.sudoku-game .life-gauge { display:flex; justify-content:center; gap:4px; margin-top:5px; }
+.sudoku-game .life-gauge i { width:16px; height:6px; border-radius:2px; background:var(--accent); box-shadow:0 0 6px #ff8a0099; }
+.sudoku-game .life-gauge .lost { background:#ef444433; border:1px solid #ef444499; box-shadow:none; }
+.sudoku-game .board .cell.box-right { border-right-color:#3a3a3d; }
+.sudoku-game .board .cell.box-bottom { border-bottom-color:#3a3a3d; }
+.sudoku-game .board .cell.selected { background:#ff8a0040; color:var(--accent); box-shadow:inset 0 0 0 1.5px var(--accent); }
+.sudoku-game .board .cell.given.selected { color:#fff; }
+.sudoku-game .digit,.sudoku-game .action { height:clamp(46px,6.5vh,56px); min-height:46px; border-radius:8px; border-color:#ffffff0d; }
+.sudoku-game .action { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; }
+.sudoku-game .action svg { width:16px; height:16px; }
+.sudoku-game .primary-button,.sudoku-game .secondary-button { font-size:12px; min-height:44px; border-radius:8px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; }
+.sudoku-game .sudoku-dialog { color:var(--text); background:radial-gradient(ellipse at top,#ff8a0014,transparent 55%),#1c1c1f; border:1px solid #ffffff1a; border-radius:16px; width:min(340px,calc(100% - 32px)); max-height:calc(100dvh - 40px); padding:20px; box-shadow:0 0 50px #ff8a0026; }
+.sudoku-game .sudoku-dialog::backdrop { background:#000d; backdrop-filter:blur(4px); }
+.sudoku-game .dialog-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; border-bottom:1px solid #ffffff0d; padding-bottom:8px; margin-bottom:18px; }
+.sudoku-game .dialog-heading h2 { margin:0; font-size:18px; text-transform:uppercase; letter-spacing:.16em; }
+.sudoku-game .dialog-heading button { background:transparent; border:0; color:var(--muted); min-width:44px; min-height:44px; font-size:24px; }
+.sudoku-game .sudoku-dialog>button { display:block; width:100%; margin-top:10px; }
+.sudoku-game .sudoku-dialog p { font-size:12px; line-height:1.6; color:var(--muted); }
+.sudoku-game .result-emblem { width:70px; height:70px; border:2px solid var(--accent); border-radius:16px; transform:rotate(45deg); margin:28px auto; display:grid; place-items:center; box-shadow:0 0 20px #ff8a0066; background:linear-gradient(135deg,#18181b 35%,#ffffff26 50%,#18181b 65%); }
+.sudoku-game .result-emblem svg { transform:rotate(-45deg); width:32px; height:32px; color:var(--accent); }
+.sudoku-game .result-subtitle { text-align:center; text-transform:uppercase; letter-spacing:.2em; color:var(--accent)!important; }
+.sudoku-game .result-stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:18px 0; }
+.sudoku-game .result-stats>div { border-radius:12px; padding:12px; background:#242428; border:1px solid #ffffff0d; display:grid; gap:6px; }
+.sudoku-game .result-stats span { font-family:"Chakra Petch",sans-serif; text-transform:uppercase; font-size:9px; letter-spacing:.1em; color:var(--muted); }
+.sudoku-game .result-stats strong { font-family:"Share Tech Mono",monospace; font-size:18px; text-transform:uppercase; }
+@media(max-height:650px) { .sudoku-game.is-menu .sudoku-shell { gap:12px; } .sudoku-game .sudoku-home-header .sudoku-logo { display:block; width:40px; height:40px; } .sudoku-game .sudoku-home-header .sudoku-brand { gap:6px; } }

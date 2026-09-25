@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { applySudokuAction, createSudokuGame, generateGamePuzzle, isSudokuGameComplete, sudokuBoxDimensions, type SudokuAction, type SudokuDifficulty, type SudokuGame, type SudokuSize } from "@sudoku/domain";
+import { applySudokuAction, createSudokuGame, generateGamePuzzle, isSudokuGameComplete, isSudokuGameLost, sudokuBoxDimensions, type SudokuAction, type SudokuDifficulty, type SudokuGame, type SudokuSize, type SudokuMode } from "@sudoku/domain";
+import { GameDialog, GameIcon } from "./game-dialog";
 import { useSecretUnlock } from "../secret-unlock/use-secret-unlock";
 import { readSudokuStartupPreference } from "./startup-preference";
 import { SUDOKU_GAME_STORAGE_KEY, readSavedSudokuGame } from "./saved-game";
@@ -31,6 +32,16 @@ function saveGame(game: SudokuGame): boolean {
     return false;
   }
 }
+function recordBest(game: SudokuGame): number | null {
+  try {
+    const key = `sudoku:best:v1:${game.mode ?? "free"}:${game.puzzle.size}:${game.puzzle.difficulty}`;
+    const raw = localStorage.getItem(key);
+    const previous = raw === null ? NaN : Number(raw);
+    const best = Number.isSafeInteger(previous) && previous >= 0 ? Math.min(previous, game.elapsedSeconds) : game.elapsedSeconds;
+    localStorage.setItem(key, String(best));
+    return best;
+  } catch { return null; }
+}
 function formatElapsed(seconds: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
@@ -43,9 +54,12 @@ export function SudokuBoard({
   const [saved, setSaved] = useState<SudokuGame | null>(null);
   const [size, setSize] = useState<SudokuSize>(9);
   const [difficulty, setDifficulty] = useState<SudokuDifficulty>("easy");
+  const [mode, setMode] = useState<SudokuMode>("free");
+  const [best, setBest] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [notesMode, setNotesMode] = useState(false);
   const [notice, setNotice] = useState("");
+  const [menuStep, setMenuStep] = useState<"home" | "setup" | "replace">("home");
   const {
     setScreenElement,
     onFivePointerDown,
@@ -82,14 +96,17 @@ export function SudokuBoard({
   }
   function act(action: SudokuAction) {
     if (!session?.game) return;
+    const next = applySudokuAction(session.game, action);
+    if (!isSudokuGameComplete(session.game) && isSudokuGameComplete(next)) setBest(recordBest(next));
     update({
       ...session,
-      game: applySudokuAction(session.game, action)
+      game: next
     });
   }
   const game = session?.game;
   const solved = game ? isSudokuGameComplete(game) : false;
-  const clockRunning = Boolean(game && !game.paused && !solved && session?.screen === "game");
+  const lost = game ? isSudokuGameLost(game) : false;
+  const clockRunning = Boolean(game && !game.paused && !solved && !lost && session?.screen === "game");
   useEffect(() => {
     if (!clockRunning) return;
     // Count only visible playing time; background, menu and privacy surfaces do not run the clock.
@@ -122,11 +139,13 @@ export function SudokuBoard({
       window.removeEventListener("pageshow", resetClockBaseline);
     };
   }, [clockRunning]);
-  function start() {
-    const next = createSudokuGame(generateGamePuzzle(size, difficulty));
+  function start(replay = false) {
+    setMenuStep("home");
+    const next = replay && game ? createSudokuGame(generateGamePuzzle(game.puzzle.size, game.puzzle.difficulty), game.mode ?? "free") : createSudokuGame(generateGamePuzzle(size, difficulty), mode);
     setSelected(null);
     setNotesMode(false);
     setNotice("");
+    setBest(null);
     update({
       game: next,
       screen: "game",
@@ -134,6 +153,7 @@ export function SudokuBoard({
     });
   }
   function menu() {
+    setMenuStep("home");
     if (session) update({
       ...session,
       screen: "menu"
@@ -151,40 +171,29 @@ export function SudokuBoard({
   }
   const selectedValue = selected === null ? 0 : game?.values[selected] ?? 0;
   const [boxHeight, boxWidth] = sudokuBoxDimensions(game?.puzzle.size ?? 9);
-  const playable = game?.puzzle.givens.filter(v => !v).length ?? 0;
-  const completed = game?.values.filter((v, i) => !game.puzzle.givens[i] && v === game.puzzle.solution[i]).length ?? 0;
-  return <main ref={setScreenElement} className="page sudoku-reveal-screen sudoku-game">
+  return <main ref={setScreenElement} className={`page sudoku-reveal-screen sudoku-game${session?.screen === "menu" ? " is-menu" : ""}`}>
     <section className="sudoku-shell" aria-label="Sudoku">
-      <header className="topbar sudoku-topbar">
-        <div
+      <header className={`topbar sudoku-topbar${session?.screen !== "game" ? " sudoku-home-header" : ""}`}>
+        {session?.screen !== "game" && <div
           className="sudoku-brand"><span
           className="sudoku-logo"
-          aria-hidden="true" /><div><h1>Sudoku</h1><span
-          className="sudoku-identity">{session?.screen === "game" && game ? `${game.puzzle.size}×${game.puzzle.size} · ${game.puzzle.difficulty}` : "A little focus, every day"}</span></div></div>
+          aria-hidden="true" /><div><h1>SUDOKU.MOSCOW</h1><span
+          className="sudoku-identity">Select mode</span></div></div>}
         {session?.screen === "game" && <div className="sudoku-header-actions">
-          {!game?.paused && <button type="button" disabled={solved} onClick={() => act({
-            type: "pause"
-          })}>Pause</button>}
-          <button type="button" onClick={menu}>Menu</button>
+          <button type="button" aria-label="Menu" onClick={menu}><GameIcon name="menu" /></button>
+          <strong>SUDOKU.MOSCOW</strong>
+          <button type="button" aria-label="Pause" disabled={solved || lost || game?.paused} onClick={() => act({ type: "pause" })}><GameIcon name="pause" /></button>
         </div>}
       </header>
       <div className="game-content">
         {!session ? <p role="status">Loading game…</p> : session.screen === "menu" ? <div className="sudoku-menu">
-          <h2>Your next puzzle</h2>
-          {session.game && <button className="secondary-button" onClick={() => update({
+          {menuStep === "home" && <>
+          {session.game && <button className="primary-button" onClick={() => update({
             ...session,
+            game: { ...session.game!, paused: false },
             screen: "game"
-          })}>Back to game</button>}
-          {session.game && <button className="secondary-button" onClick={() => {
-            update({
-              ...session,
-              game: createSudokuGame(session.game!.puzzle),
-              screen: "game"
-            });
-            setSelected(null);
-            setNotesMode(false);
-          }}>Reset</button>}
-          {saved && <button className="secondary-button" onClick={() => {
+          })}>Continue</button>}
+          {saved && (!session.game || (!session.autosave && JSON.stringify(session.game.puzzle) !== JSON.stringify(saved.puzzle))) && <button className={session.game ? "secondary-button" : "primary-button"} onClick={() => {
             setSelected(null);
             setNotesMode(false);
             update({
@@ -195,7 +204,17 @@ export function SudokuBoard({
               screen: "game",
               autosave: true
             });
-          }}>Continue saved game · {saved.puzzle.size}×{saved.puzzle.size}</button>}
+          }}>{session.game ? "Saved game" : "Continue"}</button>}
+          {(["free", "challenge"] as SudokuMode[]).map(value => <button key={value} className={`mode-card ${value}`} aria-label={value === "free" ? "Free Mode" : "Challenge Mode"} onClick={() => { setMode(value); setMenuStep("setup"); }}>
+            <span className="mode-emblem"><GameIcon name={value === "free" ? "play" : "timer"} /></span>
+            <strong>{value === "free" ? "Free Mode" : "Challenge Mode"}</strong>
+            <span>{value === "free" ? "Enjoy Sudoku freely" : "Mistakes will reduce your life"}</span>
+            <small>{value === "free" ? "No time limit · Unlimited lives" : "3 mistakes limit · Beat your time"}</small>
+          </button>)}
+          </>}
+          {menuStep === "setup" && <>
+          <button className="secondary-button" onClick={() => setMenuStep("home")}>Back</button>
+          <h2>{mode === "free" ? "Free Mode" : "Challenge Mode"}</h2>
           <fieldset><legend>Board size</legend><div
             className="sudoku-options">{([4, 6, 9] as SudokuSize[]).map(value => <button key={value}
             className="secondary-button"
@@ -206,9 +225,14 @@ export function SudokuBoard({
             className="secondary-button"
             aria-pressed={difficulty === value}
             onClick={() => setDifficulty(value)}>{value[0]!.toUpperCase() + value.slice(1)}</button>)}</div></fieldset>
-          {saved && <p>Starting a new game replaces your saved game.</p>}
-          <button className="primary-button" onClick={start}>New game</button>
-          {session.game && !session.autosave && <><p>Your quick game is kept for this visit. Save it to continue another day; this replaces the previous saved game.</p><button
+          <button className="primary-button" onClick={() => saved && !isSudokuGameComplete(saved) && !isSudokuGameLost(saved) ? setMenuStep("replace") : start()}>Start game</button>
+          </>}
+          {menuStep === "replace" && <GameDialog title="Replace saved game?" onClose={() => setMenuStep("setup")}>
+            <p>Your saved progress will be replaced by the new puzzle.</p>
+            <button className="primary-button" onClick={() => start()}>Start new game</button>
+            <button className="secondary-button" onClick={() => setMenuStep("setup")}>Cancel</button>
+          </GameDialog>}
+          {menuStep === "home" && session.game && !session.autosave && <><p>Your quick game is kept for this visit. Save it to continue another day; this replaces the previous saved game.</p><button
             className="secondary-button"
             onClick={() => {
               if (session.game && saveGame(session.game)) {
@@ -219,15 +243,23 @@ export function SudokuBoard({
                 setNotice("Game saved on this device.");
               } else setNotice("Storage is unavailable. Keep this window open to retain your game.");
             }}>Save this game</button></>}
-          <details><summary>How to play</summary><p>Fill each row, column and outlined box with the digits shown below the board, using each digit once.</p><ol><li>Select an empty square, then a digit.</li><li>Use Notes to record possible digits.</li><li>Hint fills one square. Undo and Redo let you revisit moves.</li></ol><p>Difficulty changes the number of starting clues. Every generated puzzle has one solution. Progress stays on this device.</p></details>
         </div> : game && <>
           <div
             className="sudoku-stats"
-            aria-label="Puzzle status"><div><span>Time</span><strong>{formatElapsed(game.elapsedSeconds)}</strong></div><div><span>Mistakes</span><strong>{game.mistakes}</strong></div><div><span>Progress</span><strong>{completed}/{playable}</strong></div></div>
-          <div className="status" aria-live="polite">{game.paused ? "Paused" : solved ? "Completed" : notesMode ? "Notes mode" : "Playing"}</div>
-          {game.paused ? <div className="sudoku-paused"><h2>Take a breath</h2><button className="primary-button" onClick={() => act({
+            aria-label="Puzzle status"><div><span>Difficulty</span><strong>{game.puzzle.difficulty.toUpperCase()}</strong></div><div><span>Timer</span><strong>{formatElapsed(game.elapsedSeconds)}</strong></div><div><span>Mistakes</span>{game.mode === "challenge" ? <div className="life-gauge" role="img" aria-label={`${Math.max(0, 3 - game.mistakes)} lives remaining`}>{[1, 2, 3].map(life => <i key={life} className={game.mistakes >= life ? "lost" : ""} />)}</div> : <strong aria-label={`${game.mistakes} mistakes, unlimited lives`}>-</strong>}</div></div>
+          <div className="sudoku-status-announcement" aria-live="polite">{game.paused ? "Paused" : solved ? "Completed" : notesMode ? "Notes mode" : "Playing"}</div>
+          {game.paused && <GameDialog title="Paused" onClose={() => act({ type: "resume" })}><button className="primary-button" onClick={() => act({
               type: "resume"
-            })}>Resume</button></div> : <>
+            })}>Resume</button><button className="secondary-button" onClick={menu}>Return to menu</button></GameDialog>}
+          {(solved || lost) && <GameDialog title={lost ? "Challenge over" : "Mission complete"} onClose={menu}>
+            <div className={`result-emblem${lost ? " failed" : ""}`}><GameIcon name={lost ? "timer" : "award"} /></div>
+            <p className="result-subtitle">{lost ? "Three mistakes · Try again" : "Grid mastered"}</p>
+            <div className="result-stats"><div><span>Time</span><strong>{formatElapsed(game.elapsedSeconds)}</strong></div><div><span>Mistakes</span><strong>{game.mistakes}</strong></div><div><span>Difficulty</span><strong>{game.puzzle.difficulty}</strong></div><div><span>Mode</span><strong>{game.mode ?? "free"}</strong></div></div>
+            {!lost && best !== null && <p className="result-subtitle">{best === game.elapsedSeconds ? "Personal best" : "Best time"} · {formatElapsed(best)}</p>}
+            <button className="primary-button" onClick={() => { if (lost) { update({ ...session, game: createSudokuGame(game.puzzle, game.mode ?? "free") }); setSelected(null); setNotesMode(false); } else start(true); }}>{lost ? "Try again" : "New game"}</button>
+            <button className="secondary-button" onClick={menu}>Return to menu</button>
+          </GameDialog>}
+          <>
             <div className="board" role="grid" aria-label="Sudoku board" style={{
               gridTemplateColumns: `repeat(${game.puzzle.size},minmax(0,1fr))`
             }}>
@@ -255,7 +287,7 @@ export function SudokuBoard({
               })}
             </div>
             <div className="controls"><div className="digits" aria-label="Digits" style={{
-                gridTemplateColumns: `repeat(${game.puzzle.size},minmax(0,1fr))`
+                gridTemplateColumns: `repeat(${game.puzzle.size === 4 ? 2 : 3},minmax(0,1fr))`
               }}>
               {Array.from({
                   length: game.puzzle.size
@@ -275,22 +307,14 @@ export function SudokuBoard({
                     type: "erase",
                     index: selected
                   });
-                }}>Erase</button>
-              <button className={`action${notesMode ? " active" : ""}`} aria-pressed={notesMode} onClick={() => setNotesMode(!notesMode)}>Notes</button>
-              <button className="action" onClick={() => setSelected(null)}>Clear</button>
+                }}><GameIcon name="erase" />Erase</button>
+              <button className={`action${notesMode ? " active" : ""}`} aria-pressed={notesMode} onClick={() => setNotesMode(!notesMode)}><GameIcon name="notes" />Notes</button>
               <button className="action" disabled={!game.history.length} onClick={() => act({
                   type: "undo"
-                })}>Undo</button>
-              <button className="action" disabled={!game.future.length} onClick={() => act({
-                  type: "redo"
-                })}>Redo</button>
-              <button className="action" disabled={solved} aria-label={`Hint (${game.hints} used)`} onClick={() => act({
-                  type: "hint",
-                  index: selected !== null && !game.puzzle.givens[selected] && game.values[selected] !== game.puzzle.solution[selected] ? selected : undefined
-                })}>Hint</button>
+                })}><GameIcon name="undo" />Undo</button>
 
             </div></div>
-          </>}
+          </>
         </>}
         {notice && <p className="game-notice" role="status">{notice}</p>}
       </div>
