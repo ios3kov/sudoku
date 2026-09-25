@@ -1,5 +1,15 @@
 # Progress
 
+## CI efficiency follow-up verified — 2026-09-25
+
+Current repository main: `3beb8851586a117bfde34948c5c210a6c6ac3be0`.
+
+PR #96 merged the docs-only main-push filters for `ci`, `device-access`, `beat-runtime` and `api-shutdown`. Pull-request coverage remains unchanged. The reviewed PR head `232c6e7a69722f9f3609be0c47388f151b480373` passed all required workflows after a single transient MinIO transport disconnect was reproduced as a flake and the Infra shard alone passed on targeted rerun. Post-merge main verification on `3beb8851586a117bfde34948c5c210a6c6ac3be0` completed successfully: parallel `ci #711`, `device-access #394`, `beat-runtime #396` and `api-shutdown #378` are green.
+
+This documentation-only checkpoint is intentionally expected not to trigger those four heavy core workflows. If no such runs appear for this docs-only SHA, Step107's path filter is verified in practice.
+
+Production remains unchanged. The remaining release gates are physical/two-device iPhone acceptance, VoiceOver/media/device profiling, a production-aligned restore drill, deployment preflight with fresh backup/rollback evidence, and separate explicit production deployment authorization.
+
 ## Verified parallel CI + nonce CSP baseline — 2026-09-25
 
 Current verified repository baseline: `8fead74e3a3ac95487b7a6d29f25f057591805a9`.

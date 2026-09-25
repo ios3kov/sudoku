@@ -26,3 +26,11 @@ The native iOS workflow is unchanged because it already has explicit path filter
 This does not remove pull-request verification and does not reduce test coverage for executable changes. It only removes a duplicate post-merge run for documentation-only changes.
 
 Production deployment is unaffected and remains separately authorized.
+
+## Merge verification
+
+PR #96 merged to main as `3beb8851586a117bfde34948c5c210a6c6ac3be0`.
+
+The PR head `232c6e7a69722f9f3609be0c47388f151b480373` passed `device-access`, `beat-runtime`, `api-shutdown` and the full parallel CI. During the first CI attempt, the Infra shard saw a transient MinIO HTTP disconnect during conditional-upload verification; GitHub reran only that failed shard, and the targeted rerun passed conditional uploads, isolated restore, Compose validation and production image builds. Browser E2E and all other shards were already green and were not re-executed.
+
+Post-merge main verification also passed: `ci #711`, `device-access #394`, `beat-runtime #396` and `api-shutdown #378`.
