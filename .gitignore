@@ -17,3 +17,5 @@ backups/
 *.partial
 
 .sudoku-maintenance.lock
+security-audit-report.md
+security-audit-report.json

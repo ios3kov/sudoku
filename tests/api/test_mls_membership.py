@@ -8,6 +8,8 @@ from app.db import SessionFactory
 from app.main import app
 from app.models import (
     Conversation,
+    ConversationMember,
+    ConversationMembershipChange,
     User,
 )
 from app.security import hash_password
@@ -486,3 +488,87 @@ async def test_e2ee_device_add_and_revoke_require_durable_rekey() -> None:
             },
         )
         assert after_remove.status_code == 201, after_remove.text
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_unrelated_user_cannot_finalize_device_rekey() -> None:
+    suffix = uuid.uuid4().hex[:10]
+    owner_email = f"rekey-owner-{suffix}@example.com"
+    outsider_email = f"rekey-outsider-{suffix}@example.com"
+    password = "correct horse battery staple"
+
+    async with SessionFactory() as db:
+        owner = User(
+            email=owner_email,
+            display_name="Rekey Owner",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        outsider = User(
+            email=outsider_email,
+            display_name="Rekey Outsider",
+            password_hash=hash_password(password),
+            status="active",
+            is_admin=False,
+        )
+        db.add_all([owner, outsider])
+        await db.flush()
+
+        conversation = Conversation(
+            type="group",
+            title="Private Rekey",
+            created_by=owner.id,
+            next_sequence=1,
+            encryption_required=True,
+            e2ee_ready=True,
+        )
+        db.add(conversation)
+        await db.flush()
+        db.add(
+            ConversationMember(
+                conversation_id=conversation.id,
+                user_id=owner.id,
+                role="owner",
+                e2ee_state="active",
+            )
+        )
+        change = ConversationMembershipChange(
+            conversation_id=conversation.id,
+            target_user_id=owner.id,
+            target_device_id=uuid.uuid4(),
+            requested_by=owner.id,
+            kind="device_add",
+            status="pending",
+        )
+        db.add(change)
+        await db.commit()
+        conversation_id = conversation.id
+        change_id = change.id
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=MUTATION_HEADERS,
+    ) as outsider_client:
+        login = await outsider_client.post(
+            "/v1/auth/login",
+            json={
+                "email": outsider_email,
+                "password": password,
+                "device_name": "outsider-device",
+            },
+        )
+        assert login.status_code == 200, login.text
+
+        response = await outsider_client.post(
+            f"/v1/e2ee/membership-changes/{change_id}/finalize"
+        )
+        assert response.status_code == 403, response.text
+
+    async with SessionFactory() as db:
+        stored = await db.get(ConversationMembershipChange, change_id)
+        assert stored is not None
+        assert stored.conversation_id == conversation_id
+        assert stored.status == "pending"

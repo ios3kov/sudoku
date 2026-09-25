@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, delete, exists, func, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from .contacts import require_contacts
 from .db import get_db
@@ -49,6 +50,41 @@ from .e2ee_support import (
 )
 
 router = APIRouter(prefix="/v1/e2ee", tags=["e2ee"])
+
+
+async def require_key_package_access(
+    db: AsyncSession,
+    requester_user_id: uuid.UUID,
+    target_user_id: uuid.UUID,
+) -> None:
+    """Limit MLS device/prekey discovery to legitimate communication peers."""
+    if requester_user_id == target_user_id:
+        return
+
+    requester_member = aliased(ConversationMember)
+    target_member = aliased(ConversationMember)
+    shared_conversation = (
+        await db.execute(
+            select(requester_member.conversation_id)
+            .join(
+                target_member,
+                target_member.conversation_id == requester_member.conversation_id,
+            )
+            .where(
+                requester_member.user_id == requester_user_id,
+                requester_member.e2ee_state != "pending_add",
+                target_member.user_id == target_user_id,
+                target_member.e2ee_state != "pending_add",
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if shared_conversation is not None:
+        return
+
+    # Preserve the same phone-migration compatibility as new-chat creation.
+    await require_contacts(db, requester_user_id, {target_user_id})
+
 
 @router.post(
     "/conversations/{conversation_id}/membership-changes/add/{user_id}",
@@ -334,7 +370,19 @@ async def finalize_membership_change(
         return
     if change.status != "pending":
         raise HTTPException(403, "MLS membership transition cannot be finalized")
-    if change.kind not in {"device_add", "device_remove"} and change.requested_by != auth.user.id:
+    if change.kind in {"device_add", "device_remove"}:
+        participant = (
+            await db.execute(
+                select(ConversationMember.user_id).where(
+                    ConversationMember.conversation_id == change.conversation_id,
+                    ConversationMember.user_id == auth.user.id,
+                    ConversationMember.e2ee_state != "pending_add",
+                )
+            )
+        ).scalar_one_or_none()
+        if participant is None:
+            raise HTTPException(403, "MLS membership transition cannot be finalized")
+    elif change.requested_by != auth.user.id:
         raise HTTPException(403, "MLS membership transition cannot be finalized")
 
     conversation = (
@@ -787,6 +835,7 @@ async def list_key_package_devices(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-key-package-list", 120, 60)
+    await require_key_package_access(db, auth.user.id, user_id)
     now = datetime.now(UTC)
     rows = (
         await db.execute(
@@ -832,6 +881,7 @@ async def claim_key_package(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_user_rate_limit(auth.user.id, "mls-key-package-claim", 120, 60)
+    await require_key_package_access(db, auth.user.id, user_id)
     device = await active_device(db, user_id, device_id)
     if device is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "MLS device is unavailable")
