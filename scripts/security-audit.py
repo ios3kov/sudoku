@@ -171,6 +171,7 @@ def check_invariants(fs,out):
     middleware=fs.get("apps/api/app/middleware.py","")
     security=fs.get("apps/api/app/security.py","")
     obs=fs.get("apps/api/app/observability.py","")
+    auth_route=fs.get("apps/api/app/routes/auth.py","")
     if 'REQUIRE_E2EE_NEW_CONVERSATIONS: "true"' not in compose:
         add(out,"invariant.e2ee-prod","critical","compose.production.yaml",1,"Production E2EE gate missing","Force E2EE for new conversations.")
     for h in ("Strict-Transport-Security","Content-Security-Policy","X-Content-Type-Options","X-Frame-Options","Referrer-Policy"):
@@ -186,6 +187,11 @@ def check_invariants(fs,out):
         add(out,"invariant.auth-primitives","critical","apps/api/app/security.py",1,"Expected CSPRNG/Argon2 primitives missing","Use CSPRNG sessions and Argon2id.")
     if "_redact_sensitive" not in obs or 'logging.getLogger("uvicorn.access").disabled = True' not in obs:
         add(out,"invariant.logging","high","apps/api/app/observability.py",1,"Expected log privacy controls missing","Keep bodies/secrets out of access logs and redact keys.")
+    if auth_route and (
+        "_DUMMY_PASSWORD_HASH" not in auth_route
+        or "run_in_threadpool(verify_password, candidate_hash" not in auth_route
+    ):
+        add(out,"invariant.login-timing","high","apps/api/app/routes/auth.py",1,"Login can skip or block on request-time Argon2 verification","Run both existing and unknown-user password verification through a threadpool using a dummy Argon2 hash for unknown/inactive users.")
     ios=fs.get("ios/Sudoku/Sudoku/SudokuViewController.swift","")
     plist=fs.get("ios/Sudoku/Sudoku/Info.plist","")
     biometric=fs.get("ios/Sudoku/Sudoku/BiometricKeyStore.swift","")
