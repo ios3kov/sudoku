@@ -1385,20 +1385,22 @@ async def list_transport_events(
     )
 
     # A user can be an established conversation member while this exact device
-    # is completely fresh. Do not expose application ciphertext from epochs
-    # before the device joined: that state was deleted and cannot be recovered
-    # by reload. The first assigned Welcome (or first sent control for an
-    # original creator device) is the durable per-device join boundary.
+    # is completely fresh. Keep the join boundary inside the transport SELECT:
+    # this preserves the fixed query budget while preventing pre-Welcome
+    # application ciphertext from reaching a device that no longer has the old
+    # MLS epoch state.
     if is_member:
-        welcome_sequence = await db.scalar(
-            select(func.min(ConversationTransportEvent.sequence))
+        join_event = aliased(ConversationTransportEvent)
+        joined_by_welcome = exists(
+            select(join_event.sequence)
             .join(
                 MlsControlEvent,
-                MlsControlEvent.id == ConversationTransportEvent.control_event_id,
+                MlsControlEvent.id == join_event.control_event_id,
             )
             .where(
-                ConversationTransportEvent.conversation_id == conversation_id,
-                ConversationTransportEvent.kind == "mls_control",
+                join_event.conversation_id == conversation_id,
+                join_event.kind == "mls_control",
+                join_event.sequence < ConversationTransportEvent.sequence,
                 MlsControlEvent.kind == "welcome",
                 exists(
                     select(MlsControlRecipient.event_id).where(
@@ -1409,33 +1411,27 @@ async def list_transport_events(
                 ),
             )
         )
-        sender_sequence = await db.scalar(
-            select(func.min(ConversationTransportEvent.sequence))
+        joined_by_sender = exists(
+            select(join_event.sequence)
             .join(
                 MlsControlEvent,
-                MlsControlEvent.id == ConversationTransportEvent.control_event_id,
+                MlsControlEvent.id == join_event.control_event_id,
             )
             .where(
-                ConversationTransportEvent.conversation_id == conversation_id,
-                ConversationTransportEvent.kind == "mls_control",
+                join_event.conversation_id == conversation_id,
+                join_event.kind == "mls_control",
+                join_event.sequence < ConversationTransportEvent.sequence,
                 MlsControlEvent.sender_user_id == auth.user.id,
                 MlsControlEvent.sender_device_id == device_id,
             )
         )
-        join_candidates = [
-            int(item)
-            for item in (welcome_sequence, sender_sequence)
-            if item is not None
-        ]
-        if join_candidates:
-            device_join_sequence = min(join_candidates)
-            visibility = or_(
-                and_(
-                    ConversationTransportEvent.kind == "message",
-                    ConversationTransportEvent.sequence > device_join_sequence,
-                ),
-                visibility,
-            )
+        visibility = or_(
+            and_(
+                ConversationTransportEvent.kind == "message",
+                or_(joined_by_welcome, joined_by_sender),
+            ),
+            visibility,
+        )
 
     rows = (
         await db.execute(
