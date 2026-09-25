@@ -1,10 +1,12 @@
 import importlib.util
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("security_audit", ROOT / "scripts" / "security-audit.py")
 audit = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
+sys.modules[SPEC.name] = audit
 SPEC.loader.exec_module(audit)
 
 
