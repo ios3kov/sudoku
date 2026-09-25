@@ -354,6 +354,19 @@ class Audit:
                 self.add("cors-wildcard-header", "low", rel, None, "Object storage accepts any CORS request header from its allowed origin.", "Reduce to required upload headers after compatibility verification.")
 
     def check_invariants(self) -> None:
+        member_support = self.root / "apps/api/app/routes/messaging_support.py"
+        if member_support.exists():
+            support_text = member_support.read_text(errors="ignore")
+            if re.search(r"ConversationMemberResponse\([\s\S]{0,500}(?:phone_e164|email)\s*=", support_text):
+                self.add(
+                    "conversation-member-pii",
+                    "high",
+                    self.rel(member_support),
+                    None,
+                    "Conversation payload exposes member phone/email beyond the contacts directory.",
+                    "Return only the fields needed for conversation membership; keep contact details behind the contacts API.",
+                )
+
         expected = {
             "apps/api/app/middleware.py": ["SameOriginMutationMiddleware", "Cache-Control", "no-store"],
             "apps/api/app/schemas.py": ["MAX_E2EE_MESSAGE_BYTES", "class E2eeEnvelopeRequest", 'kind: Literal["application"]'],
