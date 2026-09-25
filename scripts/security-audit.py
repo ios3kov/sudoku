@@ -223,9 +223,8 @@ def check_invariants(fs,out):
         or 'response.headers.set("Content-Security-Policy", contentSecurityPolicy)' not in csp_proxy
     ):
         add(out,"invariant.csp-nonce","high","apps/web/proxy.ts",1,"CSP nonce plumbing is incomplete","Generate an unpredictable nonce, pass it to Next.js in request headers and return the matching CSP response header.")
-    for line_number,line in enumerate(csp_proxy.splitlines(),1):
-        if "script-src" in line and "'unsafe-inline'" in line:
-            add(out,"invariant.csp-unsafe-inline","medium","apps/web/proxy.ts",line_number,"CSP allows unsafe-inline scripts","Keep inline scripts nonce/hash-gated; style-src may retain a separately reviewed inline-style exception.")
+    for match in re.finditer(r"script-src[^;\\n]*'unsafe-inline'",csp_proxy):
+        add(out,"invariant.csp-unsafe-inline","medium","apps/web/proxy.ts",line_of(csp_proxy,match.start()),"CSP allows unsafe-inline scripts","Keep inline scripts nonce/hash-gated; style-src may retain a separately reviewed inline-style exception.")
     caddy_csp=re.search(r'Content-Security-Policy\s+"([^"]+)"',caddy)
     if caddy_csp:
         add(out,"invariant.csp-edge-override","high","infra/caddy/Caddyfile.production",1,"Caddy overrides the per-request CSP","Let the upstream Next.js CSP response header pass through unchanged so its nonce matches rendered scripts.")
