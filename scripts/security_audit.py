@@ -334,6 +334,10 @@ class Audit:
             for header in ("Strict-Transport-Security", "Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy"):
                 if header not in text:
                     self.add("security-header", "medium", self.rel(caddy), None, f"Production edge is missing {header}.", "Add it at the TLS edge.")
+            if "request_body @api" not in text or "max_size 24MB" not in text:
+                self.add("api-body-limit", "high", self.rel(caddy), None,
+                         "Production API has no reviewed edge request-body ceiling.",
+                         "Bound /v1 request bodies at Caddy before FastAPI parses JSON.")
             match = re.search(r"script-src[^\n]*'unsafe-inline'", text)
             if match:
                 self.add("csp-unsafe-inline", "medium", self.rel(caddy), text.count("\n", 0, match.start()) + 1,
