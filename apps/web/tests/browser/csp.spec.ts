@@ -39,7 +39,7 @@ test("document CSP uses a fresh nonce and no unsafe-inline script allowance", as
 
 test("CSP blocks an untrusted inline script", async ({ page }) => {
   await page.goto("/");
-  await page.addScriptTag({ content: "window.__sudokuUntrustedInlineRan = true;" });
+  await page.addScriptTag({ content: "window.__sudokuUntrustedInlineRan = true;" }).catch(() => undefined);
   await expect
     .poll(() => page.evaluate(() => Boolean((window as typeof window & { __sudokuUntrustedInlineRan?: boolean }).__sudokuUntrustedInlineRan)))
     .toBe(false);
