@@ -1,7 +1,10 @@
+import base64
+import binascii
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -156,13 +159,37 @@ class ReactionSummary(BaseModel):
     user_ids: list[uuid.UUID]
 
 
+MAX_E2EE_MESSAGE_BYTES = 256 * 1024
+MAX_E2EE_MESSAGE_B64_CHARS = 4 * ((MAX_E2EE_MESSAGE_BYTES + 2) // 3)
+
+
+class E2eeEnvelopeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1]
+    protocol: Literal["mls-rfc9420"]
+    kind: Literal["application"]
+    ciphertext: str = Field(min_length=4, max_length=MAX_E2EE_MESSAGE_B64_CHARS)
+
+    @field_validator("ciphertext")
+    @classmethod
+    def validate_ciphertext(cls, value: str) -> str:
+        try:
+            decoded = base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Ciphertext must be valid base64") from exc
+        if not decoded or len(decoded) > MAX_E2EE_MESSAGE_BYTES:
+            raise ValueError("Ciphertext exceeds the E2EE message budget")
+        return value
+
+
 class CreateMessageRequest(BaseModel):
     client_id: uuid.UUID
     type: str = Field(default="text", pattern="^(text|image|file|voice)$")
     body: str | None = Field(default=None, max_length=20000)
     reply_to: uuid.UUID | None = None
     asset_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10)
-    envelope: dict | None = None
+    envelope: E2eeEnvelopeRequest | None = None
 
 
 class EditMessageRequest(BaseModel):
