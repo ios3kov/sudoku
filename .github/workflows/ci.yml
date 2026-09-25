@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -35,8 +38,19 @@ jobs:
       WEB_PUSH_ALLOWED_HOSTS: push.apple.com,fcm.googleapis.com,push.services.mozilla.com
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: "3.13", cache: pip }
+      - name: Security scanner unit tests
+        run: python -m unittest discover -s tests/ops -p 'test_security_audit.py'
+      - name: Deep repository security audit
+        run: |
+          set +e
+          python scripts/security_audit.py . --history --fail-on high
+          status=$?
+          cat security-audit-report.md
+          exit "$status"
       - name: Install API + tests
         run: python -m pip install -e "./apps/api[test]"
       - name: Start S3 test service
