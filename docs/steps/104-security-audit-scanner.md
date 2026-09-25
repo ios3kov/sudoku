@@ -17,7 +17,8 @@ The scanner currently checks:
 - browser-side paid API calls and public secret-like env names;
 - crypto/security code touching `localStorage` or `sessionStorage`;
 - dangerous Python execution/deserialization sinks;
-- production invariants for E2EE, secure cookies, CSPRNG/Argon2, log redaction and core HTTP security headers.
+- production invariants for E2EE, secure cookies, CSPRNG/Argon2, log redaction and core HTTP security headers;
+- relaxed CSP patterns such as `unsafe-inline` as review-level findings.
 
 Existing CI continues to own dependency-specific checks through `pip-audit`, `npm audit` and `cargo audit`.
 
@@ -29,7 +30,7 @@ Existing CI continues to own dependency-specific checks through `pip-audit`, `np
 - Git is invoked with hooks and fsmonitor disabled.
 - No network scanning or exploit generation.
 - Markdown and JSON reports are emitted for humans and CI.
-- Exit code 2 blocks on critical/high findings; exit code 1 blocks on medium findings; 0 is clean.
+- Exit code 2 means critical/high findings; exit code 1 means medium-only findings; 0 is clean. CI blocks on exit code 2 and retains medium findings as review evidence.
 - A clean deterministic scan is not a security guarantee.
 
 ## Verification
