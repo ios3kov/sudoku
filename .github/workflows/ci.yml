@@ -231,6 +231,13 @@ jobs:
           trap 'docker rm -f sudoku-minio-upload-audit >/dev/null' EXIT
           python tests/ops/minio_conditional_upload.py
 
+      - name: Validate production Caddy config
+        run: |
+          docker run --rm \
+            -e APP_DOMAIN=sudoku.test \
+            -v "$PWD/infra/caddy/Caddyfile.production:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
       - name: Validate production Compose merge
         env:
           APP_DOMAIN: sudoku.example.com
