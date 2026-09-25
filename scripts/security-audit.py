@@ -14,7 +14,7 @@ SECRET={
 "stripe":re.compile(r"\bsk_live_[A-Za-z0-9]{20,}\b"),
 "pem":re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 }
-GENERIC=re.compile(r"""(?ix)\b(api[_-]?key|secret|password|token|private[_-]?key)\b\s*[:=]\s*["']([^"'\s]{20,})["']""")
+GENERIC=re.compile(r"""(?ix)\b(api[_-]?key|secret|password|token|private[_-]?key)\b\s*[:=]\s*["']?([A-Za-z0-9_./+=:@-]{20,})["']?""")
 PLACEHOLDER=re.compile(r"(?i)(replace|example|dummy|changeme|generate|test|localhost|sudoku-ci|ci-secret|not-a-secret)")
 
 @dataclass
@@ -136,6 +136,9 @@ def check_invariants(fs,out):
         add(out,"invariant.e2ee-prod","critical","compose.production.yaml",1,"Production E2EE gate missing","Force E2EE for new conversations.")
     for h in ("Strict-Transport-Security","Content-Security-Policy","X-Content-Type-Options","X-Frame-Options","Referrer-Policy"):
         if h not in caddy: add(out,"invariant.header","high","infra/caddy/Caddyfile.production",1,"Missing "+h,"Restore production security header.")
+    csp=re.search(r'Content-Security-Policy\s+"([^"]+)"',caddy)
+    if csp and "script-src" in csp.group(1) and "'unsafe-inline'" in csp.group(1):
+        add(out,"invariant.csp-unsafe-inline","medium","infra/caddy/Caddyfile.production",1,"CSP allows unsafe-inline scripts","Prefer nonce/hash-based Next.js scripts; keep this as a reviewed exception only if required.")
     if "origin != self.expected_origin" not in middleware:
         add(out,"invariant.same-origin","critical","apps/api/app/middleware.py",1,"Exact-origin mutation gate missing","Require exact PUBLIC_ORIGIN.")
     if "secure_cookies: bool = Field(default=True" not in config:
