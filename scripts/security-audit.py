@@ -215,12 +215,12 @@ def check_invariants(fs,out):
     caddy_active="\n".join(line for line in caddy.splitlines() if not line.lstrip().startswith("#"))
     for h in ("Strict-Transport-Security","X-Content-Type-Options","X-Frame-Options","Referrer-Policy"):
         if h not in caddy_active: add(out,"invariant.header","high","infra/caddy/Caddyfile.production",1,"Missing "+h,"Restore production security header.")
-    caddy_csp=re.search(r'Content-Security-Policy\\s+"([^"]+)"',caddy_active)
+    caddy_csp=re.search(r'Content-Security-Policy\s+"([^"]+)"',caddy_active)
     proxy_csp_owned=(
         'const CSP_HEADER = "Content-Security-Policy"' in proxy
         and "requestHeaders.set(CSP_HEADER, contentSecurityPolicy)" in proxy
         and "response.headers.set(CSP_HEADER, contentSecurityPolicy)" in proxy
-        and re.search(r"`script-src[^`]*'nonce-\\$\\{nonce\\}'`",proxy) is not None
+        and "'nonce-${nonce}'" in proxy
     )
     if not caddy_csp and not proxy_csp_owned:
         add(out,"invariant.header","high","apps/web/proxy.ts",1,"Missing Content-Security-Policy owner","Generate CSP in Next.js proxy.ts or restore an active Caddy CSP header.")
