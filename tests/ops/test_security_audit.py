@@ -101,3 +101,9 @@ def test_special_security_config_files_are_scanned(tmp_path):
     scanned = dict(audit.files(tmp_path))
     assert ".gitignore" in scanned
     assert "Caddyfile.production" in scanned
+
+
+def test_known_synthetic_credentials_are_placeholders():
+    assert audit.is_placeholder("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl")
+    assert audit.is_placeholder("local-sudoku-password")
+    assert not audit.is_placeholder("ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4")
