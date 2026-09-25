@@ -10,8 +10,6 @@ export interface CurrentUser {
 export interface ConversationMember {
   id: string;
   display_name: string;
-  phone_e164: string | null;
-  email: string | null;
   role: string;
   last_read_sequence: number;
 }
