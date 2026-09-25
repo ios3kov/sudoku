@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-function optionalOrigin(name: string): string | null {
+function optionalOrigin(name: string, allowedProtocols: readonly string[]): string | null {
   const raw = process.env[name]?.trim();
   if (!raw) return null;
 
   try {
     const url = new URL(raw);
-    if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol)) return null;
+    if (!allowedProtocols.includes(url.protocol)) return null;
     if (url.username || url.password || url.search || url.hash) return null;
     if (url.pathname !== "/" && url.pathname !== "") return null;
     return url.origin;
@@ -17,8 +17,8 @@ function optionalOrigin(name: string): string | null {
 
 function buildContentSecurityPolicy(nonce: string): string {
   const connectSources = new Set(["'self'"]);
-  const assetOrigin = optionalOrigin("CSP_ASSET_ORIGIN");
-  const websocketOrigin = optionalOrigin("CSP_WEBSOCKET_ORIGIN");
+  const assetOrigin = optionalOrigin("CSP_ASSET_ORIGIN", ["http:", "https:"]);
+  const websocketOrigin = optionalOrigin("CSP_WEBSOCKET_ORIGIN", ["ws:", "wss:"]);
 
   if (assetOrigin) connectSources.add(assetOrigin);
   if (websocketOrigin) connectSources.add(websocketOrigin);
@@ -31,8 +31,8 @@ function buildContentSecurityPolicy(nonce: string): string {
     "form-action 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' blob: data:",
-    "media-src 'self' blob:",
+    `img-src 'self' blob: data:${assetOrigin ? ` ${assetOrigin}` : ""}`,
+    `media-src 'self' blob:${assetOrigin ? ` ${assetOrigin}` : ""}`,
     "font-src 'self' data:",
     `connect-src ${Array.from(connectSources).join(" ")}`,
     "worker-src 'self' blob:",
