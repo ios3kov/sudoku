@@ -145,3 +145,64 @@ def test_dependency_lock_checks():
 def test_generated_requirements_lock_is_scanned(tmp_path):
     (tmp_path / "requirements.lock").write_text("fastapi==0.1.0\n")
     assert "requirements.lock" in dict(audit.files(tmp_path))
+
+
+def test_nonce_csp_proxy_is_accepted_with_reviewed_inline_style_exception():
+    out = []
+    audit.check_invariants(
+        {
+            "compose.production.yaml": """
+REQUIRE_E2EE_NEW_CONVERSATIONS: "true"
+CSP_ASSET_ORIGIN: https://assets.sudoku.test
+CSP_WEBSOCKET_ORIGIN: wss://sudoku.test
+CSP_UPGRADE_INSECURE_REQUESTS: "true"
+""",
+            "infra/caddy/Caddyfile.production": """
+Strict-Transport-Security
+X-Content-Type-Options
+X-Frame-Options
+Referrer-Policy
+""",
+            "apps/web/proxy.ts": """
+crypto.randomUUID()
+const csp = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'`
+requestHeaders.set("x-nonce", nonce)
+response.headers.set("Content-Security-Policy", contentSecurityPolicy)
+""",
+        },
+        out,
+    )
+    found = ids(out)
+    assert "invariant.csp-missing" not in found
+    assert "invariant.csp-nonce" not in found
+    assert "invariant.csp-unsafe-inline" not in found
+    assert "invariant.csp-edge-override" not in found
+    assert "invariant.csp-prod-origin" not in found
+
+
+def test_unsafe_inline_script_csp_is_reported():
+    out = []
+    audit.check_invariants(
+        {
+            "compose.production.yaml": """
+REQUIRE_E2EE_NEW_CONVERSATIONS: "true"
+CSP_ASSET_ORIGIN: https://assets.sudoku.test
+CSP_WEBSOCKET_ORIGIN: wss://sudoku.test
+CSP_UPGRADE_INSECURE_REQUESTS: "true"
+""",
+            "infra/caddy/Caddyfile.production": """
+Strict-Transport-Security
+X-Content-Type-Options
+X-Frame-Options
+Referrer-Policy
+""",
+            "apps/web/proxy.ts": """
+crypto.randomUUID()
+const csp = `script-src 'self' 'nonce-${nonce}' 'unsafe-inline'`
+requestHeaders.set("x-nonce", nonce)
+response.headers.set("Content-Security-Policy", contentSecurityPolicy)
+""",
+        },
+        out,
+    )
+    assert "invariant.csp-unsafe-inline" in ids(out)
