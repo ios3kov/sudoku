@@ -67,6 +67,8 @@ jobs:
             --json security-audit-report.json
           code=$?
           set -e
+          test -s security-audit-report.md
+          test -s security-audit-report.json
           cat security-audit-report.md
           if [ "$code" -ge 2 ]; then
             exit "$code"
