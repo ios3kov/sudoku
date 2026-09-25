@@ -2,6 +2,9 @@ name: device-access
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
   pull_request:
 permissions:
   contents: read
