@@ -10,6 +10,7 @@ from pathlib import Path
 
 SKIP={".git","node_modules",".next","dist","build",".venv","venv","__pycache__","coverage","target"}
 EXT={".py",".js",".jsx",".ts",".tsx",".mjs",".cjs",".rs",".swift",".sh",".sql",".json",".yml",".yaml",".toml",".ini",".cfg",".md",".txt",".env"}
+SPECIAL_TEXT_FILES={".gitignore","Caddyfile.production","Caddyfile.local"}
 SECRET={
 "openai":re.compile(r"\bsk-(?!ant-)[A-Za-z0-9_-]{20,}\b"),
 "anthropic":re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"),
@@ -18,7 +19,8 @@ SECRET={
 "stripe":re.compile(r"\bsk_live_[A-Za-z0-9]{20,}\b"),
 "pem":re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 }
-GENERIC=re.compile(r"""(?ix)\b(api[_-]?key|secret|password|token|private[_-]?key)\b\s*[:=]\s*["']?([A-Za-z0-9_./+=:@-]{20,})["']?""")
+GENERIC_QUOTED=re.compile(r"""(?ix)\b(api[_-]?key|secret|password|token|private[_-]?key)\b\s*[:=]\s*(["'])([^"'\s]{16,})\2""")
+GENERIC_ENV=re.compile(r"""(?im)^\s*([A-Z][A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|PRIVATE_KEY|API_KEY)[A-Z0-9_]*)\s*[:=]\s*([A-Za-z0-9_./+=:@-]{20,})\s*$""")
 PLACEHOLDER=re.compile(r"(?i)(replace|example|dummy|changeme|generate|test|localhost|sudoku-ci|ci-secret|not-a-secret)")
 
 @dataclass
@@ -33,7 +35,7 @@ def files(root):
     for p in root.rglob("*"):
         if p.is_symlink() or not p.is_file() or any(x in SKIP for x in p.parts): continue
         if p.stat().st_size>2_000_000: continue
-        if p.suffix.lower() not in EXT and not p.name.startswith(".env"): continue
+        if p.suffix.lower() not in EXT and p.name not in SPECIAL_TEXT_FILES and not p.name.startswith(".env"): continue
         try: yield p.relative_to(root).as_posix(),p.read_text(encoding="utf-8",errors="ignore")
         except OSError: pass
 
@@ -54,10 +56,16 @@ def check_secrets(root,fs,out,history):
                 v=m.group(0)
                 if not PLACEHOLDER.search(v):
                     add(out,"secret."+name,"critical",path,line_of(text,m.start()),"Potential live secret "+mask(v),"Rotate and move to runtime secret storage.")
-        for m in GENERIC.finditer(text):
-            v=m.group(2)
+        for m in GENERIC_QUOTED.finditer(text):
+            v=m.group(3)
             if not PLACEHOLDER.search(v):
-                add(out,"secret.generic","high",path,line_of(text,m.start()),"Hard-coded secret-like value "+mask(v),"Move to secret storage and rotate if exposed.")
+                add(out,"secret.generic","high",path,line_of(text,m.start()),"Hard-coded secret-like string "+mask(v),"Move to secret storage and rotate if exposed.")
+        for m in GENERIC_ENV.finditer(text):
+            v=m.group(2)
+            if PLACEHOLDER.search(v):
+                continue
+            severity="medium" if path.startswith((".github/","tests/","apps/web/tests/")) else "high"
+            add(out,"secret.env-literal",severity,path,line_of(text,m.start()),"Committed secret-like environment value "+mask(v),"Use a generated test value or runtime secret; rotate if this credential was ever live.")
     tracked=set(git(root,"ls-files").splitlines())
     for path in tracked:
         n=Path(path).name
@@ -115,7 +123,7 @@ def check_routes(fs,out):
 
 def check_sinks(fs,out):
     for path,text in fs.items():
-        if path.startswith("apps/web/"):
+        if path.startswith("apps/web/") and "/tests/" not in path:
             for m in re.finditer(r"https?://api\.(?:openai|anthropic|stripe)\.com",text,re.IGNORECASE):
                 add(out,"client.paid-api","critical",path,line_of(text,m.start()),"Paid API called from browser","Proxy through authenticated server.")
             for m in re.finditer(r"(NEXT_PUBLIC_|VITE_|REACT_APP_)[A-Z0-9_]*(SECRET|PRIVATE|TOKEN|PASSWORD|KEY)",text):
