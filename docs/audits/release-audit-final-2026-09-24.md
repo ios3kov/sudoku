@@ -1,5 +1,7 @@
 # Consolidated release audit — 2026-09-24
 
+2026-09-25 update: [candidate verification](release-candidate-2026-09-25.md) records successful exact-SHA CI, including controlled profiling and the isolated CI restore. Physical and full-application recovery boundaries below remain open.
+
 ## Decision and evidence boundary
 
 Repository baseline: `f7ba8fce00b251bbeedc1fdd89a6657cfdb2e0c9` (PR #87). This report consolidates the approved [Step103](../steps/103-release-audit-program.md) and the [findings register](release-baseline-2026-09-24.md). The current audit candidate also contains request-log regression coverage, an export-boundary trace privacy fix, and reproducible performance evidence collection. Exact candidate CI and measurement results are attached to the audit PR; a pending job is not a pass.

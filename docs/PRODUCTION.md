@@ -29,6 +29,10 @@ Docker and Compose versions were verified during provisioning and must continue 
 
 ## Release status
 
+### Repository-only candidate — 2026-09-25
+
+Candidate `afec35c604bd942c216c8566eff200b4801b2eba` passed all applicable exact-SHA workflows. See [candidate verification](audits/release-candidate-2026-09-25.md) for evidence and remaining release boundaries. This is not a deployment record; the production checkpoint below remains the last recorded deployment, not a fresh inspection of the live host.
+
 ### Current checkpoint — 2026-09-23 phone/contact rollout deployed
 
 Repository verification and production evidence remain separate, but the coordinated phone/contact release is now live.
