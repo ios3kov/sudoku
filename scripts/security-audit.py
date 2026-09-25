@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
 from __future__ import annotations
-import argparse, ast, json, re, subprocess
-from dataclasses import dataclass, asdict
+
+import argparse
+import ast
+import json
+import re
+import subprocess
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 SKIP={".git","node_modules",".next","dist","build",".venv","venv","__pycache__","coverage","target"}
@@ -107,7 +111,7 @@ def check_routes(fs,out):
 def check_sinks(fs,out):
     for path,text in fs.items():
         if path.startswith("apps/web/"):
-            for m in re.finditer(r"https?://api\.(?:openai|anthropic|stripe)\.com",text,re.I):
+            for m in re.finditer(r"https?://api\.(?:openai|anthropic|stripe)\.com",text,re.IGNORECASE):
                 add(out,"client.paid-api","critical",path,line_of(text,m.start()),"Paid API called from browser","Proxy through authenticated server.")
             for m in re.finditer(r"(NEXT_PUBLIC_|VITE_|REACT_APP_)[A-Z0-9_]*(SECRET|PRIVATE|TOKEN|PASSWORD|KEY)",text):
                 add(out,"client.public-secret","critical",path,line_of(text,m.start()),"Browser-exposed secret-like env name","Keep secrets server-side.")
