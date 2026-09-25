@@ -162,7 +162,9 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
                 json={"role": "owner"},
             )
             assert promoted.status_code == 200, promoted.text
-            assert any(item["id"] == member_id and item["role"] == "owner" for item in promoted.json()["members"])
+            members = promoted.json()["members"]
+            assert any(item["id"] == member_id and item["role"] == "owner" for item in members)
+            assert all("phone_e164" not in item and "email" not in item for item in members)
 
             bad_origin = await admin_client.post(
                 f"/v1/conversations/{conversation_id}/messages",
