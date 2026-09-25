@@ -204,6 +204,7 @@ def check_sinks(fs,out):
 def check_invariants(fs,out):
     compose=fs.get("compose.production.yaml","")
     caddy=fs.get("infra/caddy/Caddyfile.production","")
+    csp_proxy=fs.get("apps/web/proxy.ts","")
     config=fs.get("apps/api/app/config.py","")
     middleware=fs.get("apps/api/app/middleware.py","")
     security=fs.get("apps/api/app/security.py","")
@@ -211,11 +212,26 @@ def check_invariants(fs,out):
     auth_route=fs.get("apps/api/app/routes/auth.py","")
     if 'REQUIRE_E2EE_NEW_CONVERSATIONS: "true"' not in compose:
         add(out,"invariant.e2ee-prod","critical","compose.production.yaml",1,"Production E2EE gate missing","Force E2EE for new conversations.")
-    for h in ("Strict-Transport-Security","Content-Security-Policy","X-Content-Type-Options","X-Frame-Options","Referrer-Policy"):
+    for h in ("Strict-Transport-Security","X-Content-Type-Options","X-Frame-Options","Referrer-Policy"):
         if h not in caddy: add(out,"invariant.header","high","infra/caddy/Caddyfile.production",1,"Missing "+h,"Restore production security header.")
-    csp=re.search(r'Content-Security-Policy\s+"([^"]+)"',caddy)
-    if csp and "script-src" in csp.group(1) and "'unsafe-inline'" in csp.group(1):
-        add(out,"invariant.csp-unsafe-inline","medium","infra/caddy/Caddyfile.production",1,"CSP allows unsafe-inline scripts","Prefer nonce/hash-based Next.js scripts; keep this as a reviewed exception only if required.")
+    if "Content-Security-Policy" not in csp_proxy:
+        add(out,"invariant.csp-missing","high","apps/web/proxy.ts",1,"Per-request CSP generation missing","Generate a fresh nonce-backed CSP in Next.js Proxy and return it on HTML responses.")
+    if csp_proxy and (
+        "crypto.randomUUID()" not in csp_proxy
+        or 'requestHeaders.set("x-nonce", nonce)' not in csp_proxy
+        or "'nonce-${nonce}'" not in csp_proxy
+        or 'response.headers.set("Content-Security-Policy", contentSecurityPolicy)' not in csp_proxy
+    ):
+        add(out,"invariant.csp-nonce","high","apps/web/proxy.ts",1,"CSP nonce plumbing is incomplete","Generate an unpredictable nonce, pass it to Next.js in request headers and return the matching CSP response header.")
+    for line_number,line in enumerate(csp_proxy.splitlines(),1):
+        if "script-src" in line and "'unsafe-inline'" in line:
+            add(out,"invariant.csp-unsafe-inline","medium","apps/web/proxy.ts",line_number,"CSP allows unsafe-inline scripts","Keep inline scripts nonce/hash-gated; style-src may retain a separately reviewed inline-style exception.")
+    caddy_csp=re.search(r'Content-Security-Policy\s+"([^"]+)"',caddy)
+    if caddy_csp:
+        add(out,"invariant.csp-edge-override","high","infra/caddy/Caddyfile.production",1,"Caddy overrides the per-request CSP","Let the upstream Next.js CSP response header pass through unchanged so its nonce matches rendered scripts.")
+    for token in ("CSP_ASSET_ORIGIN: https://assets.","CSP_WEBSOCKET_ORIGIN: wss://",'CSP_UPGRADE_INSECURE_REQUESTS: "true"'):
+        if token not in compose:
+            add(out,"invariant.csp-prod-origin","high","compose.production.yaml",1,"Production CSP runtime origin configuration is incomplete","Configure asset/WebSocket origins and HTTPS upgrading for the web service.")
     if "origin != self.expected_origin" not in middleware:
         add(out,"invariant.same-origin","critical","apps/api/app/middleware.py",1,"Exact-origin mutation gate missing","Require exact PUBLIC_ORIGIN.")
     if "secure_cookies: bool = Field(default=True" not in config:
