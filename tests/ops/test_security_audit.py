@@ -62,3 +62,15 @@ async def unlock(auth = Depends(get_session_context)):
 '''
     audit.check_routes({"apps/api/app/routes/unlock.py": source}, out)
     assert "route.rate-limit" in ids(out)
+
+
+def test_remembered_phone_storage_is_not_treated_as_crypto_secret():
+    out = []
+    source = """
+const PHONE_KEY = "sudoku.remembered-phone.v1";
+export function rememberPhone(phone: string) {
+  localStorage.setItem(PHONE_KEY, phone);
+}
+"""
+    audit.check_sinks({"apps/web/features/messenger/device-access.ts": source}, out)
+    assert "client.crypto-webstorage" not in ids(out)
