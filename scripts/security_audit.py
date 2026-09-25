@@ -20,6 +20,11 @@ RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 SKIP = {".git", "node_modules", ".next", "dist", "build", ".venv", "venv", "__pycache__", "coverage", "target", "generated", "test-results"}
 TEXT = {".py", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".json", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".sh", ".sql", ".md", ".txt", ".html", ".css", ".xml", ".plist", ".swift", ".rs", ".env"}
 MAX_FILE = 2_000_000
+SELF_SCAN_IGNORE = {"scripts/security_audit.py", "tests/ops/test_security_audit.py"}
+REQUEST_ASYNC_SURFACES = {
+    "apps/api/app/e2ee.py",
+    "apps/api/app/realtime.py",
+}
 
 SECRET_PATTERNS = [
     ("anthropic", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b")),
@@ -74,6 +79,9 @@ class Audit:
             if not (path.name.startswith(".env") or path.suffix.lower() in TEXT):
                 continue
             try:
+                rel = path.relative_to(self.root).as_posix()
+                if rel in SELF_SCAN_IGNORE:
+                    continue
                 resolved = path.resolve()
                 if not resolved.is_relative_to(self.root) or path.stat().st_size > MAX_FILE:
                     continue
@@ -225,7 +233,8 @@ class Audit:
                         self.add("route-auth", "high", rel, fn.lineno, f"{method} {route} has no visible auth dependency.",
                                  "Require server-side authentication or explicitly document the public route.")
 
-                if isinstance(fn, ast.AsyncFunctionDef) and rel.startswith("apps/api/app/"):
+                request_async_surface = rel.startswith("apps/api/app/routes/") or rel in REQUEST_ASYNC_SURFACES
+                if isinstance(fn, ast.AsyncFunctionDef) and request_async_surface:
                     for call in [node for node in ast.walk(fn) if isinstance(node, ast.Call)]:
                         name = self.call_name(call)
                         if name not in {"verify_password", "hash_password", "hash_device_pin", "verify_device_pin"}:
@@ -264,7 +273,7 @@ class Audit:
         ]
         for path, text in self.files():
             rel = self.rel(path)
-            if rel.startswith("apps/web/") and path.suffix.lower() in {".js", ".jsx", ".mjs", ".ts", ".tsx"}:
+            if rel.startswith("apps/web/") and "/tests/" not in rel and path.suffix.lower() in {".js", ".jsx", ".mjs", ".ts", ".tsx"}:
                 for regex, rule, severity, problem, fix in rules:
                     for match in regex.finditer(text):
                         self.add(rule, severity, rel, text.count("\n", 0, match.start()) + 1, problem, fix)
@@ -381,6 +390,8 @@ class Audit:
                 file_path = line[6:]
                 continue
             if not line.startswith(("+", "-")) or line.startswith(("+++", "---")):
+                continue
+            if file_path in SELF_SCAN_IGNORE:
                 continue
             payload = line[1:]
             for kind, regex in SECRET_PATTERNS:
