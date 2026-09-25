@@ -101,12 +101,19 @@ def check_routes(fs,out):
         except SyntaxError: continue
         pm=re.search(r"""APIRouter\s*\(\s*prefix\s*=\s*["']([^"']+)["']""",text)
         prefix=pm.group(1) if pm else ""
+        functions={n.name:segment(text,n) for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
+        rate_helpers={
+            name for name,body in functions.items()
+            if any(x in body for x in ("enforce_login_rate_limit(","enforce_user_rate_limit(","enforce_ip_rate_limit("))
+        }
         for fn in [n for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))]:
             decos=route_decorators(fn)
             if not decos: continue
             seg=segment(text,fn)
             auth="Depends(get_auth_context)" in seg or "Depends(get_session_context)" in seg
             rate=any(x in seg for x in ("enforce_login_rate_limit(","enforce_user_rate_limit(","enforce_ip_rate_limit("))
+            if not rate:
+                rate=any(re.search(rf"\b{re.escape(helper)}\s*\(",seg) for helper in rate_helpers)
             for method,route in decos:
                 absolute=(prefix+route) if route.startswith("/") else route
                 full=(absolute+" "+fn.name).lower()
