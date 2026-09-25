@@ -1,6 +1,8 @@
 :8080 {
     encode zstd gzip
 
+    # Content-Security-Policy is generated per response by Next.js proxy.ts
+    # and passed through by this local reverse proxy.
     @api path /v1/*
     reverse_proxy @api api:8000
 
