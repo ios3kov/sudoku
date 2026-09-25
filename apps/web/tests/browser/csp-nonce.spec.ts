@@ -10,11 +10,10 @@ function scriptDirective(csp: string): string {
 }
 
 test("document CSP uses a fresh script nonce and blocks arbitrary inline scripts", async ({ page, request }) => {
-  const first = await page.goto("/");
-  expect(first).not.toBeNull();
-  expect(first!.ok()).toBe(true);
+  const source = await request.get("/");
+  expect(source.ok()).toBe(true);
 
-  const firstHeaders = first!.headers();
+  const firstHeaders = source.headers();
   const firstCsp = firstHeaders["content-security-policy"];
   const firstNonce = firstHeaders["x-nonce"];
 
@@ -28,6 +27,27 @@ test("document CSP uses a fresh script nonce and blocks arbitrary inline scripts
   expect(scripts).toContain("'wasm-unsafe-eval'");
   expect(scripts).not.toContain("'unsafe-inline'");
 
+  const originalBody = await source.text();
+  const probe = '<script id="csp-inline-probe">window.__cspInlineRan = true</script>';
+  const injectedBody = originalBody.replace("</head>", `${probe}</head>`);
+  expect(injectedBody).not.toBe(originalBody);
+
+  await page.route("http://127.0.0.1:3000/", async (route) => {
+    await route.fulfill({
+      status: source.status(),
+      headers: {
+        "content-type": firstHeaders["content-type"] ?? "text/html; charset=utf-8",
+        "content-security-policy": firstCsp,
+        "x-nonce": firstNonce,
+      },
+      body: injectedBody,
+    });
+  });
+
+  const first = await page.goto("/");
+  expect(first).not.toBeNull();
+  expect(first!.ok()).toBe(true);
+
   const documentNonces = await page.evaluate(() =>
     Array.from(document.scripts)
       .map((script) => script.nonce)
@@ -36,17 +56,9 @@ test("document CSP uses a fresh script nonce and blocks arbitrary inline scripts
   expect(documentNonces.length).toBeGreaterThan(0);
   expect(documentNonces.every((nonce) => nonce === firstNonce)).toBe(true);
 
-  await page.evaluate(() => {
-    const state = window as typeof window & { __cspInlineRan?: boolean };
-    state.__cspInlineRan = false;
-    const script = document.createElement("script");
-    script.textContent = "window.__cspInlineRan = true";
-    document.head.appendChild(script);
-  });
-  await page.waitForTimeout(50);
   expect(
     await page.evaluate(
-      () => (window as typeof window & { __cspInlineRan?: boolean }).__cspInlineRan,
+      () => Boolean((window as typeof window & { __cspInlineRan?: boolean }).__cspInlineRan),
     ),
   ).toBe(false);
 

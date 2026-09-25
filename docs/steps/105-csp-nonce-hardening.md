@@ -72,7 +72,7 @@ The follow-up browser regression `apps/web/tests/browser/csp-nonce.spec.ts` vali
 - HTML responses contain a `script-src` nonce plus `strict-dynamic` and `wasm-unsafe-eval`.
 - `script-src` does not contain `'unsafe-inline'`.
 - Next.js document scripts carry the response nonce.
-- An arbitrary dynamically inserted inline script without the nonce is blocked.
+- A noncedless inline script injected into the HTML response before parsing is blocked by the real application CSP.
 - Separate HTML responses receive different nonces.
 
 This regression covers the browser-visible nonce contract. It does not replace physical Safari/iPhone acceptance or production-origin smoke testing.
