@@ -64,6 +64,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+      ASSET_PUBLIC_ORIGIN: https://assets.${APP_DOMAIN:?APP_DOMAIN is required}
 
   caddy:
     ports: !override
