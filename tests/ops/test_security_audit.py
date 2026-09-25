@@ -140,3 +140,8 @@ def test_dependency_lock_checks():
     assert "supply.python-unlocked" in ids(out)
     assert "supply.node-unlocked" not in ids(out)
     assert "supply.rust-unlocked" not in ids(out)
+
+
+def test_generated_requirements_lock_is_scanned(tmp_path):
+    (tmp_path / "requirements.lock").write_text("fastapi==0.1.0\n")
+    assert "requirements.lock" in dict(audit.files(tmp_path))

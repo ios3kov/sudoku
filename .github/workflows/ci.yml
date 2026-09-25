@@ -40,7 +40,11 @@ jobs:
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v5.6.0
         with: { python-version: "3.13", cache: pip }
       - name: Install API + tests
-        run: python -m pip install -e "./apps/api[test]"
+        run: |
+          python -m pip install --require-hashes -r apps/api/requirements.lock
+          grep -E '^[a-zA-Z0-9_.-]+==' apps/api/requirements.lock | sed 's/ \\$//' > /tmp/api-runtime-constraints.txt
+          python -m pip install -c /tmp/api-runtime-constraints.txt -e "./apps/api[test]"
+          python -m pip check
       - name: Start S3 test service
         run: |
           moto_server -H 127.0.0.1 -p 9000 >/tmp/moto-s3.log 2>&1 &

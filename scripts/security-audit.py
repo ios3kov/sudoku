@@ -10,7 +10,7 @@ from pathlib import Path
 
 SKIP={".git","node_modules",".next","dist","build",".venv","venv","__pycache__","coverage","target"}
 EXT={".py",".js",".jsx",".ts",".tsx",".mjs",".cjs",".rs",".swift",".sh",".sql",".json",".yml",".yaml",".toml",".ini",".cfg",".md",".txt",".env"}
-SPECIAL_TEXT_FILES={".gitignore","Caddyfile.production","Caddyfile.local","Cargo.lock"}
+SPECIAL_TEXT_FILES={".gitignore","Caddyfile.production","Caddyfile.local","Cargo.lock","requirements.lock"}
 SECRET={
 "openai":re.compile(r"\bsk-(?!ant-)[A-Za-z0-9_-]{20,}\b"),
 "anthropic":re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"),

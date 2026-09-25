@@ -1,5 +1,9 @@
 # Progress
 
+## Python runtime lock follow-up — 2026-09-25 (awaiting CI)
+
+Generated `apps/api/requirements.lock` with uv 0.12.19 for CPython 3.13/Linux x86_64. Docker installs hashed runtime requirements before installing the application without dependency resolution. CI installs the same runtime lock and constrains test-extra installation to those runtime versions, then runs pip check. Hash-verified target downloads passed (including the http-ece source distribution); this is not proof of a Linux image build. Eleven scanner tests pass locally. Build-system/test dependencies are not fully locked. Full candidate CI is required; the previously green application candidate remains `afec35c` until then. Production unchanged.
+
 ## Verified candidate — 2026-09-25
 
 Application candidate: `afec35c604bd942c216c8566eff200b4801b2eba`.

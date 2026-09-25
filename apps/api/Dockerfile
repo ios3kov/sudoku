@@ -6,7 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /srv/api
 COPY apps/api/ /srv/api/
-RUN pip install --no-cache-dir . \
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock \
+    && pip install --no-cache-dir --no-deps . \
     && groupadd --system sudoku \
     && useradd --system --gid sudoku --home-dir /nonexistent --shell /usr/sbin/nologin sudoku \
     && install -d -o sudoku -g sudoku -m 0700 /var/lib/sudoku-beat \
