@@ -1,9 +1,8 @@
 import uuid
 
+import app.routes.auth as auth_routes
 import httpx
 import pytest
-
-import app.routes.auth as auth_routes
 from app.main import app
 
 ORIGIN = "https://sudoku.test"
