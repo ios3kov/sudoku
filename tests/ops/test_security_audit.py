@@ -145,3 +145,50 @@ def test_dependency_lock_checks():
 def test_generated_requirements_lock_is_scanned(tmp_path):
     (tmp_path / "requirements.lock").write_text("fastapi==0.1.0\n")
     assert "requirements.lock" in dict(audit.files(tmp_path))
+
+
+def test_csp_comment_does_not_satisfy_header_invariant():
+    out = []
+    audit.check_invariants(
+        {
+            "compose.production.yaml": 'REQUIRE_E2EE_NEW_CONVERSATIONS: "true"\n',
+            "infra/caddy/Caddyfile.production": """
+header {
+  Strict-Transport-Security "max-age=1"
+  X-Content-Type-Options "nosniff"
+  X-Frame-Options "DENY"
+  Referrer-Policy "no-referrer"
+  # Content-Security-Policy is generated elsewhere
+}
+""",
+        },
+        out,
+    )
+    assert "invariant.header" in ids(out)
+
+
+def test_next_proxy_nonce_csp_satisfies_header_invariant():
+    out = []
+    audit.check_invariants(
+        {
+            "compose.production.yaml": 'REQUIRE_E2EE_NEW_CONVERSATIONS: "true"\n',
+            "infra/caddy/Caddyfile.production": """
+header {
+  Strict-Transport-Security "max-age=1"
+  X-Content-Type-Options "nosniff"
+  X-Frame-Options "DENY"
+  Referrer-Policy "no-referrer"
+  # Content-Security-Policy is generated per response by Next.js proxy.ts
+}
+""",
+            "apps/web/proxy.ts": """
+const CSP_HEADER = "Content-Security-Policy";
+const contentSecurityPolicy = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'`;
+requestHeaders.set(CSP_HEADER, contentSecurityPolicy);
+response.headers.set(CSP_HEADER, contentSecurityPolicy);
+""",
+        },
+        out,
+    )
+    assert "invariant.header" not in ids(out)
+    assert "invariant.csp-unsafe-inline" not in ids(out)
