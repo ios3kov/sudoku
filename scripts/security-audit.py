@@ -82,6 +82,8 @@ def check_routes(fs,out):
         if not(path.startswith("apps/api/") and path.endswith(".py")): continue
         try: tree=ast.parse(text)
         except SyntaxError: continue
+        pm=re.search(r"""APIRouter\s*\(\s*prefix\s*=\s*["']([^"']+)["']""",text)
+        prefix=pm.group(1) if pm else ""
         for fn in [n for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))]:
             decos=route_decorators(fn)
             if not decos: continue
@@ -89,17 +91,18 @@ def check_routes(fs,out):
             auth="Depends(get_auth_context)" in seg or "Depends(get_session_context)" in seg
             rate=any(x in seg for x in ("enforce_login_rate_limit(","enforce_user_rate_limit(","enforce_ip_rate_limit("))
             for method,route in decos:
-                full=(route+" "+fn.name).lower()
+                absolute=(prefix+route) if route.startswith("/") else route
+                full=(absolute+" "+fn.name).lower()
                 if method=="websocket":
                     if "origin" not in seg.lower():
                         add(out,"route.websocket-origin","high",path,fn.lineno,"WebSocket lacks obvious origin enforcement","Require exact PUBLIC_ORIGIN before accept.")
                     continue
                 public=any(x in full for x in ("health","login","accept_invite","assetlinks"))
-                if route.startswith("/v1/") and not public and not auth:
-                    add(out,"route.auth","high",path,fn.lineno,method.upper()+" "+route+" lacks obvious auth dependency","Use session/PIN dependency and object ownership checks.")
+                if absolute.startswith("/v1/") and not public and not auth:
+                    add(out,"route.auth","high",path,fn.lineno,method.upper()+" "+absolute+" lacks obvious auth dependency","Use session/PIN dependency and object ownership checks.")
                 sensitive=any(x in full for x in ("login","unlock","invite","search","upload","send","message","contact","push","biometric","pin"))
                 if sensitive and method in {"post","put","patch","delete"} and not rate:
-                    add(out,"route.rate-limit","medium",path,fn.lineno,method.upper()+" "+(route or fn.name)+" has no local rate limit","Add user/IP/account bucket or documented shared guard.")
+                    add(out,"route.rate-limit","medium",path,fn.lineno,method.upper()+" "+(absolute or fn.name)+" has no local rate limit","Add user/IP/account bucket or documented shared guard.")
 
 def check_sinks(fs,out):
     for path,text in fs.items():
