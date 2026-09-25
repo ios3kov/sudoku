@@ -197,6 +197,8 @@ def check_invariants(fs,out):
     e2ee=fs.get("apps/api/app/e2ee.py","")
     if e2ee and e2ee.count("await require_key_package_access(db, auth.user.id, user_id)") < 2:
         add(out,"invariant.mls-key-package-acl","high","apps/api/app/e2ee.py",1,"MLS KeyPackage discovery/claim peer ACL missing","Require self, synced-contact or shared-conversation authorization before device listing and prekey claim.")
+    if e2ee and "if participant is None:" not in e2ee:
+        add(out,"invariant.mls-rekey-finalize-acl","high","apps/api/app/e2ee.py",1,"MLS device rekey finalization membership guard missing","Require the caller to be an active conversation participant before finalizing device add/remove transitions.")
 
 def reports(out,md,jp):
     rank={"critical":0,"high":1,"medium":2,"info":3}
