@@ -71,6 +71,16 @@ Stop Wave 0 if the current production backup or restore evidence cannot be locat
 
 Target: one focused PR. No visual redesign beyond what is necessary to make states truthful and usable.
 
+### Implementation checkpoint — 2026-09-25
+
+Branch: `fix/wave1-p0-remediation` from exact baseline `bd262e22f026f0e4789e37c50adf61526d120313`.
+
+- #108 implementation: `09afbd87fcb0d21c5e830a5078cc0922eec26eb1` — per-device MLS transport join boundary, explicit fresh-device/rekey/history/error states, durable old-history warning, API + browser fresh-install coverage.
+- #116 implementation: `59b2be6da19421a43f32c3d4a88529174f5b470f` — one idempotent direct-chat open/create path for New Chat and Contacts, pending direct reuse for both participants, concurrent duplicate regression.
+- #111 implementation: `ff9d15bdda5716380d53da9aaf1f56d82785d9f2` — four-digit PIN auto-submit, in-flight request lock, clean wrong-PIN retry, browser first-attempt/single-request regression.
+- Verification state at this checkpoint: code complete; targeted CI/browser E2E/review still required before Wave 1 can be marked green.
+- Production remains unchanged and must not be deployed without a separate explicit deploy command.
+
 ## 1.1 Fresh-device MLS recovery — #108
 
 ### Problem
