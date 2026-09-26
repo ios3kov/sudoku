@@ -5,9 +5,6 @@ import { messengerApi } from "./api";
 import { SudokuEscapeButton } from "./sudoku-escape-button";
 import type { CurrentUser } from "./types";
 
-export const profileConfirmedKey = (userId: string) =>
-  `sudoku.profile-name-confirmed.v1:${userId}`;
-
 export function DisplayNameOnboarding({
   user,
   onDone,
@@ -30,11 +27,6 @@ export function DisplayNameOnboarding({
       const updated = next === user.display_name
         ? user
         : await messengerApi.updateDisplayName(next);
-      try {
-        localStorage.setItem(profileConfirmedKey(updated.id), "1");
-      } catch {
-        // The preference is convenience only; account data remains server-side.
-      }
       onDone(updated);
     } catch {
       setError("Unable to save your display name. Try again.");
