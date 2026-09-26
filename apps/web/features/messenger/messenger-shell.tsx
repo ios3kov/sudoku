@@ -67,6 +67,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
   const directOpenRef = useRef(new Map<string, Promise<void>>());
+  const directBootstrapRef = useRef(new Map<string, Promise<void>>());
   const concealCallbacks = useRef({onHide, onLoggedOut});
   useEffect(() => { concealCallbacks.current = {onHide, onLoggedOut}; }, [onHide, onLoggedOut]);
   const revokeLocalSession = useCallback(() => {
@@ -451,16 +452,20 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     setCreating(false);
     setShowContacts(false);
 
-    if (autoBootstrapDirect) {
+    if (autoBootstrapDirect && !directBootstrapRef.current.has(conversation.id)) {
       const adapter = e2eeRef.current!;
-      void adapter.bootstrapConversation(conversation)
+      const operation = adapter.bootstrapConversation(conversation)
         .then((ready) => updateConversation(ready))
         .catch((error: unknown) => {
           setSecureSetupError(
             error instanceof Error ? error.message : "Unable to prepare secure chat",
           );
         })
-        .finally(() => setSecureSetupBusy(false));
+        .finally(() => {
+          directBootstrapRef.current.delete(conversation.id);
+          setSecureSetupBusy(false);
+        });
+      directBootstrapRef.current.set(conversation.id, operation);
     }
   }
 
