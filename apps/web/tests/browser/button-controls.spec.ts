@@ -272,3 +272,18 @@ test("admin invite typeahead searches local contacts by name and Russian phone v
   await page.getByRole("button", { name: "Create invite", exact: true }).click();
   expect(await page.evaluate(() => window.__buttonAudit.calls.invites.at(-1))).toBe("+79262373609");
 });
+
+
+test("phone country selector rebases an entered local number", async ({ page }) => {
+  await mount(page, "invite");
+  const phone = page.getByLabel("Phone number", { exact: true });
+  const country = page.getByLabel("Country", { exact: true });
+
+  await country.selectOption("RU");
+  await phone.fill("9262373609");
+  await expect(phone).toHaveValue("+7 (926) 237-36-09");
+
+  await country.selectOption("ME");
+  const digits = (await phone.inputValue()).replace(/\D/g, "");
+  expect(digits).toBe("3829262373609");
+});
