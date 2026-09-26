@@ -123,6 +123,10 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
     onHide={() => { completePendingLogin(); hide(); }}
   />;
 
+  if (user && !active) {
+    return <MessengerRevealPreview user={user} />;
+  }
+
   if (user && !user.profile_setup_completed) {
     return <DisplayNameOnboarding
       user={user}
@@ -132,7 +136,6 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   }
 
   if (user) {
-    if (!active) return <MessengerRevealPreview user={user} />;
     return <ConversationDraftProvider key={user.id}><MessengerShell user={user} onHide={hide} onLoggedOut={signedOut} onUserUpdated={setUser} /></ConversationDraftProvider>;
   }
 
