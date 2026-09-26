@@ -173,3 +173,7 @@ The iOS app is a separate release artifact. Server and iOS releases are versione
 ## Cross-platform UX parity
 
 Sudoku Messenger uses one product contract across iOS, Android/PWA and desktop/browser. Native bridges are implementation details, not separate UX specifications. Gesture semantics, conceal/reveal behavior, PIN and Messenger flows, contact/chat behavior and private-surface lifecycle must remain equivalent across supported clients. OS-specific APIs may be used to achieve the same result. For background/task-switcher privacy, clients must conceal Messenger and present the last available real Sudoku state before the operating system captures a preview whenever the platform exposes enough lifecycle control.
+
+### Retained Sudoku privacy surface
+
+The web/PWA shell keeps the current Sudoku screen mounted underneath private Messenger content. While Messenger is active, Sudoku is inert and its gameplay clock is paused. On `visibilitychange(hidden)` or `pagehide`, a synchronous CSS privacy shield hides the private layer and raises the retained real Sudoku state for browser/OS task-preview capture. The decorative privacy grid is fallback-only before a usable Sudoku state has hydrated. Native iOS additionally caches a UIKit image of the same Sudoku state for App Switcher protection.
