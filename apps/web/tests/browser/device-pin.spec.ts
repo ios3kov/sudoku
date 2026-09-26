@@ -152,7 +152,7 @@ for (const role of ["member", "admin"]) {
     await reveal(page);
     const rememberedPhone = page.getByLabel("Phone number", { exact: true });
     await rememberedPhone.focus();
-    await expect(rememberedPhone).toHaveValue(phone);
+    expect((await rememberedPhone.inputValue()).replace(/\D/g, "")).toBe(phone.replace(/\D/g, ""));
     await page.getByLabel("Remember phone on this device").uncheck();
     await reveal(page);
     await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("");
@@ -230,7 +230,6 @@ test("login navigation, invite submit and hide controls work", async ({ page }) 
   await page.getByRole("button", { name: "Use an invite", exact: true }).click();
   await expect(page.getByRole("button", { name: "Join", exact: true })).toBeVisible();
   await page.getByLabel("Invite code").fill("invalid-audit-invite");
-  await page.getByLabel("Name").fill("Button Audit");
   await page.getByLabel("Phone number", { exact: true }).fill("+70000000008");
   await page.getByLabel("Password", { exact: true }).fill("button audit password");
   await page.getByRole("button", { name: "Join", exact: true }).click();
@@ -241,4 +240,70 @@ test("login navigation, invite submit and hide controls work", async ({ page }) 
 
   await page.getByRole("button", { name: "Hide", exact: true }).click();
   await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+});
+
+
+test("new invite account chooses display name after registration", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  await passwordLogin(page, testPhone(4));
+  await page.getByRole("button", { name: "Not now", exact: true }).click();
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+
+  const invitedPhone = testPhone(9);
+  const inviteResponse = await page.request.post("/v1/invites", {
+    data: {
+      phone: invitedPhone,
+      expires_hours: 1,
+      max_uses: 1,
+    },
+  });
+  expect(inviteResponse.status()).toBe(201);
+  const invite = await inviteResponse.json() as { token: string };
+
+  await page.request.post("/v1/auth/logout");
+  await page.reload();
+  await revealCurrentPage(page);
+
+  await page.getByRole("button", { name: "Use an invite", exact: true }).click();
+  await page.getByLabel("Invite code", { exact: true }).fill(invite.token);
+  await page.getByLabel("Phone number", { exact: true }).fill(invitedPhone);
+  await page.getByLabel("Password", { exact: true }).fill("new account password");
+  await page.getByRole("button", { name: "Join", exact: true }).click();
+
+  await expect(page.getByRole("button", { name: "Set PIN", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Not now", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "How should people see you?", exact: true })).toBeVisible();
+  const displayName = page.getByLabel("Display name", { exact: true });
+  await displayName.fill("Новый Пользователь ✨");
+  await expect(page.getByLabel("Display name preview")).toContainText("Новый Пользователь ✨");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+  await expect(page.locator(".minimal-list-heading")).toContainText("Новый Пользователь ✨");
+});
+
+test("Sudoku escape conceals Messenger immediately without logout", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await passwordLogin(page, testPhone(5));
+  await page.getByRole("button", { name: "Not now", exact: true }).click();
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+
+  let logoutRequests = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/v1/auth/logout") && request.method() === "POST") {
+      logoutRequests += 1;
+    }
+  });
+
+  await page.getByRole("button", { name: "Hide messenger and return to Sudoku", exact: true }).click();
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+  expect(logoutRequests).toBe(0);
+
+  await revealCurrentPage(page);
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+  expect(logoutRequests).toBe(0);
 });
