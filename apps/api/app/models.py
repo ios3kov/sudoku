@@ -426,6 +426,10 @@ class ConversationTransportEvent(Base):
         UUID(as_uuid=True),
         ForeignKey("mls_control_events.id", ondelete="CASCADE"),
     )
+    sender_device_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
