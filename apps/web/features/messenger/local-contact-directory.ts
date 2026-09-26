@@ -63,16 +63,26 @@ export function localNameForPhone(
   return contacts.find((item) => item.phones.includes(phone))?.name || null;
 }
 
+function normalizedSearchDigits(value: string): string {
+  const compact = value.replace(/\D/g, "");
+  if (compact.length === 10 && compact.startsWith("9")) return "7" + compact;
+  if (compact.length === 11 && compact.startsWith("8")) return "7" + compact.slice(1);
+  return compact;
+}
+
 export function searchLocalAddressBook(
   contacts: LocalAddressBookContact[],
   query: string,
 ): LocalAddressBookContact[] {
   const term = query.trim().toLocaleLowerCase();
   if (!term) return contacts;
-  const compact = term.replace(/\D/g, "");
+  const digits = normalizedSearchDigits(term);
   return contacts.filter((contact) => {
     if (contact.name.toLocaleLowerCase().includes(term)) return true;
-    if (!compact) return false;
-    return contact.phones.some((phone) => phone.replace(/\D/g, "").includes(compact));
+    if (!digits) return false;
+    return contact.phones.some((phone) => {
+      const phoneDigits = phone.replace(/\D/g, "");
+      return phoneDigits.includes(digits) || digits.includes(phoneDigits);
+    });
   });
 }
