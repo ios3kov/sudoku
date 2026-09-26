@@ -59,14 +59,48 @@ function groupGeneric(national: string): string {
   return national.replace(/(\d{3})(?=\d)/g, "$1 ").trim();
 }
 
+function formatRuNational(national: string): string {
+  const a = national.slice(0, 3);
+  const b = national.slice(3, 6);
+  const c = national.slice(6, 8);
+  const d = national.slice(8, 10);
+  return `${a}${b ? ` ${b}` : ""}${c ? `-${c}` : ""}${d ? `-${d}` : ""}`;
+}
+
+function formatUsNational(national: string): string {
+  const a = national.slice(0, 3);
+  const b = national.slice(3, 6);
+  const c = national.slice(6, 10);
+  return `${a ? `(${a}` : ""}${a.length === 3 ? ")" : ""}${b ? ` ${b}` : ""}${c ? `-${c}` : ""}`;
+}
+
 export function formatPhone(value: string, countryCode: string): string {
   const explicitInternational = value.trim().startsWith("+");
   const e164 = toE164(value, countryCode);
 
   if (!e164) {
-    const country = countryByCode(countryCode);
-    const digits = digitsOnly(value);
-    return explicitInternational ? `+${digits}` : digits;
+    const fallbackCountry = countryByCode(countryCode);
+    const rawDigits = digitsOnly(value);
+    const inferred = explicitInternational
+      ? PHONE_COUNTRIES
+          .slice()
+          .sort((a, b) => b.dial.length - a.dial.length)
+          .find((country) => rawDigits.startsWith(country.dial))
+      : null;
+    const country = inferred ?? fallbackCountry;
+    const national = explicitInternational && inferred
+      ? rawDigits.slice(inferred.dial.length)
+      : rawDigits;
+
+    const formattedNational = country.code === "RU"
+      ? formatRuNational(national.replace(/^[87](?=\d{10}$)/, ""))
+      : country.code === "US"
+        ? formatUsNational(national)
+        : groupGeneric(national);
+
+    return explicitInternational
+      ? `+${inferred?.dial ?? rawDigits}${formattedNational ? ` ${formattedNational}` : ""}`.trim()
+      : formattedNational;
   }
 
   const digits = e164.slice(1);
@@ -78,18 +112,14 @@ export function formatPhone(value: string, countryCode: string): string {
   const national = digits.slice(country.dial.length);
 
   if (country.code === "RU" && national.length <= 10) {
-    const a = national.slice(0, 3);
-    const b = national.slice(3, 6);
-    const c = national.slice(6, 8);
-    const d = national.slice(8, 10);
-    return `+7${a ? ` (${a}` : ""}${a.length === 3 ? ")" : ""}${b ? ` ${b}` : ""}${c ? `-${c}` : ""}${d ? `-${d}` : ""}`;
+    const formatted = formatRuNational(national);
+    const first = national.slice(0, 3);
+    const rest = formatted.slice(first.length);
+    return `+7${first ? ` (${first}` : ""}${first.length === 3 ? ")" : ""}${rest}`;
   }
 
   if (country.code === "US" && national.length <= 10) {
-    const a = national.slice(0, 3);
-    const b = national.slice(3, 6);
-    const c = national.slice(6, 10);
-    return `+1${a ? ` (${a}` : ""}${a.length === 3 ? ")" : ""}${b ? ` ${b}` : ""}${c ? `-${c}` : ""}`;
+    return `+1 ${formatUsNational(national)}`.trim();
   }
 
   return `+${country.dial}${national ? ` ${groupGeneric(national)}` : ""}`;
