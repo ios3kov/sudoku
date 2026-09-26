@@ -6,14 +6,13 @@ import { captureNativeSudokuSnapshot } from "../sudoku/native-surface-theme";
 import {
   SECRET_REVEAL_ARM_DELAY_MS,
   SECRET_REVEAL_CLICK_SUPPRESS_PX,
+  revealCompletionDurationMs,
   shouldCancelBeforeArm,
   shouldCommitReveal,
 } from "./secret-unlock-motion";
 
 const UNLOCK_PROGRESS = 0.5;
 const RETURN_MS = 300;
-const FINISH_MIN_MS = 220;
-const FINISH_MAX_MS = 360;
 const PRIVATE_REVEAL_DISTANCE_PX = 220;
 const OFFSCREEN_OVERSHOOT_PX = 28;
 const VELOCITY_FRESH_MS = 120;
@@ -164,15 +163,11 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
     const screen = screenRef.current;
     const underlay = underlayRef.current;
     const targetOffset = Math.max(360, viewportHeight.current) + OFFSCREEN_OVERSHOOT_PX;
-    const remainingRatio = clamp(
-      0,
-      1,
-      (targetOffset - currentOffset.current) / Math.max(1, targetOffset),
-    );
-    const velocityBonus = clamp(0, 90, upwardVelocity.current * 65);
-    const naturalDuration = 220 + remainingRatio * 140 - velocityBonus;
     const duration = motionDuration(
-      Math.round(clamp(FINISH_MIN_MS, FINISH_MAX_MS, naturalDuration)),
+      revealCompletionDurationMs(
+        targetOffset - currentOffset.current,
+        upwardVelocity.current,
+      ),
     );
 
     unlocking.current = true;
