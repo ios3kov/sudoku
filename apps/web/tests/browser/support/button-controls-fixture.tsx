@@ -309,7 +309,7 @@ function NewChatFixture() {
 function ContactsFixture() {
   const [open, setOpen] = useState(true);
   return <Frame onClose={() => setOpen(false)}>{open
-    ? <ContactsPanel onClose={() => setOpen(false)} />
+    ? <ContactsPanel onClose={() => setOpen(false)} onOpenChat={async () => {}} />
     : <p>contacts closed</p>}</Frame>;
 }
 
