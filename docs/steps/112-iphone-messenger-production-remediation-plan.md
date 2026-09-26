@@ -239,6 +239,31 @@ Unlock:
 - wrong 4 digits -> error/haptic -> all cells clear -> immediate retry;
 - password fallback where policy allows.
 
+### #107 implementation checkpoint — 2026-09-26
+
+Modern PIN setup/unlock is implemented on branch `feat/modern-pin-ux-20260926` with one reusable four-cell PIN component shared by onboarding and unlock.
+
+- unlock: four visual cells over one numeric input; automatic verification on digit 4; no PIN Unlock button;
+- setup: `Create PIN` auto-advances to `Confirm PIN` on digit 4;
+- confirmation: auto-saves on digit 4 when values match;
+- mismatch: confirmation clears immediately and remains ready for retry;
+- password recovery remains an explicit form;
+- Browser E2E verifies four cells, automatic transition, focused confirmation and absence of Save PIN.
+
+Biometric removal remains separate under #112.
+
+
+### #107 repository verification — 2026-09-26
+
+PR #132 head `1918e11223d13f6c64c657044bc98f177ef1ac89` passed all required branch workflows:
+
+- `ci` 36268660787;
+- `device-access` 36268660793;
+- `beat-runtime` 36268660820;
+- `api-shutdown` 36268660833.
+
+Repository implementation for #107 is verified. Remaining acceptance is physical-device PIN feel/focus/haptic verification.
+
 ## 2.3 Remove biometrics — #112
 
 Product removal sequence:

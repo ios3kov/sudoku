@@ -43,9 +43,12 @@ for (const role of ["member", "admin"]) {
     // messenger. It must not switch future game launches to quick play yet.
     expect(await page.evaluate(() => localStorage.getItem("sudoku.startup.v1"))).toBeNull();
     await page.getByRole("button", { name: "Set PIN", exact: true }).click();
+    await expect(page.locator(".pin-code-cell")).toHaveCount(4);
     await page.getByLabel("Four-digit PIN", { exact: true }).fill("0123");
+    await expect(page.getByRole("heading", { name: "Confirm PIN", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Confirm PIN", { exact: true })).toBeFocused();
     await page.getByLabel("Confirm PIN", { exact: true }).fill("0123");
-    await page.getByRole("button", { name: "Save PIN", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save PIN", exact: true })).toHaveCount(0);
 
     await expect(page.getByText("Messages", { exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => localStorage.getItem("sudoku.startup.v1"))).toBe("quick-play");
