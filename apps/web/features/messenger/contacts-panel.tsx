@@ -53,6 +53,8 @@ export function ContactsPanel({
   }, []);
 
   useEffect(() => {
+    // Remote loading owns its explicit loading state; run once on panel mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
     void loadLocal();
     const refresh = () => { void loadLocal(); };
