@@ -200,7 +200,7 @@ export function useSecretUnlock({ enabled = true, onUnlock }: SecretUnlockOption
       underlayRef.current?.style.removeProperty("opacity");
       onUnlock();
     }, duration + 18);
-  }, [applyOffset, clearFrame, clearPhaseTimer, onUnlock]);
+  }, [applyOffset, clearFrame, clearPhaseTimer, enabled, onUnlock]);
 
   useEffect(() => {
     if (enabled) return;
