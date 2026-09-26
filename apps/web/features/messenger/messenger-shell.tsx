@@ -587,9 +587,11 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           <p className="muted center">
             {deviceRekeyError
               ?? (
-                selected.e2ee_ready && !selectedTracked
-                  ? "This device is waiting to be added to the secure conversation."
-                  : "This encrypted conversation is unavailable until the local MLS state is ready."
+                !selected.e2ee_ready && selected.created_by !== user.id
+                  ? "Preparing secure chat. It will open automatically when secure setup completes."
+                  : selected.e2ee_ready && !selectedTracked
+                    ? "This device is waiting to be added to the secure conversation."
+                    : "This encrypted conversation is unavailable until the local MLS state is ready."
               )}
           </p>
         </section>
