@@ -150,6 +150,11 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
     }
   }
 
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void save();
+  }
+
   return <section className="device-access-panel" aria-label="Login and device PIN">
     <h3>Login and device PIN</h3>
     <p>PIN applies only to this device. Your account password is not saved.</p>
