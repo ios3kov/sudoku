@@ -649,8 +649,10 @@ async def test_e2ee_transport_feed_orders_messages_and_control_events() -> None:
         assert [item["transport_sequence"] for item in items] == [1, 2, 3, 4]
         assert items[0]["control"]["id"] == bootstrap_welcome.json()["id"]
         assert items[1]["message_id"] == first.json()["id"]
+        assert items[1]["sender_device_id"] == str(sender_device)
         assert items[2]["control"]["id"] == control.json()["id"]
         assert items[3]["message_id"] == second.json()["id"]
+        assert items[3]["sender_device_id"] == str(sender_device)
         # Additive display metadata must be the accepted server timestamp,
         # not a locally invented arrival time or an MLS cursor-derived date.
         assert datetime.fromisoformat(items[1]["created_at"]) == datetime.fromisoformat(first.json()["created_at"])
