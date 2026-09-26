@@ -469,7 +469,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     }
   }
 
-  function updateConversation(next: Conversation) {
+  const updateConversation = useCallback((next: Conversation) => {
     setConversations((current) => {
       const updated = sortConversations(
         current.map((item) => item.id === next.id ? next : item),
@@ -477,7 +477,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       conversationsRef.current = updated;
       return updated;
     });
-  }
+  }, []);
 
   function openContactDirect(contact: ContactDirectoryItem): Promise<void> {
     const existing = conversationsRef.current.find(
@@ -546,7 +546,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         setSecureSetupBusy(false);
       });
     directBootstrapRef.current.set(selected.id, operation);
-  }, [e2eeAdapter, e2eeReadyForActions, selected, user.id]);
+  }, [e2eeAdapter, e2eeReadyForActions, selected, updateConversation, user.id]);
 
   if (selected?.encryption_required) {
     const selectedTracked =
