@@ -122,7 +122,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
   // independent OpenMLS browser sessions. Keep each functional assertion
   // individually bounded below, but leave enough aggregate headroom so the
   // suite fails on the real assertion rather than the outer test clock.
-  test.setTimeout(480_000);
+  test.setTimeout(600_000);
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
@@ -378,6 +378,43 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     } finally {
       releaseTransport();
       await peer.unroute(transportPattern);
+    }
+
+    // Fresh-device recovery: this new session has no local OpenMLS state but
+    // the account already belongs to an active encrypted direct conversation.
+    // Old ciphertext must be treated as unavailable history until the existing
+    // member device commits this device and delivers its Welcome.
+    await sendText(owner, "history before fresh device");
+    await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(acceptedMessage(peer, "history before fresh device")).toBeVisible({
+      timeout: 60_000,
+    });
+
+    const freshPeerContext = await browser.newContext();
+    const freshPeer = await freshPeerContext.newPage();
+    try {
+      await observeRealtimeSocket(freshPeer);
+      await login(freshPeer, PEER_PHONE);
+      await expect(
+        freshPeer.getByText("Secure messaging needs a restart.", { exact: true }),
+      ).toHaveCount(0);
+
+      await expect(
+        freshPeer.getByText(
+          "Secure messaging is ready. Earlier encrypted history may be unavailable on this device.",
+          { exact: true },
+        ),
+      ).toBeVisible({ timeout: 120_000 });
+
+      await openConversation(freshPeer, "Browser Owner");
+      await expect(acceptedMessage(freshPeer, "history before fresh device")).toHaveCount(0);
+
+      await sendText(owner, "future message after fresh-device Welcome");
+      await expect(
+        acceptedMessage(freshPeer, "future message after fresh-device Welcome"),
+      ).toBeVisible({ timeout: 60_000 });
+    } finally {
+      await freshPeerContext.close();
     }
 
     await verifyActiveComposition(owner, peer, sendText, openConversation, unlockPrivate);
