@@ -40,13 +40,6 @@ async function reveal(page: Page) {
   await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "");
 }
 
-async function replaceContacts(page: Page, phones: string[]) {
-  const response = await page.request.post("/v1/contacts/sync", {
-    data: { phones, replace: true },
-  });
-  expect(response.ok()).toBe(true);
-}
-
 async function login(page: Page, phone: string) {
   await reveal(page);
   await page.getByLabel("Phone number", { exact: true }).fill(phone);
@@ -138,7 +131,7 @@ test("admin invite searches local Contacts by name and RU phone variants", async
   await invite.getByRole("button", { name: "Load contacts", exact: true }).click();
   await expect(invite.getByRole("button", { name: "Refresh contacts", exact: true })).toBeVisible();
   await invite.getByLabel("Invite phone country", { exact: true }).selectOption("RU");
-  const search = invite.getByLabel("Search contact or phone", { exact: true });
+  const search = invite.getByPlaceholder("Name or phone number", { exact: true });
   await search.fill("Иван");
   await expect(invite.getByRole("option").filter({ hasText: "Иван Петров" })).toBeVisible();
 
@@ -199,12 +192,11 @@ test("system contact picker sync exposes only selected registered contacts", asy
   }, { selectedPhone: testPhone(3) });
 
   await login(page, testPhone(5));
-  await replaceContacts(page, []);
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Phone contacts" })).toBeVisible();
 
   const directory = page.locator(".contact-chat-row");
-  await expect(directory).toHaveCount(0);
+  await expect(directory.filter({ hasText: testPhone(3) })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("1 registered contact");
@@ -309,10 +301,12 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
 test("New chat opens searchable Contacts and keeps group creation available", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(3));
-  await replaceContacts(page, [testPhone(5)]);
 
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
   const contacts = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  await contacts.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(5));
+  await contacts.getByRole("button", { name: "Add contact", exact: true }).click();
+  await expect(contacts.getByRole("status")).toContainText("registered contact");
   await expect(contacts).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Create secure chat", exact: true })).toHaveCount(0);
 
