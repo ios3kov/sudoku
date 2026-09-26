@@ -53,9 +53,9 @@ def main():
         assert put_with_connect_retry(url, b"replacement", headers).status_code == 412
         unsigned = {k: v for k, v in headers.items() if k != "If-None-Match"}
         denied = put_with_connect_retry(url, b"replacement", unsigned)
-            # Pinned MinIO maps missing signed headers to HTTP 400 AccessDenied.
-            assert denied.status_code == 400, denied.text
-            assert "<Code>AccessDenied</Code>" in denied.text, denied.text
+        # Pinned MinIO maps missing signed headers to HTTP 400 AccessDenied.
+        assert denied.status_code == 400, denied.text
+        assert "<Code>AccessDenied</Code>" in denied.text, denied.text
         body = client.get_object(Bucket=bucket, Key=key)["Body"]
         try:
             assert body.read() == data
