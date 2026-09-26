@@ -298,7 +298,7 @@ export function SudokuBoard({
               })}
             </div>
             <div className="controls"><div className="digits" aria-label="Digits" style={{
-                gridTemplateColumns: `repeat(${game.puzzle.size === 4 ? 2 : 3},minmax(0,1fr))`
+                gridTemplateColumns: `repeat(${game.puzzle.size},minmax(0,1fr))`
               }}>
               {Array.from({
                   length: game.puzzle.size
