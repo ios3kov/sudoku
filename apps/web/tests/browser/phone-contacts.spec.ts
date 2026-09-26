@@ -297,6 +297,26 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
 
 
 
+test("New chat opens searchable Contacts and keeps group creation available", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(3));
+
+  await page.getByRole("button", { name: "New secure chat", exact: true }).click();
+  const contacts = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  await expect(contacts).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Create secure chat", exact: true })).toHaveCount(0);
+
+  const search = contacts.getByLabel("Search contacts", { exact: true });
+  await search.fill("PIN Skip");
+  await expect(contacts.locator(".contact-chat-row").filter({ hasText: "PIN Skip" })).toBeVisible();
+
+  await contacts.getByRole("button", { name: "Create group", exact: true }).click();
+  const group = page.getByRole("dialog", { name: "Create secure chat", exact: true });
+  await expect(group).toBeVisible();
+  await expect(group.getByRole("button", { name: "Direct", exact: true })).toHaveCount(0);
+  await expect(group.getByRole("button", { name: "Group", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
+
 test("registered contact opens or reuses one direct chat from Contacts in one tap", async ({ page }) => {
   test.setTimeout(240_000);
   await login(page, testPhone(3));
