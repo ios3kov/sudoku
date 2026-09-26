@@ -6,7 +6,7 @@ import { MessengerRevealPreview } from "./messenger-reveal-preview";
 import { ConversationDraftProvider } from "./conversation-drafts";
 import { DevicePinUnlock } from "./device-pin-unlock";
 import { DevicePinOnboarding } from "./device-pin-onboarding";
-import { DisplayNameOnboarding, profileConfirmedKey } from "./display-name-onboarding";
+import { DisplayNameOnboarding } from "./display-name-onboarding";
 import { PhoneInput } from "./phone-input";
 import { SudokuEscapeButton } from "./sudoku-escape-button";
 import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
@@ -28,6 +28,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   const requestId = useRef(0);
   const hideRef = useRef(onHide);
   const loginPasswordRef = useRef<string | null>(null);
+  const newAccountRef = useRef(false);
   useEffect(() => { hideRef.current = onHide; }, [onHide]);
 
   const signedOut = useCallback(() => {
@@ -41,16 +42,11 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   const finishIdentitySetup = useCallback((current: CurrentUser) => {
     loginPasswordRef.current = null;
     setPendingLogin(null);
-    let confirmed = false;
-    try {
-      confirmed = localStorage.getItem(profileConfirmedKey(current.id)) === "1";
-    } catch {
-      confirmed = false;
-    }
-    if (confirmed) {
-      setUser(current);
-    } else {
+    if (newAccountRef.current) {
+      newAccountRef.current = false;
       setPendingProfile(current);
+    } else {
+      setUser(current);
     }
   }, []);
 
@@ -94,20 +90,9 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       if (response.ok) {
         const current = await response.json() as CurrentUser;
         if (alive.current && id === requestId.current && started === accessEpoch()) {
-          let confirmed = false;
-          try {
-            confirmed = localStorage.getItem(profileConfirmedKey(current.id)) === "1";
-          } catch {
-            confirmed = false;
-          }
+          setPendingProfile(null);
+          setUser(current);
           setPinRequired(false);
-          if (confirmed) {
-            setPendingProfile(null);
-            setUser(current);
-          } else {
-            setUser(null);
-            setPendingProfile(current);
-          }
         }
       } else if (response.status === 401) {
         signedOut();
@@ -174,9 +159,11 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       <div className="private-header"><div><h2>{view === "login" ? "Sign in" : "Join"}</h2><p>{view === "login" ? "Private access" : "Invite-only access"}</p></div>
         <button className="text-button" type="button" onClick={hide}>Hide</button></div>
       {view === "login" ? <LoginForm onSuccess={(current, password) => {
+        newAccountRef.current = false;
         loginPasswordRef.current = password;
         setPendingLogin(current);
       }} onError={setError} /> : <InviteForm onSuccess={(current, password) => {
+        newAccountRef.current = true;
         loginPasswordRef.current = password;
         setPendingLogin(current);
       }} onError={setError} />}
@@ -249,7 +236,7 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, pas
     try {
       const response = await fetch("/v1/invites/accept", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, phone, display_name: data.get("display_name"), password, device_name: "Sudoku web app" }),
+        body: JSON.stringify({ token, phone, display_name: "New member", password, device_name: "Sudoku web app" }),
       });
       if (!alive.current || started !== accessEpoch()) return;
       if (!response.ok) {
@@ -268,7 +255,6 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, pas
 
   return <form className="auth-form" onSubmit={submit}>
     <label>Invite code<input name="invite" autoCapitalize="none" autoCorrect="off" required /></label>
-    <label>Name<input name="display_name" autoComplete="name" required maxLength={120} /></label>
     <PhoneInput value={phone} onChange={setPhone} required />
     <label>Password<input name="password" type="password" autoComplete="new-password" minLength={12} required /></label>
     <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Joining…" : "Join"}</button>
