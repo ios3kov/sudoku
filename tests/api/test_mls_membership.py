@@ -378,6 +378,12 @@ async def test_e2ee_device_add_and_revoke_require_durable_rekey() -> None:
         )
         assert before_add_control.status_code == 201, before_add_control.text
 
+        before_welcome_feed = await peer_new_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{peer_new_device}/transport-events"
+        )
+        assert before_welcome_feed.status_code == 200, before_welcome_feed.text
+        assert before_welcome_feed.json() == []
+
         add_control = await owner_client.post(
             f"/v1/e2ee/conversations/{conversation_id}/control-batches",
             json={
@@ -414,6 +420,38 @@ async def test_e2ee_device_add_and_revoke_require_durable_rekey() -> None:
             f"/v1/e2ee/membership-changes/{add_change['id']}/finalize"
         )
         assert add_finalized.status_code == 204, add_finalized.text
+
+        after_add_message = await owner_client.post(
+            f"/v1/conversations/{conversation_id}/messages",
+            json={
+                "client_id": str(uuid.uuid4()),
+                "type": "text",
+                "body": None,
+                "envelope": {
+                    "version": 1,
+                    "protocol": "mls-rfc9420",
+                    "kind": "application",
+                    "ciphertext": base64.b64encode(b"after-device-add").decode(),
+                },
+                "asset_ids": [],
+            },
+        )
+        assert after_add_message.status_code == 201, after_add_message.text
+
+        after_welcome_feed = await peer_new_client.get(
+            f"/v1/e2ee/conversations/{conversation_id}/devices/{peer_new_device}/transport-events"
+        )
+        assert after_welcome_feed.status_code == 200, after_welcome_feed.text
+        assert [item["kind"] for item in after_welcome_feed.json()] == [
+            "mls_control",
+            "message",
+        ]
+        assert after_welcome_feed.json()[0]["control"]["kind"] == "welcome"
+        assert after_welcome_feed.json()[1]["message_id"] == after_add_message.json()["id"]
+        assert all(
+            item.get("message_id") != before_add_control.json()["id"]
+            for item in after_welcome_feed.json()
+        )
 
         revoked = await peer_new_client.delete(
             f"/v1/sessions/{peer_old_device}"

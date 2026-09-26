@@ -146,6 +146,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         pendingKeyPackagesB64: [],
         transportCursors: {},
         trackedConversations: [],
+        historyUnavailableConversations: [],
       };
       this.assertActive();
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
@@ -984,6 +985,11 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return this.localState!.transportCursors[conversationId] ?? 0;
   }
 
+  joinedConversationIds(): string[] {
+    this.assertReady();
+    return [...this.localState!.trackedConversations].sort();
+  }
+
   trackedConversationIds(): string[] {
     this.assertReady();
     const ids = new Set<string>([
@@ -996,6 +1002,30 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       ids.add(this.localState!.pendingOutboundTransition.conversationId);
     }
     return [...ids].sort();
+  }
+
+  historyUnavailableConversationIds(): string[] {
+    this.assertReady();
+    return [...this.localState!.historyUnavailableConversations].sort();
+  }
+
+  async markHistoryUnavailable(conversationId: string): Promise<void> {
+    if (!conversationId) throw new Error("Conversation id is required");
+    await this.enqueue(async () => {
+      this.assertReady();
+      if (this.localState!.historyUnavailableConversations.includes(conversationId)) return;
+      const previous = [...this.localState!.historyUnavailableConversations];
+      this.localState!.historyUnavailableConversations = uniqueIds([
+        ...previous,
+        conversationId,
+      ]);
+      try {
+        await this.persistCurrentState();
+      } catch (error) {
+        this.localState!.historyUnavailableConversations = previous;
+        throw error;
+      }
+    });
   }
 
   projectConversation(conversationId: string): EncryptedProjectionResult {
@@ -1023,7 +1053,11 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       try {
         do {
           record.rerun = false;
-          processed += await this.syncTransportOnce(conversationId);
+          let batchProcessed = 0;
+          do {
+            batchProcessed = await this.syncTransportOnce(conversationId);
+            processed += batchProcessed;
+          } while (batchProcessed > 0);
         } while (record.rerun);
         return processed;
       } finally {
@@ -1158,6 +1192,28 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     item: Extract<MlsTransportEvent, { kind: "message" }>,
   ): Promise<void> {
     const cursorBefore = this.localState!.transportCursors[conversationId] ?? 0;
+
+    // A newly registered device is a legitimate conversation member at the
+    // application layer before it has received its MLS Welcome. Old-epoch
+    // ciphertext is intentionally not decryptable on that device. Advance the
+    // durable transport cursor until the Welcome arrives instead of turning
+    // this expected state into a generic E2EE failure/reload loop.
+    if (!this.localState!.trackedConversations.includes(conversationId)) {
+      const snapshot = this.snapshotRuntime();
+      try {
+        this.localState!.historyUnavailableConversations = uniqueIds([
+          ...this.localState!.historyUnavailableConversations,
+          conversationId,
+        ]);
+        this.localState!.transportCursors[conversationId] = item.transport_sequence;
+        await this.persistCurrentState();
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
+      }
+      return;
+    }
+
     const existing = this.localState!.eventJournal[conversationId]?.find(
       (record) => record.eventId === item.message_id,
     );

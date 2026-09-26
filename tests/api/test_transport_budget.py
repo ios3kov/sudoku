@@ -42,6 +42,13 @@ class Database:
             (self.controls if is_control else self.messages).append(item)
             self.rows.append(SimpleNamespace(sequence=index+1, kind="mls_control" if is_control else "message", message_id=None if is_control else item_id, control_event_id=item_id if is_control else None))
 
+    async def scalar(self, _query):
+        # The transport visibility preflight asks whether this fixture device
+        # already owns an MLS epoch. This budget test is about payload lookup
+        # count/order, so model an established device and keep all messages
+        # visible without adding fake payload round trips.
+        return True
+
     async def execute(self, query):
         entity = query.column_descriptions[0]["entity"]
         self.calls.append(entity)

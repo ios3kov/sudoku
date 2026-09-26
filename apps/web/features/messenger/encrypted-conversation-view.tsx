@@ -735,6 +735,10 @@ export function EncryptedConversationView({
     await messengerApi.markRead(conversation.id, sequence);
     onReadAcknowledged(conversation.id, sequence);
   }
+
+  const historyUnavailable =
+    adapter.historyUnavailableConversationIds().includes(conversation.id);
+
   return (
     <section className="conversation-view">
       <ConversationHeader
@@ -779,6 +783,11 @@ export function EncryptedConversationView({
       {queuedCount > 0 ? (
         <p className="muted center">
           {queuedCount} encrypted update{queuedCount === 1 ? "" : "s"} queued
+        </p>
+      ) : null}
+      {historyUnavailable ? (
+        <p className="muted center">
+          Earlier encrypted history is unavailable on this device.
         </p>
       ) : null}
 

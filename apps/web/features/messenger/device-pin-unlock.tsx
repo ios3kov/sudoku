@@ -23,6 +23,9 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricKind, setBiometricKind] = useState<NativeBiometricKind>("none");
   const alive = useRef(false);
+  const busyRef = useRef(false);
+  const interactionStarted = useRef(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     alive.current = true;
@@ -65,7 +68,7 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
         if (r.status === 401) { onSignedOut(); return; }
         if (!r.ok) return;
         const result = await r.json();
-        if (!alive.current) return;
+        if (!alive.current || interactionStarted.current) return;
         setBiometricEnabled(Boolean(result.biometric_enabled));
         if (!result.pin_enabled) { onUnlocked(); return; }
         if (result.password_required) {
@@ -84,13 +87,22 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
     };
   }, [onUnlocked, onSignedOut]);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
+  async function submitCredential(credential: string) {
+    if (busyRef.current) return;
+    if (mode === "pin" && !/^[0-9]{4}$/.test(credential)) return;
+    if (mode === "password" && !credential) return;
+
+    interactionStarted.current = true;
+    busyRef.current = true;
     setBusy(true); setError(null);
     const started = accessEpoch();
-    const credential = value;
-    setValue("");
+
+    const resetPinForRetry = () => {
+      if (mode !== "pin" || !alive.current) return;
+      setValue("");
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+    };
+
     try {
       const response = await fetch(
         `/v1/auth/device-access/${mode === "pin" ? "unlock" : "password"}`,
@@ -108,6 +120,7 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
       if (!response.ok) {
         if (response.headers.get("X-PIN-Password-Required") === "true") {
           setMode("password");
+          setValue("");
           setError("PIN attempts exhausted. Use your account password.");
         } else {
           setError(
@@ -115,20 +128,30 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
               ? "Too many attempts. Try later."
               : mode === "pin" ? "Incorrect PIN" : "Incorrect password",
           );
+          resetPinForRetry();
         }
         return;
       }
       const result = await response.json();
       if (alive.current && acceptUnlock(result.unlock_token, started)) {
         onUnlocked();
+      } else {
+        resetPinForRetry();
       }
     } catch {
       if (alive.current) {
         setError("Network unavailable. Unlock requires a connection.");
+        resetPinForRetry();
       }
     } finally {
+      busyRef.current = false;
       if (alive.current) setBusy(false);
     }
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void submitCredential(value);
   }
 
   async function unlockWithBiometrics() {
@@ -258,6 +281,7 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
         <label>{mode === "pin" ? "Device PIN" : "Account password"}
           <input
             key={mode}
+            ref={inputRef}
             name={mode}
             type="password"
             inputMode={mode === "pin" ? "numeric" : "text"}
@@ -268,13 +292,24 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
             maxLength={mode === "pin" ? 4 : 1024}
             className={mode === "pin" ? "device-pin-input" : undefined}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            autoFocus
+            onChange={(e) => {
+              const next = mode === "pin"
+                ? e.target.value.replace(/\D/g, "").slice(0, 4)
+                : e.target.value;
+              setValue(next);
+              if (mode === "pin" && next.length === 4 && !busyRef.current) {
+                void submitCredential(next);
+              }
+            }}
             disabled={busy}
           />
         </label>
-        <button type="submit" className="secondary-button" disabled={busy}>
-          {busy ? "Checking…" : "Unlock"}
-        </button>
+        {mode === "password" ? (
+          <button type="submit" className="secondary-button" disabled={busy}>
+            {busy ? "Checking…" : "Unlock"}
+          </button>
+        ) : null}
       </form>
       {error && <p className="form-error" role="alert">{error}</p>}
       {mode === "pin" && <button

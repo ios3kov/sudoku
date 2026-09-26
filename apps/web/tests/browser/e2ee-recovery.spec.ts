@@ -117,12 +117,26 @@ async function sendText(page: Page, value: string) {
   await page.getByRole("button", { name: "Send", exact: true }).click();
 }
 
+async function dispatchRealtime(
+  page: Page,
+  event: { type: string; conversation_id: string; payload?: unknown },
+) {
+  await page.evaluate((nextEvent) => {
+    const socket = (window as Window & { __sudokuE2eRealtimeSocket?: WebSocket })
+      .__sudokuE2eRealtimeSocket;
+    if (!socket) throw new Error("Realtime observer is not installed");
+    socket.dispatchEvent(new MessageEvent("message", {
+      data: JSON.stringify(nextEvent),
+    }));
+  }, event);
+}
+
 test("MLS survives reload, offline retry and fails closed on transport outage", async ({ browser }) => {
   // Cold GitHub runners can spend several minutes compiling/initializing two
   // independent OpenMLS browser sessions. Keep each functional assertion
   // individually bounded below, but leave enough aggregate headroom so the
   // suite fails on the real assertion rather than the outer test clock.
-  test.setTimeout(480_000);
+  test.setTimeout(600_000);
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
@@ -378,6 +392,114 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     } finally {
       releaseTransport();
       await peer.unroute(transportPattern);
+    }
+
+    // Fresh-device recovery: this new session has no local OpenMLS state but
+    // the account already belongs to an active encrypted direct conversation.
+    // Old ciphertext must be treated as unavailable history until the existing
+    // member device commits this device and delivers its Welcome.
+    await sendText(owner, "history before fresh device");
+    await expect(acceptedMessage(owner, "history before fresh device")).toBeVisible({
+      timeout: 60_000,
+    });
+    await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(acceptedMessage(peer, "history before fresh device")).toBeVisible({
+      timeout: 60_000,
+    });
+
+    const freshPeerContext = await browser.newContext();
+    const freshPeer = await freshPeerContext.newPage();
+    try {
+      await observeRealtimeSocket(freshPeer);
+      await login(freshPeer, PEER_PHONE);
+      await expect(
+        freshPeer.getByText("Secure messaging needs a restart.", { exact: true }),
+      ).toHaveCount(0);
+
+      const ownerConversationsResponse = await owner.request.get("/v1/conversations");
+      expect(ownerConversationsResponse.ok()).toBe(true);
+      const ownerConversations = await ownerConversationsResponse.json() as Array<{
+        id: string;
+        type: string;
+        latest_sequence: number;
+        members: Array<{ email: string | null }>;
+      }>;
+      const recoveryConversation = ownerConversations.find(
+        (item) =>
+          item.type === "direct"
+          && item.members.some((member) => member.email === "browser-peer@example.com"),
+      );
+      expect(recoveryConversation).toBeDefined();
+      if (!recoveryConversation) throw new Error("Fresh-device recovery conversation is missing");
+
+      // Browser CI intentionally runs without the outbox worker. Deliver the
+      // server-created wake event through the real RealtimeClient handler so
+      // the old member performs the same device-add choreography production
+      // receives from mls.device.changed.
+      await expect.poll(async () => {
+        const response = await owner.request.get(
+          `/v1/e2ee/conversations/${recoveryConversation.id}/membership-changes/pending`,
+        );
+        if (!response.ok()) return null;
+        return (await response.json() as { change?: { kind?: string } | null }).change?.kind ?? null;
+      }).toBe("device_add");
+
+      await dispatchRealtime(owner, {
+        type: "mls.device.changed",
+        conversation_id: recoveryConversation.id,
+      });
+
+      await expect.poll(async () => {
+        const response = await owner.request.get(
+          `/v1/e2ee/conversations/${recoveryConversation.id}/membership-changes/pending`,
+        );
+        if (!response.ok()) return "error";
+        return (await response.json() as { change?: unknown | null }).change ?? null;
+      }, { timeout: 60_000 }).toBeNull();
+
+      // The same CI stack has no worker to deliver mls.control.created either.
+      // Inject it into the fresh device's real realtime handler; the client then
+      // consumes the durable Welcome from its transport feed without reload.
+      await dispatchRealtime(freshPeer, {
+        type: "mls.control.created",
+        conversation_id: recoveryConversation.id,
+      });
+
+      await expect(
+        freshPeer.getByText(
+          "Secure messaging is ready. Earlier encrypted history may be unavailable on this device.",
+          { exact: true },
+        ),
+      ).toBeVisible({ timeout: 60_000 });
+
+      await openConversation(freshPeer, "Browser Owner");
+      await expect(acceptedMessage(freshPeer, "history before fresh device")).toHaveCount(0);
+
+      await sendText(owner, "future message after fresh-device Welcome");
+      await expect(acceptedMessage(owner, "future message after fresh-device Welcome")).toBeVisible();
+
+      const updatedConversationsResponse = await owner.request.get("/v1/conversations");
+      expect(updatedConversationsResponse.ok()).toBe(true);
+      const updatedConversations = await updatedConversationsResponse.json() as Array<{
+        id: string;
+        latest_sequence: number;
+      }>;
+      const updatedRecoveryConversation = updatedConversations.find(
+        (item) => item.id === recoveryConversation.id,
+      );
+      expect(updatedRecoveryConversation).toBeDefined();
+      if (!updatedRecoveryConversation) throw new Error("Updated recovery conversation is missing");
+
+      await dispatchRealtime(freshPeer, {
+        type: "message.created",
+        conversation_id: recoveryConversation.id,
+        payload: { sequence: updatedRecoveryConversation.latest_sequence },
+      });
+      await expect(
+        acceptedMessage(freshPeer, "future message after fresh-device Welcome"),
+      ).toBeVisible({ timeout: 60_000 });
+    } finally {
+      await freshPeerContext.close();
     }
 
     await verifyActiveComposition(owner, peer, sendText, openConversation, unlockPrivate);

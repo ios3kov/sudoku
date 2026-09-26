@@ -5,10 +5,19 @@ import { messengerApi } from "./api";
 import { ContactAccess } from "./contact-access";
 import type { ContactDirectoryItem } from "./types";
 
-export function ContactsPanel({ onClose }: { onClose: () => void }) {
+export function ContactsPanel({
+  onClose,
+  onOpenContact,
+  chatEnabled,
+}: {
+  onClose: () => void;
+  onOpenContact: (contact: ContactDirectoryItem) => Promise<void>;
+  chatEnabled: boolean;
+}) {
   const [contacts, setContacts] = useState<ContactDirectoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -25,6 +34,18 @@ export function ContactsPanel({ onClose }: { onClose: () => void }) {
   // Load remote contacts on mount; this also shares the explicit refresh loading state.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
+
+  async function open(contact: ContactDirectoryItem) {
+    if (!chatEnabled || openingId) return;
+    setOpeningId(contact.id); setError(null);
+    try {
+      await onOpenContact(contact);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to open secure chat.");
+    } finally {
+      setOpeningId(null);
+    }
+  }
 
   async function remove(userId: string) {
     setBusyId(userId); setError(null);
@@ -50,9 +71,16 @@ export function ContactsPanel({ onClose }: { onClose: () => void }) {
         <div className="settings-list">
           {contacts.length === 0 ? <p className="muted">No registered contacts yet.</p> : contacts.map((contact) => (
             <div className="settings-row" key={contact.id}>
-              <div><strong>{contact.display_name}</strong><small>{contact.phone_e164}</small></div>
-              <button type="button" disabled={busyId === contact.id} onClick={() => void remove(contact.id)}>
-                {busyId === contact.id ? "Removing…" : "Remove"}
+              <button
+                type="button"
+                disabled={!chatEnabled || openingId === contact.id}
+                onClick={() => void open(contact)}
+                aria-label={`Open chat with ${contact.display_name}`}
+              >
+                <span><strong>{contact.display_name}</strong><small>{contact.phone_e164}</small></span>
+              </button>
+              <button type="button" disabled={busyId === contact.id || openingId === contact.id} onClick={() => void remove(contact.id)}>
+                {busyId === contact.id ? "Removing…" : openingId === contact.id ? "Opening…" : "Remove"}
               </button>
             </div>
           ))}

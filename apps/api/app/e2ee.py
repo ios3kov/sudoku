@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, delete, exists, func, or_, select, tuple_
+from sqlalchemy import and_, delete, exists, false, func, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -1384,10 +1384,48 @@ async def list_transport_events(
         control_assigned,
     )
     if is_member:
-        visibility = or_(
-            ConversationTransportEvent.kind == "message",
-            visibility,
+        # A fresh device is an application-layer conversation member before it
+        # owns the MLS epoch. Never expose old application ciphertext to that
+        # device: it cannot decrypt it, and walking the whole history just to
+        # reach its Welcome can exhaust the transport rate limit.
+        sent_control = bool(
+            await db.scalar(
+                select(
+                    exists().where(
+                        MlsControlEvent.conversation_id == conversation_id,
+                        MlsControlEvent.sender_user_id == auth.user.id,
+                        MlsControlEvent.sender_device_id == device_id,
+                    )
+                )
+            )
         )
+        first_welcome_sequence = await db.scalar(
+            select(func.min(ConversationTransportEvent.sequence))
+            .join(
+                MlsControlEvent,
+                MlsControlEvent.id == ConversationTransportEvent.control_event_id,
+            )
+            .join(
+                MlsControlRecipient,
+                MlsControlRecipient.event_id == MlsControlEvent.id,
+            )
+            .where(
+                ConversationTransportEvent.conversation_id == conversation_id,
+                ConversationTransportEvent.kind == "mls_control",
+                MlsControlEvent.kind == "welcome",
+                MlsControlRecipient.user_id == auth.user.id,
+                MlsControlRecipient.device_id == device_id,
+            )
+        )
+        message_visible = false()
+        if sent_control:
+            message_visible = ConversationTransportEvent.kind == "message"
+        elif first_welcome_sequence is not None:
+            message_visible = and_(
+                ConversationTransportEvent.kind == "message",
+                ConversationTransportEvent.sequence > first_welcome_sequence,
+            )
+        visibility = or_(message_visible, visibility)
 
     rows = (
         await db.execute(

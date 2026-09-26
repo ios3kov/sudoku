@@ -15,13 +15,29 @@ import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
 import { ContactsPanel } from "./contacts-panel";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
-import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
+import type { ContactDirectoryItem, Conversation, CurrentUser, RealtimeEvent } from "./types";
 
 function sortConversations(items: Conversation[]): Conversation[] {
   return [...items].sort((a, b) => {
     if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
     return b.created_at.localeCompare(a.created_at);
   });
+}
+
+type E2eeState =
+  | "initializing"
+  | "ready"
+  | "new_device_pending"
+  | "rekey_pending"
+  | "history_unavailable_on_this_device"
+  | "recoverable_error"
+  | "fatal_error";
+
+function e2eeOperational(state: E2eeState): boolean {
+  return state === "ready"
+    || state === "new_device_pending"
+    || state === "rekey_pending"
+    || state === "history_unavailable_on_this_device";
 }
 
 export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { user: CurrentUser; onHide: () => void; onLoggedOut: () => void; onUserUpdated: (user: CurrentUser) => void }) {
@@ -42,12 +58,16 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   const [secureSetupBusy, setSecureSetupBusy] = useState(false);
   const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
   const [deviceRekeyError, setDeviceRekeyError] = useState<string | null>(null);
-  const [e2eeState, setE2eeState] = useState<"initializing" | "ready" | "error">("initializing");
+  const [e2eeState, setE2eeState] = useState<E2eeState>("initializing");
+  const [e2eeError, setE2eeError] = useState<string | null>(null);
+  const [e2eeRetryTick, setE2eeRetryTick] = useState(0);
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const [e2eeAdapter, setE2eeAdapter] = useState<OpenMlsProtocolAdapter | null>(null);
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
+  const directOpenRef = useRef(new Map<string, Promise<void>>());
+  const directBootstrapRef = useRef(new Map<string, Promise<void>>());
   const concealCallbacks = useRef({onHide, onLoggedOut});
   useEffect(() => { concealCallbacks.current = {onHide, onLoggedOut}; }, [onHide, onLoggedOut]);
   const revokeLocalSession = useCallback(() => {
@@ -85,11 +105,28 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     void loadConversations(true);
   }, [loadConversations]);
 
+  const refreshE2eeState = useCallback((adapter: OpenMlsProtocolAdapter) => {
+    const encrypted = conversationsRef.current.filter(
+      (conversation) => conversation.encryption_required && conversation.e2ee_ready,
+    );
+    const tracked = new Set(adapter.joinedConversationIds());
+    if (encrypted.some((conversation) => !tracked.has(conversation.id))) {
+      setE2eeState("new_device_pending");
+      return;
+    }
+    const historyUnavailable = new Set(adapter.historyUnavailableConversationIds());
+    if (encrypted.some((conversation) => historyUnavailable.has(conversation.id))) {
+      setE2eeState("history_unavailable_on_this_device");
+      return;
+    }
+    setE2eeState("ready");
+  }, []);
+
   const reconcileDeviceChange = useCallback(async (
     adapter: OpenMlsProtocolAdapter,
     conversationId: string,
   ) => {
-    if (!adapter.trackedConversationIds().includes(conversationId)) return false;
+    if (!adapter.joinedConversationIds().includes(conversationId)) return false;
     const conversation = conversationsRef.current.find(
       (item) =>
         item.id === conversationId
@@ -99,19 +136,24 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     if (!conversation) return false;
 
     try {
+      setE2eeState((current) =>
+        current === "new_device_pending" ? current : "rekey_pending"
+      );
       const changed = await adapter.reconcilePendingDeviceChange(conversation);
       if (changed) {
         setDeviceRekeyError(null);
         await loadConversations();
       }
+      refreshE2eeState(adapter);
       return changed;
     } catch (error) {
-      setDeviceRekeyError(
-        error instanceof Error ? error.message : "Secure device rekey is blocked",
-      );
+      const message = error instanceof Error ? error.message : "Secure device rekey is blocked";
+      setDeviceRekeyError(message);
+      setE2eeError(message);
+      setE2eeState("recoverable_error");
       return false;
     }
-  }, [loadConversations]);
+  }, [loadConversations, refreshE2eeState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,6 +171,8 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
 
     void (async () => {
       try {
+        setE2eeState("initializing");
+        setE2eeError(null);
         const sessions = await messengerApi.sessions();
         if (cancelled) return;
         const current = sessions.find((session) => session.current);
@@ -144,7 +188,6 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         if (cancelled) { currentAdapter.retire(); return; }
         e2eeRef.current = currentAdapter;
         setE2eeAdapter(currentAdapter);
-        setE2eeState("ready");
 
         const latestConversations = sortConversations(
           await messengerApi.conversations(),
@@ -158,21 +201,33 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         );
         for (const conversation of encryptedConversations) {
           if (cancelled) return;
-          // Unified transport is authoritative for recovery. It includes both
-          // MLS control events and application messages in one durable order,
-          // so a Welcome must never be consumed first through the legacy
-          // control-only feed and then replayed from transport sequence 0.
+          const joined = currentAdapter.joinedConversationIds().includes(conversation.id);
+          if (!joined && conversation.latest_sequence > 0) {
+            await currentAdapter.markHistoryUnavailable(conversation.id);
+          }
+          // Unified transport remains authoritative. The server does not expose
+          // pre-Welcome application ciphertext to a fresh device; the assigned
+          // Welcome is therefore the first decryptable epoch boundary.
           await currentAdapter.syncTransport(conversation.id);
-          if (currentAdapter.trackedConversationIds().includes(conversation.id)) {
+          if (currentAdapter.joinedConversationIds().includes(conversation.id)) {
             await reconcileDeviceChange(currentAdapter, conversation.id);
             await currentAdapter.syncTransport(conversation.id);
           }
         }
-      } catch {
+        if (!cancelled) refreshE2eeState(currentAdapter);
+      } catch (error) {
         if (!cancelled) {
-          e2eeRef.current = null;
-          setE2eeAdapter(null);
-          setE2eeState("error");
+          const message = error instanceof Error ? error.message : "Secure messaging failed to initialize";
+          setE2eeError(message);
+          if (adapter?.ready) {
+            e2eeRef.current = adapter;
+            setE2eeAdapter(adapter);
+            setE2eeState("recoverable_error");
+          } else {
+            e2eeRef.current = null;
+            setE2eeAdapter(null);
+            setE2eeState("fatal_error");
+          }
         }
       }
     })();
@@ -184,7 +239,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       document.removeEventListener("visibilitychange", retireWhenHidden);
       e2eeRef.current = null;
     };
-  }, [reconcileDeviceChange, user.id]);
+  }, [e2eeRetryTick, reconcileDeviceChange, refreshE2eeState, user.id]);
 
   const acknowledgeRead = useCallback((conversationId: string, sequence: number, readerId = user.id) => {
     setConversations((current) => {
@@ -208,16 +263,19 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           for (const conversation of encryptedConversations) {
             void (async () => {
               await adapter.syncTransport(conversation.id);
-              if (adapter.trackedConversationIds().includes(conversation.id)) {
+              if (adapter.joinedConversationIds().includes(conversation.id)) {
                 await reconcileDeviceChange(adapter, conversation.id);
                 await adapter.syncTransport(conversation.id);
               }
-            })().catch(() => {
-              setE2eeState("error");
+              refreshE2eeState(adapter);
+            })().catch((error: unknown) => {
+              setE2eeError(error instanceof Error ? error.message : "Secure messaging recovery failed");
+              setE2eeState("recoverable_error");
             });
           }
-          void adapter.ensureKeyPackagePool(10).catch(() => {
-            setE2eeState("error");
+          void adapter.ensureKeyPackagePool(10).catch((error: unknown) => {
+            setE2eeError(error instanceof Error ? error.message : "Unable to prepare secure device keys");
+            setE2eeState("recoverable_error");
           });
         }
       },
@@ -250,7 +308,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               conversation.id === event.conversation_id
               && conversation.encryption_required,
           );
-          const locallyTracked = adapter?.trackedConversationIds().includes(event.conversation_id) ?? false;
+          const locallyTracked = adapter?.joinedConversationIds().includes(event.conversation_id) ?? false;
           if (
             adapter
             && (
@@ -259,16 +317,21 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               || locallyTracked
             )
           ) {
-            void adapter.syncTransport(event.conversation_id).catch(() => {
-              setE2eeState("error");
-            });
+            void adapter.syncTransport(event.conversation_id)
+              .then(() => refreshE2eeState(adapter))
+              .catch((error: unknown) => {
+                setE2eeError(error instanceof Error ? error.message : "Secure messaging recovery failed");
+                setE2eeState("recoverable_error");
+              });
             if (event.type === "mls.control.created") {
-              void adapter.ensureKeyPackagePool(10).catch(() => {
-                setE2eeState("error");
+              void adapter.ensureKeyPackagePool(10).catch((error: unknown) => {
+                setE2eeError(error instanceof Error ? error.message : "Unable to prepare secure device keys");
+                setE2eeState("recoverable_error");
               });
             }
             if (event.type === "mls.device.rekeyed") {
-              void reconcileDeviceChange(adapter, event.conversation_id);
+              void reconcileDeviceChange(adapter, event.conversation_id)
+                .then(() => refreshE2eeState(adapter));
             }
           }
         }
@@ -277,10 +340,11 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           && event.conversation_id
           && e2eeRef.current
         ) {
+          const adapter = e2eeRef.current;
           void reconcileDeviceChange(
-            e2eeRef.current,
+            adapter,
             event.conversation_id,
-          );
+          ).then(() => refreshE2eeState(adapter));
         }
         if (event.type === "conversation.member_removed" && event.conversation_id && (event.payload as { user_id?: string } | undefined)?.user_id === user.id) {
           setSelectedId((current) => current === event.conversation_id ? null : current);
@@ -303,7 +367,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       realtimeRef.current = null;
       setRealtimeClient(null);
     };
-  }, [acknowledgeRead, loadConversations, reconcileDeviceChange, revokeLocalSession, user.id]);
+  }, [acknowledgeRead, loadConversations, reconcileDeviceChange, refreshE2eeState, revokeLocalSession, user.id]);
 
   async function enablePush() {
     setPushState("enabling");
@@ -366,6 +430,18 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   }
 
   function addConversation(conversation: Conversation) {
+    const autoBootstrapDirect =
+      conversation.type === "direct"
+      && conversation.encryption_required
+      && !conversation.e2ee_ready
+      && conversation.created_by === user.id
+      && Boolean(e2eeRef.current);
+
+    if (autoBootstrapDirect) {
+      setSecureSetupBusy(true);
+      setSecureSetupError(null);
+    }
+
     setConversations((current) => {
       const without = current.filter((item) => item.id !== conversation.id);
       const next = sortConversations([conversation, ...without]);
@@ -374,9 +450,26 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     });
     setSelectedId(conversation.id);
     setCreating(false);
+    setShowContacts(false);
+
+    if (autoBootstrapDirect && !directBootstrapRef.current.has(conversation.id)) {
+      const adapter = e2eeRef.current!;
+      const operation = adapter.bootstrapConversation(conversation)
+        .then((ready) => updateConversation(ready))
+        .catch((error: unknown) => {
+          setSecureSetupError(
+            error instanceof Error ? error.message : "Unable to prepare secure chat",
+          );
+        })
+        .finally(() => {
+          directBootstrapRef.current.delete(conversation.id);
+          setSecureSetupBusy(false);
+        });
+      directBootstrapRef.current.set(conversation.id, operation);
+    }
   }
 
-  function updateConversation(next: Conversation) {
+  const updateConversation = useCallback((next: Conversation) => {
     setConversations((current) => {
       const updated = sortConversations(
         current.map((item) => item.id === next.id ? next : item),
@@ -384,7 +477,41 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       conversationsRef.current = updated;
       return updated;
     });
+  }, []);
+
+  function openContactDirect(contact: ContactDirectoryItem): Promise<void> {
+    const existing = conversationsRef.current.find(
+      (conversation) =>
+        conversation.type === "direct"
+        && conversation.encryption_required
+        && conversation.members.some((member) => member.id === contact.id),
+    );
+    if (existing) {
+      setShowContacts(false);
+      setSelectedId(existing.id);
+      return Promise.resolve();
+    }
+
+    const inFlight = directOpenRef.current.get(contact.id);
+    if (inFlight) return inFlight;
+
+    const operation = (async () => {
+      const adapter = e2eeRef.current;
+      if (!adapter || !e2eeOperational(e2eeState)) {
+        throw new Error("Secure messaging is still preparing on this device");
+      }
+
+      const conversation = await messengerApi.createDirect(contact.id, true);
+      setShowContacts(false);
+      addConversation(conversation);
+    })().finally(() => {
+      directOpenRef.current.delete(contact.id);
+    });
+    directOpenRef.current.set(contact.id, operation);
+    return operation;
   }
+
+  const e2eeReadyForActions = Boolean(e2eeAdapter) && e2eeOperational(e2eeState);
 
   const visibleConversations = conversations.filter((conversation) =>
     conversationTitle(conversation, user.id)
@@ -393,13 +520,41 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   );
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
 
+  useEffect(() => {
+    if (
+      !selected
+      || selected.type !== "direct"
+      || !selected.encryption_required
+      || selected.e2ee_ready
+      || selected.created_by !== user.id
+      || !e2eeReadyForActions
+      || !e2eeAdapter
+      || directBootstrapRef.current.has(selected.id)
+    ) {
+      return;
+    }
+
+    const operation = e2eeAdapter.bootstrapConversation(selected)
+      .then((ready) => updateConversation(ready))
+      .catch((error: unknown) => {
+        setSecureSetupError(
+          error instanceof Error ? error.message : "Unable to prepare secure chat",
+        );
+      })
+      .finally(() => {
+        directBootstrapRef.current.delete(selected.id);
+        setSecureSetupBusy(false);
+      });
+    directBootstrapRef.current.set(selected.id, operation);
+  }, [e2eeAdapter, e2eeReadyForActions, selected, updateConversation, user.id]);
+
   if (selected?.encryption_required) {
     const selectedTracked =
-      e2eeAdapter?.trackedConversationIds().includes(selected.id) ?? false;
+      e2eeAdapter?.joinedConversationIds().includes(selected.id) ?? false;
     if (
       !selected.e2ee_ready
       && selected.created_by === user.id
-      && e2eeState === "ready"
+      && e2eeReadyForActions
       && e2eeAdapter
     ) {
       return (
@@ -413,28 +568,34 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               <button type="button" onClick={() => setSelectedId(null)}>Back</button>
             </header>
             <div className="empty-conversations">
-              <h2>Finish secure setup</h2>
-              <p>{secureSetupError ?? "All participant devices must join the MLS group before activation."}</p>
-              <button
-                type="button"
-                disabled={secureSetupBusy}
-                onClick={() => {
-                  const adapter = e2eeAdapter;
-                  if (!adapter) return;
-                  setSecureSetupBusy(true);
-                  setSecureSetupError(null);
-                  void adapter.bootstrapConversation(selected)
-                    .then((ready) => updateConversation(ready))
-                    .catch((error: unknown) => {
-                      setSecureSetupError(
-                        error instanceof Error ? error.message : "Unable to finish secure setup",
-                      );
-                    })
-                    .finally(() => setSecureSetupBusy(false));
-                }}
-              >
-                {secureSetupBusy ? "Finishing…" : "Resume secure setup"}
-              </button>
+              <h2>{selected.type === "direct" && !secureSetupError ? "Preparing secure chat…" : "Finish secure setup"}</h2>
+              <p>{secureSetupError ?? (
+                selected.type === "direct"
+                  ? "Secure device setup is continuing automatically."
+                  : "All participant devices must join the MLS group before activation."
+              )}</p>
+              {selected.type !== "direct" || secureSetupError ? (
+                <button
+                  type="button"
+                  disabled={secureSetupBusy}
+                  onClick={() => {
+                    const adapter = e2eeAdapter;
+                    if (!adapter) return;
+                    setSecureSetupBusy(true);
+                    setSecureSetupError(null);
+                    void adapter.bootstrapConversation(selected)
+                      .then((ready) => updateConversation(ready))
+                      .catch((error: unknown) => {
+                        setSecureSetupError(
+                          error instanceof Error ? error.message : "Unable to finish secure setup",
+                        );
+                      })
+                      .finally(() => setSecureSetupBusy(false));
+                  }}
+                >
+                  {secureSetupBusy ? "Finishing…" : "Resume secure setup"}
+                </button>
+              ) : null}
             </div>
           </section>
         </main>
@@ -443,7 +604,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
 
     if (
       selected.e2ee_ready
-      && e2eeState === "ready"
+      && e2eeReadyForActions
       && e2eeAdapter
       && selectedTracked
     ) {
@@ -478,16 +639,18 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           <header className="messenger-topbar minimal-chat-topbar">
             <div>
               <strong>{conversationTitle(selected, user.id)}</strong>
-              <span>{e2eeState === "error" ? "Secure chat unavailable" : "Initializing secure chat…"}</span>
+              <span>{e2eeState === "fatal_error" || e2eeState === "recoverable_error" ? "Secure chat unavailable" : "Preparing secure messaging on this device…"}</span>
             </div>
             <button type="button" onClick={() => setSelectedId(null)}>Back</button>
           </header>
           <p className="muted center">
             {deviceRekeyError
               ?? (
-                selected.e2ee_ready && !selectedTracked
-                  ? "This device is waiting to be added to the secure conversation."
-                  : "This encrypted conversation is unavailable until the local MLS state is ready."
+                !selected.e2ee_ready && selected.created_by !== user.id
+                  ? "Preparing secure chat. It will open automatically when secure setup completes."
+                  : selected.e2ee_ready && !selectedTracked
+                    ? "This device is waiting to be added to the secure conversation."
+                    : "This encrypted conversation is unavailable until the local MLS state is ready."
               )}
           </p>
         </section>
@@ -528,14 +691,14 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
             <strong>Messages</strong>
             <span>{user.display_name} · {connectionState === "online" ? "online" : "reconnecting"}</span>
           </div>
-          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={openNewChat} aria-label={e2eeState !== "ready" ? "Preparing secure messaging" : user.phone_e164 ? "New secure chat" : "Set phone number to start chats"}>＋</button>
+          <button className="minimal-header-action" type="button" disabled={!e2eeReadyForActions} onClick={openNewChat} aria-label={!e2eeReadyForActions ? "Preparing secure messaging" : user.phone_e164 ? "New secure chat" : "Set phone number to start chats"}>＋</button>
         </header>
 
         {creating ? (
           <NewChat
             onCreated={addConversation}
             onCancel={() => setCreating(false)}
-            adapter={e2eeState === "ready" ? e2eeAdapter : null}
+            adapter={e2eeReadyForActions ? e2eeAdapter : null}
           />
         ) : (
           <>
@@ -561,17 +724,37 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
                 <button type="button" onClick={() => void loadConversations(true)}>Retry</button>
               </div>
             ) : null}
-            {e2eeState === "error" ? (
+            {e2eeState === "new_device_pending" ? (
               <div className="messenger-inline-status is-warning" role="status">
-                <span>Secure messaging needs a restart.</span>
-                <button type="button" onClick={() => window.location.reload()}>Reload</button>
+                <span>Preparing secure messaging on this device.</span>
+              </div>
+            ) : null}
+            {e2eeState === "rekey_pending" ? (
+              <div className="messenger-inline-status is-warning" role="status">
+                <span>Updating secure device membership…</span>
+              </div>
+            ) : null}
+            {e2eeState === "history_unavailable_on_this_device" ? (
+              <div className="messenger-inline-status" role="status">
+                <span>Secure messaging is ready. Earlier encrypted history may be unavailable on this device.</span>
+              </div>
+            ) : null}
+            {e2eeState === "recoverable_error" ? (
+              <div className="messenger-inline-status is-warning" role="status">
+                <span>{e2eeError ?? "Secure messaging recovery is temporarily blocked."}</span>
+                <button type="button" onClick={() => setE2eeRetryTick((value) => value + 1)}>Retry secure setup</button>
+              </div>
+            ) : null}
+            {e2eeState === "fatal_error" ? (
+              <div className="messenger-inline-status is-error" role="alert">
+                <span>{e2eeError ?? "Secure messaging is unavailable on this device."}</span>
               </div>
             ) : null}
             <div className="conversation-list minimal-chat-list" aria-busy={loading}>
             <button
               className="new-chat-button minimal-new-chat-button"
               type="button"
-              disabled={e2eeState !== "ready" || !user.phone_e164}
+              disabled={!e2eeReadyForActions || !user.phone_e164}
               onClick={openNewChat}
             >
               {e2eeState === "initializing" ? "Preparing secure messaging…" : !user.phone_e164 ? "Set phone to start a chat" : "New secure chat"}
@@ -622,7 +805,11 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           onCurrentRevoked={revokeLocalSession}
           onPhoneUpdated={(phone) => onUserUpdated({ ...user, phone_e164: phone })}
         /> : null}
-        {showContacts ? <ContactsPanel onClose={() => setShowContacts(false)} /> : null}
+        {showContacts ? <ContactsPanel
+          onClose={() => setShowContacts(false)}
+          onOpenContact={openContactDirect}
+          chatEnabled={e2eeReadyForActions}
+        /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
           {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}

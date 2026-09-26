@@ -103,6 +103,58 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
 });
 
 
+test("registered contact tap creates and then reuses one E2EE direct chat", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const peerContext = await browser.newContext();
+  const ownerContext = await browser.newContext();
+  const peer = await peerContext.newPage();
+  const owner = await ownerContext.newPage();
+
+  try {
+    await login(peer, testPhone(7));
+    await login(owner, testPhone(6));
+
+    let createRequests = 0;
+    owner.on("request", (request) => {
+      if (
+        request.url().endsWith("/v1/conversations")
+        && request.method() === "POST"
+      ) createRequests += 1;
+    });
+
+    await owner.getByRole("button", { name: "Contacts", exact: true }).click();
+    let panel = owner.getByRole("dialog", { name: "Phone contacts", exact: true });
+    await panel.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(7));
+    await panel.getByRole("button", { name: "Add contact", exact: true }).click();
+    await expect(panel.getByText(testPhone(7), { exact: true })).toBeVisible();
+
+    const openPeer = panel.getByRole("button", { name: "Open chat with Wave1 Contact Peer", exact: true });
+    await openPeer.evaluate((element) => {
+      (element as HTMLButtonElement).click();
+      (element as HTMLButtonElement).click();
+    });
+    await expect(panel).toHaveCount(0);
+    await expect(
+      owner.locator(".messenger-topbar").filter({ hasText: "Wave1 Contact Peer" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
+      timeout: 60_000,
+    });
+    expect(createRequests).toBe(1);
+
+    await owner.getByRole("button", { name: "Back to conversations", exact: true }).click();
+    await owner.getByRole("button", { name: "Contacts", exact: true }).click();
+    panel = owner.getByRole("dialog", { name: "Phone contacts", exact: true });
+    await panel.getByRole("button", { name: "Open chat with Wave1 Contact Peer", exact: true }).click();
+    await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    expect(createRequests).toBe(1);
+  } finally {
+    await Promise.allSettled([peerContext.close(), ownerContext.close()]);
+  }
+});
+
 test("Contacts panel lists and removes an allowed contact", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(3));

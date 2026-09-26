@@ -377,3 +377,59 @@ async def test_database_rejects_second_global_admin_and_member_invites() -> None
 
         revoked = await admin_client.delete(f"/v1/invites/{invite_id}")
         assert revoked.status_code == 204
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_pending_e2ee_direct_is_reused_by_the_other_contact() -> None:
+    seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 900000
+    owner = await create_user(seed, "Pending Direct Owner")
+    peer = await create_user(seed + 1, "Pending Direct Peer")
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=HEADERS,
+    ) as owner_client, httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=HEADERS,
+    ) as peer_client:
+        await phone_login(owner_client, owner)
+        await phone_login(peer_client, peer)
+
+        owner_sync = await owner_client.post(
+            "/v1/contacts/sync",
+            json={"phones": [peer.phone_e164], "replace": False},
+        )
+        peer_sync = await peer_client.post(
+            "/v1/contacts/sync",
+            json={"phones": [owner.phone_e164], "replace": False},
+        )
+        assert owner_sync.status_code == 200, owner_sync.text
+        assert peer_sync.status_code == 200, peer_sync.text
+
+        created = await owner_client.post(
+            "/v1/conversations",
+            json={
+                "type": "direct",
+                "title": None,
+                "member_ids": [str(peer.id)],
+                "encryption_required": True,
+            },
+        )
+        assert created.status_code == 201, created.text
+        assert created.json()["e2ee_ready"] is False
+
+        reused = await peer_client.post(
+            "/v1/conversations",
+            json={
+                "type": "direct",
+                "title": None,
+                "member_ids": [str(owner.id)],
+                "encryption_required": True,
+            },
+        )
+        assert reused.status_code == 201, reused.text
+        assert reused.json()["id"] == created.json()["id"]
+        assert reused.json()["e2ee_ready"] is False

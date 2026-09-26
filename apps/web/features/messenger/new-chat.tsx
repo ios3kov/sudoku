@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
 import { ContactAccess } from "./contact-access";
 import type { Conversation } from "./types";
@@ -32,6 +32,7 @@ export function NewChat({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contactsRevision, setContactsRevision] = useState(0);
+  const createBusyRef = useRef(false);
 
   useEffect(() => {
     const term = query.trim();
@@ -59,20 +60,18 @@ export function NewChat({
 
 
   async function createDirect(user: DirectoryUser) {
+    if (createBusyRef.current) return;
+    createBusyRef.current = true;
     setError(null);
     setCreating(true);
-    let pending: Conversation | null = null;
     try {
       if (!adapter) throw new Error("Secure messaging is not ready");
-      pending = await messengerApi.createDirect(user.id, true);
-      onCreated(await adapter.bootstrapConversation(pending));
+      const conversation = await messengerApi.createDirect(user.id, true);
+      onCreated(conversation);
     } catch (error) {
-      if (pending) {
-        onCreated(pending);
-      } else {
-        setError(error instanceof Error ? error.message : "Unable to create secure chat");
-      }
+      setError(error instanceof Error ? error.message : "Unable to create secure chat");
     } finally {
+      createBusyRef.current = false;
       setCreating(false);
     }
   }
