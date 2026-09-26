@@ -24,8 +24,6 @@
   <dict/>
   <key>LSRequiresIPhoneOS</key>
   <true/>
-  <key>NSFaceIDUsageDescription</key>
-  <string>Use Face ID to unlock your private messages on this iPhone.</string>
   <key>NSContactsUsageDescription</key>
   <string>Allow Sudoku to find registered Messenger contacts from names and phone numbers on this iPhone.</string>
   <key>UIApplicationSceneManifest</key>
