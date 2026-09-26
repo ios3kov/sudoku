@@ -158,6 +158,19 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         ) {
           return false;
         }
+
+        // A serialized device-add may still be queued behind another MLS
+        // membership transition, so the pending endpoint can legitimately
+        // describe a different device. If this fresh device has not been
+        // assigned any durable transport yet, there is nothing valid to
+        // process and waiting is the correct state. Once any Welcome/control
+        // is assigned, processing failures stay fatal and are never hidden.
+        if (currentDeviceId) {
+          const assigned = await messengerApi
+            .mlsTransportEvents(conversation.id, currentDeviceId, 0)
+            .catch(() => null);
+          if (assigned?.length === 0) return false;
+        }
       }
       throw error;
     }
