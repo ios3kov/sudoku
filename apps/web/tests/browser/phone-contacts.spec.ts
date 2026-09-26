@@ -50,6 +50,30 @@ async function login(page: Page, phone: string) {
   await expect(page.getByRole("button", { name: "New secure chat", exact: true })).toBeEnabled({ timeout: 120_000 });
 }
 
+test("smart phone formatting keeps the caret stable while typing", async ({ page }) => {
+  test.setTimeout(120_000);
+  await reveal(page);
+
+  await page.getByLabel("Phone country").first().selectOption("RU");
+  const phone = page.getByLabel("Phone number", { exact: true });
+
+  for (const digit of "9262373609") {
+    await phone.press(digit);
+    const caret = await phone.evaluate((input) => {
+      const field = input as HTMLInputElement;
+      return {
+        start: field.selectionStart,
+        end: field.selectionEnd,
+        length: field.value.length,
+      };
+    });
+    expect(caret.start).toBe(caret.length);
+    expect(caret.end).toBe(caret.length);
+  }
+
+  await expect(phone).toHaveValue("+7 (926) 237-36-09");
+});
+
 test("smart RU phone input sends canonical E.164 for login", async ({ page }) => {
   test.setTimeout(120_000);
   await reveal(page);
