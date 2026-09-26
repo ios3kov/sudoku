@@ -128,6 +128,7 @@ test("admin invite searches local Contacts by name and RU phone variants", async
   const invite = page.getByRole("dialog", { name: "Create invite", exact: true });
   await expect(invite).toBeVisible();
 
+  await invite.getByRole("button", { name: "Load contacts", exact: true }).click();
   await invite.getByLabel("Invite phone country", { exact: true }).selectOption("RU");
   const search = invite.getByLabel("Search contact or phone", { exact: true });
   await search.fill("Иван");
