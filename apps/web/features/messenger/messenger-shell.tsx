@@ -409,13 +409,6 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     setCreating(true);
   }
 
-  function toggleInvite() {
-    setCreating(false);
-    setShowDevices(false);
-    setShowContacts(false);
-    setShowInvite((value) => !value);
-  }
-
   function toggleDevices() {
     setCreating(false);
     setShowInvite(false);
