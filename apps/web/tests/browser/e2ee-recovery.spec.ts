@@ -406,6 +406,25 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
 
 
 
+test("BFCache lifecycle preserves the active MLS adapter", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(5));
+
+  const newChat = page.getByRole("button", { name: "New secure chat" });
+  await expect(newChat).toBeEnabled();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  });
+
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+  await expect(newChat).toBeEnabled({ timeout: 30_000 });
+  await expect(
+    page.getByText("Secure messaging needs a restart.", { exact: true }),
+  ).toHaveCount(0);
+});
+
 test("fresh authenticated device joins an existing encrypted direct chat without Reload", async ({ browser }) => {
   test.setTimeout(360_000);
   const ownerContext = await browser.newContext();
