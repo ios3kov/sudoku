@@ -24,6 +24,8 @@
   <dict/>
   <key>LSRequiresIPhoneOS</key>
   <true/>
+  <key>NSContactsUsageDescription</key>
+  <string>Allow Sudoku Messenger to find registered people from your Contacts. Only phone numbers needed for contact matching are sent to the server.</string>
   <key>UIApplicationSceneManifest</key>
   <dict>
     <key>UIApplicationSupportsMultipleScenes</key>
