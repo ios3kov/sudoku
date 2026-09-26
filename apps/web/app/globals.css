@@ -227,3 +227,47 @@ code{overflow-wrap:anywhere}
 .load-earlier-button{display:block;margin:0 auto 12px;min-height:40px;border:1px solid var(--line);border-radius:999px;background:var(--surface);padding:0 14px;color:var(--accent);font-weight:700}
 
 .group-member-row{align-items:flex-start}
+
+
+/* Branded fail-closed privacy cover for browser/PWA snapshots. */
+.privacy-shell{
+  background:#1a1a1a;
+  color:#fff;
+}
+.privacy-card{
+  display:grid;
+  justify-items:center;
+  gap:18px;
+  width:min(86vw,340px);
+}
+.privacy-card h1{
+  margin:0;
+  color:#ff8a00;
+  font-size:20px;
+  letter-spacing:.16em;
+}
+.privacy-brand-mark{
+  width:68px;
+  height:68px;
+  border-radius:16px;
+  border:1px solid #ffffff16;
+  background:
+    linear-gradient(#ff8a00 0 0) 43px 13px/12px 12px no-repeat,
+    linear-gradient(#ff8a00 0 0) 28px 28px/12px 12px no-repeat,
+    linear-gradient(#ff8a00 0 0) 13px 43px/12px 12px no-repeat,
+    linear-gradient(#fff 0 0) 13px 13px/12px 12px no-repeat,
+    linear-gradient(#fff 0 0) 28px 13px/12px 12px no-repeat,
+    linear-gradient(#fff 0 0) 13px 28px/12px 12px no-repeat,
+    linear-gradient(#fff 0 0) 43px 28px/12px 12px no-repeat,
+    linear-gradient(#fff 0 0) 28px 43px/12px 12px no-repeat,
+    linear-gradient(#fff 0 0) 43px 43px/12px 12px no-repeat,
+    #212123;
+}
+.privacy-shell .privacy-grid{
+  width:min(70vw,260px);
+  border-color:#52525b;
+  background:
+    linear-gradient(90deg,transparent 32%,#52525b 32%,#52525b 34%,transparent 34%,transparent 66%,#52525b 66%,#52525b 68%,transparent 68%),
+    linear-gradient(transparent 32%,#52525b 32%,#52525b 34%,transparent 34%,transparent 66%,#52525b 66%,#52525b 68%,transparent 68%),
+    #1f1f21;
+}
