@@ -155,3 +155,8 @@ Exact post-merge push verification is green:
 - api-shutdown `35971849241`.
 
 This merge did not deploy production or upload a TestFlight build.
+
+
+## 2026-09-26 deprecation note
+
+Biometric unlock is no longer a supported product path. The iOS/web biometric client integration has been removed under Step 112. This document remains as historical implementation context only. Server-side biometric compatibility endpoints/schema may remain temporarily dormant until a later maintenance cleanup.
