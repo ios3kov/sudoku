@@ -439,3 +439,7 @@ See the [production media workstream](steps/88-native-ios-production-plan.md#med
 ## Python runtime dependency updates
 
 `apps/api/requirements.lock` targets CPython 3.13 on Linux x86_64. Regenerate deliberately using the command in its header (initial generator uv 0.12.19), review version changes, and require full CI and image builds. Docker verifies package hashes; CI test extras must preserve locked runtime versions via constraints and pip check. This is a runtime lock, not a fully reproducible image: base-image tags, build isolation tools and test-only dependencies remain separate boundaries. Do not reuse this platform-specific lock for a different deployment target without resolving and testing that target.
+
+## Cross-platform release gate
+
+The current release sequence is defined in [Step 113](steps/113-cross-platform-release-plan.md). A release candidate is not eligible for TestFlight/production until product parity is verified across iOS native, Android/PWA and supported browser clients; physical iPhone and Android/PWA acceptance are complete; Messenger is excluded from task/app-switcher previews; full automated/security/E2EE/backup-restore gates are green; and one exact candidate SHA is frozen. Any release-blocking fix after freeze creates a new candidate and invalidates prior final acceptance.
