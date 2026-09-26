@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ensureSudokuGame } from "./support/sudoku-start";
+import { formatPhone } from "../../features/messenger/phone-number";
 
 const PASSWORD = "browser acceptance password";
 const testPhone = (index: number) => "+" + String(70000000000 + index);
@@ -167,7 +168,7 @@ for (const role of ["member", "admin"]) {
     // Navigating immediately after click can abort the request and retain PIN.
     await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
     await reveal(page);
-    await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue(phone);
+    await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue(formatPhone(phone, "RU"));
     await page.getByLabel("Remember phone on this device").uncheck();
     await reveal(page);
     await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("");
