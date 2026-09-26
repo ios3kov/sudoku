@@ -34,7 +34,6 @@ targets:
       - sdk: WebKit.framework
       - sdk: Contacts.framework
       - sdk: ContactsUI.framework
-      - sdk: LocalAuthentication.framework
       - sdk: Security.framework
       - sdk: PhotosUI.framework
       - sdk: AVKit.framework
