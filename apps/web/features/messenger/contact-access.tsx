@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
-import { NATIVE_CONTACTS_READY_EVENT, nativeContactsAvailable, selectNativeContacts } from "./native-contact-access";
+import { NATIVE_CONTACTS_READY_EVENT, nativeContactsAuthorization, nativeContactsAvailable, nativeFullContactsAvailable, readAllNativeContacts, selectNativeContacts, type NativeContactsAuthorization } from "./native-contact-access";
+import { canonicalizePhone, initialPhoneCountry, PhoneInput } from "./phone-input";
 
 type PickerContact = { name?: string[]; tel?: string[] };
 type ContactsManagerLike = {
@@ -11,7 +12,8 @@ type ContactsManagerLike = {
 };
 
 function normalizePhone(value: string): string {
-  return value.replace(/[\s().-]+/g, "");
+  const locale = typeof navigator === "undefined" ? "en-ME" : navigator.language;
+  return canonicalizePhone(value, initialPhoneCountry(locale));
 }
 
 export function ContactAccess({ onSynced }: { onSynced: () => void }) {
@@ -23,10 +25,26 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   const contactsRef = useRef<ContactsManagerLike | null>(null);
   const [pickerAvailable, setPickerAvailable] = useState(false);
   const [nativePickerAvailable, setNativePickerAvailable] = useState(false);
+  const [nativeFullAvailable, setNativeFullAvailable] = useState(false);
+  const [fullAuthorization, setFullAuthorization] = useState<NativeContactsAuthorization>("unknown");
+  const [showFullExplanation, setShowFullExplanation] = useState(false);
 
   useEffect(() => {
     function refreshNativeAvailability() {
+      const fullAvailable = nativeFullContactsAvailable();
       setNativePickerAvailable(nativeContactsAvailable());
+      setNativeFullAvailable(fullAvailable);
+      if (fullAvailable) {
+        void nativeContactsAuthorization()
+          .then((status) => {
+            if (!cancelled) setFullAuthorization(status);
+          })
+          .catch(() => {
+            if (!cancelled) setFullAuthorization("unknown");
+          });
+      } else {
+        setFullAuthorization("unknown");
+      }
     }
 
     refreshNativeAvailability();
@@ -95,6 +113,36 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
     }
   }
 
+  async function syncAllContacts() {
+    if (busy || !nativeFullAvailable) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const contacts = await readAllNativeContacts();
+      const phones = contacts.flatMap((item) => item.tel ?? []);
+      const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
+      if (normalized.length === 0) {
+        setNotice("No phone numbers found in Contacts.");
+        return;
+      }
+      const matched = await messengerApi.syncContacts(normalized, true);
+      setFullAuthorization(
+        await nativeContactsAuthorization()
+          .catch((): NativeContactsAuthorization => "unknown"),
+      );
+      setNotice(`${matched.length} registered contact${matched.length === 1 ? "" : "s"} available.`);
+      setShowFullExplanation(false);
+      onSynced();
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setError("Full Contacts access was not granted. You can still choose contacts or add a number manually.");
+      setShowFullExplanation(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function submitManual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = manual.trim();
@@ -107,23 +155,56 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
       <div className="contact-access-actions">
         {nativePickerAvailable || pickerAvailable ? (
           <button type="button" disabled={busy} onClick={() => void chooseContacts()}>
-            {busy ? "Syncing…" : "Choose phone contacts"}
+            {busy ? "Syncing…" : "Choose contacts"}
           </button>
         ) : null}
-        <form onSubmit={submitManual}>
-          <input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="+382..."
-            aria-label="Add contact by phone"
+        {nativeFullAvailable ? (
+          fullAuthorization === "authorized" || fullAuthorization === "limited" ? (
+            <div className="contact-full-access-state" role="status">
+              Full Contacts access {fullAuthorization === "limited" ? "limited" : "enabled"}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="contact-full-access-button"
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setNotice(null);
+                setShowFullExplanation(true);
+              }}
+            >
+              Allow all contacts
+            </button>
+          )
+        ) : null}
+        <form onSubmit={submitManual} className="contact-manual-form">
+          <PhoneInput
             value={manual}
-            onChange={(event) => setManual(event.target.value)}
+            onChange={setManual}
+            label="Add contact by phone"
             disabled={busy}
           />
-          <button type="submit" disabled={busy || !manual.trim()}>Add contact</button>
+          <button type="submit" disabled={busy || !manual.trim()}>Add</button>
         </form>
       </div>
+      {showFullExplanation ? (
+        <div className="contact-full-access-explanation" role="dialog" aria-label="Allow all contacts">
+          <strong>Find people already using Sudoku Messenger</strong>
+          <p>
+            We’ll read names and phone numbers on this iPhone and send only phone numbers for matching registered users.
+            Unmatched address-book entries are not stored as contacts on the server.
+          </p>
+          <div>
+            <button type="button" className="primary-button" disabled={busy} onClick={() => void syncAllContacts()}>
+              {busy ? "Syncing…" : "Continue"}
+            </button>
+            <button type="button" className="secondary-button" disabled={busy} onClick={() => setShowFullExplanation(false)}>
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
       <p className="muted contact-access-help">
         {nativePickerAvailable
           ? "Choose contacts with the iPhone system picker. Only selected phone numbers are shared with the app."

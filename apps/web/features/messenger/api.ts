@@ -25,6 +25,11 @@ export const messengerApi = {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ phone, password }),
   }),
+  updateDisplayName: (displayName: string) => request<CurrentUser>("/v1/me/display-name", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ display_name: displayName }),
+  }),
   contacts: (query = "") => request<ContactDirectoryItem[]>(`/v1/contacts?q=${encodeURIComponent(query)}`),
   syncContacts: (phones: string[], replace = false) => request<ContactDirectoryItem[]>("/v1/contacts/sync", {
     method: "POST",

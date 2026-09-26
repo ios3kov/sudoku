@@ -11,6 +11,7 @@ import { ContactsPanel } from "../../../features/messenger/contacts-panel";
 import { ProtectedAttachment } from "../../../features/messenger/protected-attachment";
 import { acceptUnlock, accessEpoch } from "../../../features/messenger/device-access";
 import { messengerApi } from "../../../features/messenger/api";
+import { canonicalizePhone, initialPhoneCountry } from "../../../features/messenger/phone-input";
 import type { OpenMlsProtocolAdapter } from "../../../features/messenger/crypto/openmls-adapter";
 import type { AssetSummary, Conversation, CurrentUser, DeviceSession, Message } from "../../../features/messenger/types";
 
@@ -132,6 +133,7 @@ api.updatePhone = async (phone: string) => {
   calls.phoneUpdates.push(phone);
   return { ...me, phone_e164: phone, phone_verified: false };
 };
+api.updateDisplayName = async (displayName: string) => ({ ...me, display_name: displayName });
 api.contacts = async () => [candidate];
 api.syncContacts = async (phones: string[]) => {
   calls.syncedPhones.push(phones);
@@ -335,12 +337,14 @@ function mount(mode: Mode) {
   if (mode === "protected") root.render(<ProtectedFixture />);
 }
 
-window.__buttonAudit = { calls, mount };
+const phone = { canonicalizePhone, initialPhoneCountry };
+window.__buttonAudit = { calls, mount, phone };
 declare global {
   interface Window {
     __buttonAudit: {
       calls: typeof calls;
       mount: (mode: Mode) => void;
+      phone: typeof phone;
     };
   }
 }

@@ -17,3 +17,267 @@
 .contact-access-actions input { min-width: 0; }
 .contact-access-actions button { min-height: 44px; }
 .contact-access-help { margin: 6px 0 0; font-size: 13px; line-height: 1.4; }
+
+
+.pin-screen {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right))
+    max(96px, calc(env(safe-area-inset-bottom) + 84px))
+    max(20px, env(safe-area-inset-left));
+  background: #f7f8fa;
+}
+
+.pin-card {
+  width: min(100%, 390px);
+  margin: 0;
+  padding: 28px 24px;
+  border: 0;
+  border-radius: 30px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .10);
+}
+
+.pin-card-heading {
+  display: grid;
+  gap: 8px;
+  text-align: center;
+}
+
+.pin-card-heading h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: clamp(1.75rem, 7vw, 2.1rem);
+  line-height: 1.05;
+  letter-spacing: -.035em;
+}
+
+.pin-card-heading p {
+  margin: 0 auto;
+  max-width: 30ch;
+  color: #64748b;
+  font-size: .9375rem;
+  line-height: 1.45;
+}
+
+.pin-card-kicker {
+  color: #2563eb;
+  font-size: .6875rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.pin-entry-stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.pin-cells-field {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 74px;
+}
+
+.pin-cells {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.pin-cell {
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #dbe3ef;
+  border-radius: 18px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 2rem;
+  line-height: 1;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease, transform .15s ease;
+}
+
+.pin-cell.is-active {
+  border-color: #60a5fa;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, .08);
+}
+
+.pin-cell.is-filled {
+  background: #fff;
+  border-color: #cbd5e1;
+}
+
+.pin-cells-field.is-error .pin-cell {
+  border-color: #fca5a5;
+  background: #fff7f7;
+  animation: pin-cell-shake .22s ease;
+}
+
+.pin-cells-native {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  min-height: 64px;
+  margin: 0;
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  color: transparent !important;
+  caret-color: transparent;
+  box-shadow: none !important;
+  opacity: .02;
+}
+
+.pin-entry-hint {
+  margin: 0;
+  text-align: center;
+  color: #94a3b8;
+  font-size: .75rem;
+  line-height: 1.4;
+}
+
+.pin-error {
+  margin: 0;
+  text-align: center;
+}
+
+.pin-secondary-actions {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+.pin-secondary-actions .text-button,
+.pin-back-button {
+  min-height: 44px;
+}
+
+.pin-password-form {
+  margin-top: 4px;
+}
+
+.device-pin-onboarding .device-access-actions {
+  margin-top: 8px;
+}
+
+.settings-form-card {
+  padding: 14px;
+  border: 1px solid #e8edf3;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.settings-section-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-section-heading h3,
+.settings-section-heading p {
+  margin: 0;
+}
+
+.settings-section-heading p {
+  color: #64748b;
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+
+.settings-section-heading.compact {
+  margin-bottom: 2px;
+}
+
+.settings-notice {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ecfdf5;
+  color: #166534;
+  font-size: .8125rem;
+}
+
+@keyframes pin-cell-shake {
+  0%,100% { transform: translateX(0); }
+  35% { transform: translateX(-4px); }
+  70% { transform: translateX(4px); }
+}
+
+@media (max-width: 430px) {
+  .pin-screen {
+    place-items: start center;
+    padding-top: max(32px, calc(env(safe-area-inset-top) + 18px));
+  }
+
+  .pin-card {
+    padding: 24px 20px;
+    border-radius: 26px;
+  }
+
+  .pin-cell {
+    height: 60px;
+    border-radius: 16px;
+  }
+}
+
+
+.phone-input-field {
+  display: grid;
+  gap: 7px;
+  color: #64748b;
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.phone-input-control {
+  display: grid;
+  grid-template-columns: 112px minmax(0,1fr);
+  gap: 8px;
+}
+
+.phone-input-control select,
+.phone-input-control input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.phone-input-control select {
+  padding: 0 10px;
+}
+
+.phone-input-control input:focus,
+.phone-input-control select:focus {
+  background: #fff;
+  border-color: #93c5fd;
+  outline: 3px solid rgba(37,99,235,.08);
+}
+
+.contact-manual-form {
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) auto !important;
+  align-items: end;
+  gap: 8px;
+}
+
+.contact-manual-form .phone-input-field {
+  min-width: 0;
+}
+
+@media (max-width:430px) {
+  .phone-input-control {
+    grid-template-columns: 104px minmax(0,1fr);
+  }
+}

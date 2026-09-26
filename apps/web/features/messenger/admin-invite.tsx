@@ -1,22 +1,67 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { messengerApi } from "./api";
+import {
+  NATIVE_CONTACTS_READY_EVENT,
+  nativeContactsAvailable,
+  selectNativeContacts,
+} from "./native-contact-access";
+import { canonicalizePhone, initialPhoneCountry, PhoneInput } from "./phone-input";
+import { loadAuthorizedAddressBook, searchLocalAddressBook, type LocalAddressBookContact } from "./local-contact-directory";
 
 export function AdminInvite({ onClose }: { onClose: () => void }) {
   const [token, setToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [nativeContacts, setNativeContacts] = useState(false);
+  const [localContacts, setLocalContacts] = useState<LocalAddressBookContact[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      setNativeContacts(nativeContactsAvailable());
+      void loadAuthorizedAddressBook()
+        .then(({ contacts }) => {
+          if (!cancelled) setLocalContacts(contacts);
+        })
+        .catch(() => {
+          if (!cancelled) setLocalContacts([]);
+        });
+    };
+    refresh();
+    window.addEventListener(NATIVE_CONTACTS_READY_EVENT, refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NATIVE_CONTACTS_READY_EVENT, refresh);
+    };
+  }, []);
+
+  async function chooseContact() {
+    setError(null);
+    try {
+      const selected = await selectNativeContacts();
+      const first = selected[0];
+      const raw = first?.tel?.[0]?.trim() ?? "";
+      if (!raw) return;
+      setPhone(canonicalizePhone(raw, initialPhoneCountry(navigator.language)));
+      setSelectedName(first.name?.[0]?.trim() || null);
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setError("Unable to open iPhone contacts.");
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     setToken(null);
-    const data = new FormData(event.currentTarget);
-    const phone = String(data.get("phone") ?? "").trim();
     if (!phone) {
       setSubmitting(false);
       setError("Phone number is required");
@@ -51,20 +96,82 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
         <div><strong>Invite member</strong><span>Admin only</span></div>
         <button type="button" onClick={onClose}>Close</button>
       </div>
+
       {!token ? (
-        <form className="auth-form" onSubmit={submit}>
-          <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required /></label>
+        <form className="auth-form invite-contact-form" onSubmit={submit}>
+          {localContacts.length > 0 ? (
+            <div className="invite-contact-search">
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search contact name or number"
+                aria-label="Search contact name or number"
+              />
+              {searchTerm.trim() ? (
+                <div className="invite-contact-suggestions">
+                  {searchLocalAddressBook(localContacts, searchTerm).slice(0, 6).map((contact) => (
+                    <button
+                      type="button"
+                      key={`${contact.name}|${contact.phones.join(",")}`}
+                      onClick={() => {
+                        setSelectedName(contact.name || null);
+                        setPhone(contact.phones[0]);
+                        setSearchTerm(contact.name || contact.phones[0]);
+                      }}
+                    >
+                      <span className="avatar minimal-avatar" aria-hidden="true">
+                        {(contact.name || "?").trim().slice(0, 1).toUpperCase()}
+                      </span>
+                      <span>
+                        <strong>{contact.name || "Contact"}</strong>
+                        <small>{contact.phones[0]}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {nativeContacts ? (
+            <button type="button" className="contact-picker-card" onClick={() => void chooseContact()}>
+              <span className="avatar minimal-avatar" aria-hidden="true">＋</span>
+              <span>
+                <strong>Choose iPhone contact</strong>
+                <small>Select one person from the system picker</small>
+              </span>
+              <span aria-hidden="true">›</span>
+            </button>
+          ) : null}
+
+          {selectedName ? (
+            <div className="selected-invite-contact" role="status">
+              <span>{selectedName}</span>
+              <small>{phone}</small>
+            </div>
+          ) : null}
+
+          <PhoneInput value={phone} onChange={(next) => {
+            setPhone(next);
+            setSelectedName(null);
+          }} required />
+
           <p className="muted">One use · expires in 7 days.</p>
-          <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create invite"}</button>
+          <button className="primary-button" type="submit" disabled={submitting || !phone}>
+            {submitting ? "Creating…" : "Create invite"}
+          </button>
         </form>
       ) : (
         <div className="invite-result">
           <p>Share this code privately. It is shown only now.</p>
           <code>{token}</code>
-          <button className="primary-button" type="button" onClick={() => void copyToken()}>{copied ? "Copied" : "Copy code"}</button>
+          <button className="primary-button" type="button" onClick={() => void copyToken()}>
+            {copied ? "Copied" : "Copy code"}
+          </button>
           {expiresAt ? <small>Expires {new Date(expiresAt).toLocaleString()}</small> : null}
         </div>
       )}
+
       {error ? <p className="form-error" role="alert">{error}</p> : null}
     </section>
   );

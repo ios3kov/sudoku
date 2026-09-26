@@ -15,6 +15,7 @@ import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
 import { ContactsPanel } from "./contacts-panel";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
+import { SudokuEscapeButton } from "./sudoku-escape-button";
 import type { ContactDirectoryItem, Conversation, CurrentUser, RealtimeEvent } from "./types";
 
 function sortConversations(items: Conversation[]): Conversation[] {
@@ -408,13 +409,6 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     setCreating(true);
   }
 
-  function toggleInvite() {
-    setCreating(false);
-    setShowDevices(false);
-    setShowContacts(false);
-    setShowInvite((value) => !value);
-  }
-
   function toggleDevices() {
     setCreating(false);
     setShowInvite(false);
@@ -427,6 +421,13 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     setShowInvite(false);
     setShowDevices(false);
     setShowContacts((value) => !value);
+  }
+
+  function openChats() {
+    setCreating(false);
+    setShowInvite(false);
+    setShowDevices(false);
+    setShowContacts(false);
   }
 
   function addConversation(conversation: Conversation) {
@@ -598,6 +599,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               ) : null}
             </div>
           </section>
+          <SudokuEscapeButton onHide={onHide} />
         </main>
       );
     }
@@ -629,6 +631,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               }}
             />
           </section>
+          <SudokuEscapeButton onHide={onHide} />
         </main>
       );
     }
@@ -654,6 +657,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               )}
           </p>
         </section>
+        <SudokuEscapeButton onHide={onHide} />
       </main>
     );
   }
@@ -679,6 +683,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
             }}
           />
         </section>
+        <SudokuEscapeButton onHide={onHide} />
       </main>
     );
   }
@@ -804,6 +809,16 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           onClose={() => setShowDevices(false)}
           onCurrentRevoked={revokeLocalSession}
           onPhoneUpdated={(phone) => onUserUpdated({ ...user, phone_e164: phone })}
+          onDisplayNameUpdated={(displayName) => onUserUpdated({ ...user, display_name: displayName })}
+          isAdmin={user.is_admin}
+          onOpenInvite={() => {
+            setShowDevices(false);
+            setShowInvite(true);
+          }}
+          onEnablePush={() => void enablePush()}
+          pushState={pushState}
+          onSignOut={() => void logout()}
+          signingOut={loggingOut}
         /> : null}
         {showContacts ? <ContactsPanel
           onClose={() => setShowContacts(false)}
@@ -811,15 +826,33 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           chatEnabled={e2eeReadyForActions}
         /> : null}
 
-        <footer className="messenger-footer minimal-messenger-footer">
-          {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}
-          <button type="button" onClick={toggleContacts}>Contacts</button>
-          <button type="button" onClick={toggleDevices}>Devices</button>
-          <button type="button" onClick={() => void enablePush()} disabled={pushState === "enabling" || pushState === "enabled"}>
-            {pushState === "enabled" ? "Notifications on" : pushState === "enabling" ? "Enabling…" : pushState === "error" ? "Retry notifications" : "Enable notifications"}
+        <footer className="messenger-footer minimal-messenger-footer" aria-label="Messenger navigation">
+          <button
+            type="button"
+            className={!showContacts && !showDevices && !showInvite ? "is-active" : undefined}
+            onClick={openChats}
+          >
+            <span aria-hidden="true">●</span>
+            <span>Chats</span>
           </button>
-          <button type="button" onClick={logout} disabled={loggingOut}>{loggingOut ? "Signing out…" : "Sign out"}</button>
+          <button
+            type="button"
+            className={showContacts ? "is-active" : undefined}
+            onClick={toggleContacts}
+          >
+            <span aria-hidden="true">◎</span>
+            <span>Contacts</span>
+          </button>
+          <button
+            type="button"
+            className={showDevices || showInvite ? "is-active" : undefined}
+            onClick={toggleDevices}
+          >
+            <span aria-hidden="true">⚙</span>
+            <span>Settings</span>
+          </button>
         </footer>
+        <SudokuEscapeButton onHide={onHide} />
       </section>
     </main>
   );

@@ -18,7 +18,6 @@ final class SudokuViewController: UIViewController {
 
         let controller = WKUserContentController()
         controller.add(self, name: Self.contactHandlerName)
-        biometricBridge.install(into: controller)
         mediaBridge.install(into: controller)
         videoPlayback.install(into: controller)
         videoPlayback.presenter = self
@@ -49,7 +48,6 @@ final class SudokuViewController: UIViewController {
         configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
-        biometricBridge.webView = webView
         mediaBridge.webView = webView
         mediaBridge.presenter = self
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -79,7 +77,6 @@ final class SudokuViewController: UIViewController {
     }()
 
     private let privacyCover = PrivacyCoverView()
-    private let biometricBridge = BiometricBridge()
     private let mediaBridge = NativeMediaBridge()
     private let videoPlayback = NativeVideoPlayback()
 
@@ -143,9 +140,6 @@ final class SudokuViewController: UIViewController {
             forName: Self.contactHandlerName
         )
         videoPlayback.uninstall(from: webView.configuration.userContentController)
-        biometricBridge.uninstall(
-            from: webView.configuration.userContentController
-        )
         mediaBridge.uninstall(
             from: webView.configuration.userContentController
         )
@@ -190,6 +184,38 @@ final class SudokuViewController: UIViewController {
         )
     }
 
+    private func contactsAuthorizationStatus() -> String {
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+        if #available(iOS 18.0, *), status == .limited {
+            return "limited"
+        }
+        switch status {
+        case .notDetermined:
+            return "not_determined"
+        case .restricted:
+            return "restricted"
+        case .denied:
+            return "denied"
+        case .authorized:
+            return "authorized"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    private func resolveContactValue(requestID: String, value: Any) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeContactsResolve(id, value);",
+            arguments: [
+                "id": requestID,
+                "value": value,
+            ],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
     private func presentContactPicker(requestID: String) {
         guard pendingContactRequestID == nil, presentedViewController == nil else {
             rejectContactRequest(requestID: requestID, message: "Contact picker is already open")
@@ -203,6 +229,60 @@ final class SudokuViewController: UIViewController {
         picker.displayedPropertyKeys = [CNContactPhoneNumbersKey]
         picker.predicateForEnablingContact = NSPredicate(format: "phoneNumbers.@count > 0")
         present(picker, animated: true)
+    }
+
+
+    private func requestAllContacts(requestID: String) {
+        guard pendingContactRequestID == nil else {
+            rejectContactRequest(requestID: requestID, message: "A Contacts request is already open")
+            return
+        }
+
+        pendingContactRequestID = requestID
+        let store = CNContactStore()
+        store.requestAccess(for: .contacts) { [weak self] granted, error in
+            guard let self else { return }
+
+            guard granted, error == nil else {
+                DispatchQueue.main.async {
+                    guard self.pendingContactRequestID == requestID else { return }
+                    self.pendingContactRequestID = nil
+                    self.rejectContactRequest(
+                        requestID: requestID,
+                        message: "Contacts access was not granted"
+                    )
+                }
+                return
+            }
+
+            let keys: [CNKeyDescriptor] = [
+                CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
+                CNContactPhoneNumbersKey as CNKeyDescriptor,
+            ]
+            let request = CNContactFetchRequest(keysToFetch: keys)
+            var contacts: [CNContact] = []
+
+            do {
+                try store.enumerateContacts(with: request) { contact, _ in
+                    if !contact.phoneNumbers.isEmpty {
+                        contacts.append(contact)
+                    }
+                }
+                DispatchQueue.main.async {
+                    guard self.pendingContactRequestID == requestID else { return }
+                    self.resolveContacts(contacts)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard self.pendingContactRequestID == requestID else { return }
+                    self.pendingContactRequestID = nil
+                    self.rejectContactRequest(
+                        requestID: requestID,
+                        message: "Unable to read Contacts"
+                    )
+                }
+            }
+        }
     }
 
     private func resolveContacts(_ contacts: [CNContact]) {
@@ -267,21 +347,29 @@ final class SudokuViewController: UIViewController {
       const pending = new Map();
       let sequence = 0;
 
+      const request = (action) => new Promise((resolve, reject) => {
+        const id = String(++sequence);
+        pending.set(id, { resolve, reject });
+        window.webkit.messageHandlers.sudokuContacts.postMessage({ id, action });
+      });
+
       window.SudokuNativeContacts = {
         select() {
-          return new Promise((resolve, reject) => {
-            const id = String(++sequence);
-            pending.set(id, { resolve, reject });
-            window.webkit.messageHandlers.sudokuContacts.postMessage({ id });
-          });
+          return request("select");
+        },
+        all() {
+          return request("all");
+        },
+        status() {
+          return request("status");
         }
       };
 
-      window.__sudokuNativeContactsResolve = (id, contacts) => {
+      window.__sudokuNativeContactsResolve = (id, value) => {
         const item = pending.get(id);
         if (!item) return;
         pending.delete(id);
-        item.resolve(Array.isArray(contacts) ? contacts : []);
+        item.resolve(value);
       };
 
       window.__sudokuNativeContactsCancel = (id) => {
@@ -372,7 +460,17 @@ extension SudokuViewController: WKScriptMessageHandler {
             return
         }
 
-        presentContactPicker(requestID: requestID)
+        switch body["action"] as? String {
+        case "all":
+            requestAllContacts(requestID: requestID)
+        case "status":
+            resolveContactValue(
+                requestID: requestID,
+                value: contactsAuthorizationStatus()
+            )
+        default:
+            presentContactPicker(requestID: requestID)
+        }
     }
 }
 

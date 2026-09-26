@@ -57,6 +57,10 @@ class UpdatePhoneRequest(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class UpdateDisplayNameRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
+
+
 class ContactSyncRequest(BaseModel):
     phones: list[str] = Field(min_length=1, max_length=500)
     replace: bool = False

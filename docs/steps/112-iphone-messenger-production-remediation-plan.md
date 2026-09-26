@@ -567,3 +567,57 @@ Regression coverage added/updated:
 - PIN auto-submit sends exactly one request and succeeds on repeated first attempts after relaunch.
 
 Verification status at this checkpoint: implementation complete; PR CI / targeted browser verification pending. Physical-iPhone acceptance remains required after automated Wave 1 gates are green.
+
+
+---
+
+## Wave 2 implementation log — 2026-09-26
+
+Branch: `feat/wave2-messenger-product-ux`  
+Baseline: deployed Wave 1 candidate `53344fabf639af9343ef2a28c2e0a11c126f8a2d`  
+Production deployment: **not performed for Wave 2**
+
+Implemented:
+
+- **#110 Messenger navigation + instant Sudoku**
+  - primary mobile navigation is reduced to `Chats / Contacts / Settings`;
+  - Invite, notifications, device sessions and sign-out are consolidated inside Settings;
+  - an icon-only Sudoku escape control is present on auth, PIN, onboarding, list, chat and secondary Messenger surfaces and conceals without logout/reload/network.
+- **#107 modern PIN**
+  - four visual cells, numeric keyboard, latest-digit brief reveal, automatic create/confirm progression and automatic unlock after digit 4;
+  - mismatch/wrong-PIN clears for retry and uses short vibration feedback where the platform supports it;
+  - account-password fallback and existing server lockout policy remain unchanged.
+- **#112 biometrics removed from the product**
+  - Face ID / Touch ID controls and automatic biometric unlock calls are removed from the web product;
+  - native biometric bridge/key-store files, LocalAuthentication/Security framework dependencies and `NSFaceIDUsageDescription` are removed from the iOS host;
+  - existing database migration/server compatibility can remain dormant for rollback/history; no destructive schema cleanup is mixed into this release.
+- **#109 display name**
+  - newly accepted accounts enter a post-registration display-name setup with live preview;
+  - Unicode duplicate display names are supported; blank/control-only values are rejected;
+  - display name remains editable in Settings and phone remains the login/contact-matching identity.
+- **#106 smart phone input**
+  - one country-aware phone input is reused for login, registration, Settings phone change, contact fallback and Invite;
+  - common RU `926… / 8926… / 7926… / +7926…` variants canonicalize to the same `+7` E.164 value;
+  - formatted display is cursor-preserving while the API receives canonical E.164.
+- **#113 full iOS Contacts access**
+  - `Choose contacts` system picker remains;
+  - `Allow all contacts` first shows an in-app explanation, then invokes the iOS permission request;
+  - granted/limited state is surfaced; denial keeps picker/manual fallback;
+  - native code reads only contact name + phone fields.
+- **#114 contact-first admin Invite**
+  - when full Contacts access already exists, name/phone typeahead runs entirely on-device;
+  - system picker and manual smart-phone fallback remain;
+  - only the selected canonical phone number is sent to the invite API.
+- **#115 normal Contacts**
+  - registered contacts render as avatar/initials + Messenger display name, with local phone-book name or formatted number secondary;
+  - local-name/phone search is client-side when the address book is available;
+  - tap opens/reuses the direct E2EE chat;
+  - unmatched phone-book contacts are shown separately as local-only `Not on Sudoku` entries.
+
+### Contacts data boundary
+
+Full Contacts permission does **not** upload the whole address book as stored contact records. The client reads name + phone locally, normalizes phone numbers, and sends phone numbers to `/v1/contacts/sync` only for matching. The backend stores only matched registered-user contact edges. Unmatched names/numbers are not persisted by the contact graph.
+
+### Verification status
+
+Wave 2 code and targeted regressions are prepared. Exact-head API/web/browser/iOS CI and physical-iPhone acceptance remain required before merge or deployment.
