@@ -242,6 +242,28 @@ test("fast upward flick commits below the normal distance threshold only on rele
 });
 
 
+
+
+test("retained Sudoku stays paused while Messenger is active", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await ensureSudokuGame(page);
+
+  await unlockPrivate(page);
+  await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "", {
+    timeout: 5_000,
+  });
+
+  const timer = page.locator(".sudoku-stats strong").nth(1);
+  const privateTimer = await timer.innerText();
+  await page.waitForTimeout(2_200);
+  await expect(timer).toHaveText(privateTimer);
+
+  await page.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+  await expect(page.locator(".sudoku-reveal-screen")).not.toHaveAttribute("aria-hidden", "true");
+});
+
 test("solving the last Sudoku cell freezes the saved timer across reload", async ({ page }) => {
   // A valid unique near-complete puzzle gives this regression a deterministic
   // last move without coupling ordinary play to one shipped puzzle.
