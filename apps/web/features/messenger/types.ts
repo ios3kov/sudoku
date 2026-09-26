@@ -4,6 +4,7 @@ export interface CurrentUser {
   phone_verified: boolean;
   email: string | null;
   display_name: string;
+  profile_setup_completed: boolean;
   is_admin: boolean;
 }
 

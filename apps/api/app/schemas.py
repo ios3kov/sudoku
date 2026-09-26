@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -21,7 +21,7 @@ class InviteAcceptRequest(BaseModel):
     token: str = Field(min_length=16, max_length=512)
     phone: str = Field(min_length=8, max_length=32)
     email: EmailStr | None = None
-    display_name: str = Field(min_length=1, max_length=120)
+    display_name: str | None = Field(default=None, max_length=120)
     password: str = Field(min_length=12, max_length=1024)
     device_name: str = Field(min_length=1, max_length=160)
 
@@ -33,7 +33,22 @@ class UserResponse(BaseModel):
     phone_verified: bool
     email: str | None
     display_name: str
+    profile_setup_completed: bool
     is_admin: bool
+
+
+class UpdateDisplayNameRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Display name is required")
+        if not any(ch.isprintable() and not ch.isspace() for ch in trimmed):
+            raise ValueError("Display name must contain visible characters")
+        return trimmed
 
 
 class InviteCreateRequest(BaseModel):

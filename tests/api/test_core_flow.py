@@ -87,7 +87,6 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
                     "token": raw_invite,
                     "phone": member_phone,
                     "email": member_email,
-                    "display_name": "Member",
                     "password": password,
                     "device_name": "integration-test-member",
                 },
@@ -95,6 +94,16 @@ async def test_invite_message_idempotency_asset_and_origin_boundary() -> None:
             assert accepted.status_code == 201, accepted.text
             member_id = accepted.json()["id"]
             assert accepted.json()["is_admin"] is False
+            assert accepted.json()["profile_setup_completed"] is False
+            assert accepted.json()["display_name"] == "New member"
+
+            profile = await member_client.put(
+                "/v1/me/display-name",
+                json={"display_name": " Member ✦ "},
+            )
+            assert profile.status_code == 200, profile.text
+            assert profile.json()["display_name"] == "Member ✦"
+            assert profile.json()["profile_setup_completed"] is True
 
             synced = await admin_client.post(
                 "/v1/contacts/sync",

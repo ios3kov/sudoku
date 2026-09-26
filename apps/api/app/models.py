@@ -28,6 +28,7 @@ class User(Base):
     phone_e164: Mapped[str | None] = mapped_column(String(16), unique=True)
     phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    profile_setup_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

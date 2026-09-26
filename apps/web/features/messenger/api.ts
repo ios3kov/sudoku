@@ -26,6 +26,11 @@ export const messengerApi = {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ phone, expires_hours: 168, max_uses: 1 }),
   }),
+  updateDisplayName: (displayName: string) => request<CurrentUser>("/v1/me/display-name", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ display_name: displayName }),
+  }),
   updatePhone: (phone: string, password: string) => request<CurrentUser>("/v1/me/phone", {
     method: "PUT",
     headers: { "content-type": "application/json" },

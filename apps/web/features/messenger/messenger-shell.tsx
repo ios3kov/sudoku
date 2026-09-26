@@ -14,6 +14,7 @@ import { RealtimeClient } from "./realtime";
 import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
 import { ContactsPanel } from "./contacts-panel";
+import { ProfilePanel } from "./profile-panel";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
 import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
 
@@ -39,6 +40,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   const [showInvite, setShowInvite] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [secureSetupBusy, setSecureSetupBusy] = useState(false);
   const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
   const [deviceRekeyError, setDeviceRekeyError] = useState<string | null>(null);
@@ -508,12 +510,14 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       setCreating(false);
       setShowInvite(false);
       setShowContacts(false);
+      setShowProfile(false);
       setShowDevices(true);
       return;
     }
     setShowInvite(false);
     setShowDevices(false);
     setShowContacts(false);
+    setShowProfile(false);
     setCreating(true);
   }
 
@@ -521,6 +525,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     setCreating(false);
     setShowDevices(false);
     setShowContacts(false);
+    setShowProfile(false);
     setShowInvite((value) => !value);
   }
 
@@ -528,6 +533,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     setCreating(false);
     setShowInvite(false);
     setShowContacts(false);
+    setShowProfile(false);
     setShowDevices((value) => !value);
   }
 
@@ -535,7 +541,16 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     setCreating(false);
     setShowInvite(false);
     setShowDevices(false);
+    setShowProfile(false);
     setShowContacts((value) => !value);
+  }
+
+  function toggleProfile() {
+    setCreating(false);
+    setShowInvite(false);
+    setShowDevices(false);
+    setShowContacts(false);
+    setShowProfile((value) => !value);
   }
 
   async function openContactChat(contact: { id: string; display_name: string }) {
@@ -862,10 +877,16 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           onClose={() => setShowContacts(false)}
           onOpenChat={openContactChat}
         /> : null}
+        {showProfile ? <ProfilePanel
+          user={user}
+          onUpdated={onUserUpdated}
+          onClose={() => setShowProfile(false)}
+        /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
           {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}
           <button type="button" onClick={toggleContacts}>Contacts</button>
+          <button type="button" onClick={toggleProfile}>Profile</button>
           <button type="button" onClick={toggleDevices}>Devices</button>
           <button type="button" onClick={() => void enablePush()} disabled={pushState === "enabling" || pushState === "enabled"}>
             {pushState === "enabled" ? "Notifications on" : pushState === "enabling" ? "Enabling…" : pushState === "error" ? "Retry notifications" : "Enable notifications"}

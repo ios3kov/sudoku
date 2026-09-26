@@ -38,6 +38,7 @@ const me: CurrentUser = {
   phone_verified: true,
   email: null,
   display_name: "Audit Owner",
+  profile_setup_completed: true,
   is_admin: true,
 };
 

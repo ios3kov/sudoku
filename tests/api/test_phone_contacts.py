@@ -245,7 +245,6 @@ async def test_phone_bound_invite_creates_phone_identity() -> None:
                 json={
                     "token": token,
                     "phone": synthetic_phone(seed + 2),
-                    "display_name": "Wrong",
                     "password": PASSWORD,
                     "device_name": "wrong-phone",
                 },
@@ -257,13 +256,13 @@ async def test_phone_bound_invite_creates_phone_identity() -> None:
                 json={
                     "token": token,
                     "phone": invited_phone,
-                    "display_name": "Invited",
                     "password": PASSWORD,
                     "device_name": "phone-invite",
                 },
             )
             assert accepted.status_code == 201, accepted.text
             assert accepted.json()["phone_e164"] == invited_phone
+            assert accepted.json()["profile_setup_completed"] is False
             user_id = uuid.UUID(accepted.json()["id"])
 
     async with SessionFactory() as db:

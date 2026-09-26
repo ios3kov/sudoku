@@ -6,6 +6,7 @@ import { MessengerRevealPreview } from "./messenger-reveal-preview";
 import { ConversationDraftProvider } from "./conversation-drafts";
 import { DevicePinUnlock } from "./device-pin-unlock";
 import { DevicePinOnboarding } from "./device-pin-onboarding";
+import { DisplayNameOnboarding } from "./display-name-onboarding";
 import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import type { CurrentUser } from "./types";
 import { rememberMessengerEntry } from "../sudoku/startup-preference";
@@ -107,7 +108,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   useEffect(() => {
     // AuthGate also lives beneath the game as a reveal preview. A background
     // session check or PIN onboarding is not a successful messenger entry.
-    if (active && user && !loading && !pinRequired && !pendingLogin) rememberMessengerEntry();
+    if (active && user?.profile_setup_completed && !loading && !pinRequired && !pendingLogin) rememberMessengerEntry();
   }, [active, user, loading, pinRequired, pendingLogin]);
 
   if (loading) return <main className="page" aria-label="Private area">
@@ -122,8 +123,19 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
     onHide={() => { completePendingLogin(); hide(); }}
   />;
 
+  if (user && !active) {
+    return <MessengerRevealPreview user={user} />;
+  }
+
+  if (user && !user.profile_setup_completed) {
+    return <DisplayNameOnboarding
+      user={user}
+      onComplete={setUser}
+      onHide={hide}
+    />;
+  }
+
   if (user) {
-    if (!active) return <MessengerRevealPreview user={user} />;
     return <ConversationDraftProvider key={user.id}><MessengerShell user={user} onHide={hide} onLoggedOut={signedOut} onUserUpdated={setUser} /></ConversationDraftProvider>;
   }
 
@@ -201,7 +213,7 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
     try {
       const response = await fetch("/v1/invites/accept", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, phone: data.get("phone"), display_name: data.get("display_name"), password: data.get("password"), device_name: "Sudoku web app" }),
+        body: JSON.stringify({ token, phone: data.get("phone"), password: data.get("password"), device_name: "Sudoku web app" }),
       });
       if (!alive.current || started !== accessEpoch()) return;
       if (!response.ok) {
@@ -220,7 +232,6 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
 
   return <form className="auth-form" onSubmit={submit}>
     <label>Invite code<input name="invite" autoCapitalize="none" autoCorrect="off" required /></label>
-    <label>Name<input name="display_name" autoComplete="name" required maxLength={120} /></label>
     <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required /></label>
     <label>Password<input name="password" type="password" autoComplete="new-password" minLength={12} required /></label>
     <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Joining…" : "Join"}</button>

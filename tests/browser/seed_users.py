@@ -14,6 +14,7 @@ USERS = (
     ("browser-pin-skip@example.com", "PIN Skip"),
     ("browser-mls-fresh-owner@example.com", "MLS Fresh Owner"),
     ("browser-mls-fresh-peer@example.com", "MLS Fresh Peer"),
+    ("browser-profile-pending@example.com", "New member"),
 )
 PASSWORD = "browser acceptance password"
 
@@ -56,6 +57,7 @@ async def main() -> None:
             user.password_hash = hash_password(PASSWORD)
             user.status = "active"
             user.is_admin = wants_admin
+            user.profile_setup_completed = email != "browser-profile-pending@example.com"
             await db.flush()
 
             if wants_admin:
