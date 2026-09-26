@@ -20,7 +20,7 @@ final class StartupView: UIView {
         titleLabel.font = .systemFont(ofSize: 19, weight: .bold)
         titleLabel.adjustsFontForContentSizeCategory = true
 
-        subtitleLabel.text = "PRIVATE MESSENGER"
+        subtitleLabel.text = "SUDOKU"
         subtitleLabel.textAlignment = .center
         subtitleLabel.textColor = SudokuNativePalette.muted
         subtitleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
