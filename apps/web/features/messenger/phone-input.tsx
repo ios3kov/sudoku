@@ -73,6 +73,7 @@ export function PhoneInput({
     if (nextCountry !== countryCode) setCountryCode(nextCountry);
 
     const ordinal = digitOrdinalBeforeCursor(raw, cursor);
+    const cursorWasAtEnd = cursor === null || cursor === raw.length;
     const formatted = formatPhone(raw, nextCountry);
     const canonical = toE164(raw, nextCountry);
     setDisplay(formatted);
@@ -82,7 +83,9 @@ export function PhoneInput({
     window.requestAnimationFrame(() => {
       const input = inputRef.current;
       if (!input || document.activeElement !== input) return;
-      const nextCursor = cursorForDigitOrdinal(formatted, ordinal);
+      const nextCursor = cursorWasAtEnd
+        ? formatted.length
+        : cursorForDigitOrdinal(formatted, ordinal);
       input.setSelectionRange(nextCursor, nextCursor);
     });
   }
