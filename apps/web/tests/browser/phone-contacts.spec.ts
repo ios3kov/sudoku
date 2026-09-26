@@ -128,7 +128,11 @@ test("registered contact tap creates and then reuses one E2EE direct chat", asyn
     await panel.getByRole("button", { name: "Add contact", exact: true }).click();
     await expect(panel.getByText(testPhone(2), { exact: true })).toBeVisible();
 
-    await panel.getByRole("button", { name: "Open chat with Browser Peer", exact: true }).click();
+    const openPeer = panel.getByRole("button", { name: "Open chat with Browser Peer", exact: true });
+    await openPeer.evaluate((element) => {
+      (element as HTMLButtonElement).click();
+      (element as HTMLButtonElement).click();
+    });
     await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
       timeout: 60_000,
     });
