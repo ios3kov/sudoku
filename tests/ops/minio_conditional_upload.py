@@ -8,6 +8,20 @@ import httpx
 from botocore.config import Config
 
 
+def put_with_connect_retry(url, content, headers, attempts=5):
+    """Retry only transient connection/protocol startup failures, never HTTP contract failures."""
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            return httpx.put(url, content=content, headers=headers, timeout=10)
+        except (httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+            last_error = exc
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.25 * (attempt + 1))
+    raise last_error  # pragma: no cover
+
+
 def main():
     endpoint = "http://127.0.0.1:19000"
     client = boto3.client(
@@ -35,11 +49,10 @@ def main():
         }
         url = client.generate_presigned_url("put_object", Params=params, ExpiresIn=60)
         headers = {"Content-Type": mime, "If-None-Match": "*", "x-amz-meta-sha256": digest}
-        with httpx.Client(timeout=10) as http:
-            assert http.put(url, content=data, headers=headers).status_code == 200
-            assert http.put(url, content=b"replacement", headers=headers).status_code == 412
-            unsigned = {k: v for k, v in headers.items() if k != "If-None-Match"}
-            denied = http.put(url, content=b"replacement", headers=unsigned)
+        assert put_with_connect_retry(url, data, headers).status_code == 200
+        assert put_with_connect_retry(url, b"replacement", headers).status_code == 412
+        unsigned = {k: v for k, v in headers.items() if k != "If-None-Match"}
+        denied = put_with_connect_retry(url, b"replacement", unsigned)
             # Pinned MinIO maps missing signed headers to HTTP 400 AccessDenied.
             assert denied.status_code == 400, denied.text
             assert "<Code>AccessDenied</Code>" in denied.text, denied.text
@@ -53,7 +66,7 @@ def main():
         race_url = client.generate_presigned_url("put_object", Params=params, ExpiresIn=60)
 
         def upload(_, url=race_url, signed=headers):
-            return httpx.put(url, content=data, headers=signed, timeout=10).status_code
+            return put_with_connect_retry(url, data, signed).status_code
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             codes = sorted(pool.map(upload, range(2)))
