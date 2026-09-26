@@ -23,6 +23,8 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricKind, setBiometricKind] = useState<NativeBiometricKind>("none");
   const alive = useRef(false);
+  const requestInFlight = useRef(false);
+  const pinInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     alive.current = true;
@@ -84,55 +86,110 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
     };
   }, [onUnlocked, onSignedOut]);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true); setError(null);
+  useEffect(() => {
+    if (mode !== "pin" || busy) return;
+    const frame = window.requestAnimationFrame(() => {
+      const input = pinInputRef.current;
+      if (input && document.activeElement !== input) input.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  });
+
+  async function submitCredential(
+    credentialMode: "pin" | "password",
+    credential: string,
+  ) {
+    if (requestInFlight.current) return;
+
+    requestInFlight.current = true;
+    setBusy(true);
+    setError(null);
     const started = accessEpoch();
-    const credential = value;
-    setValue("");
+    if (credentialMode === "pin") setValue("");
+
     try {
       const response = await fetch(
-        `/v1/auth/device-access/${mode === "pin" ? "unlock" : "password"}`,
+        `/v1/auth/device-access/${credentialMode === "pin" ? "unlock" : "password"}`,
         {
           method: "POST", credentials: "include", cache: "no-store",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(
-            mode === "pin" ? { pin: credential } : { password: credential },
+            credentialMode === "pin" ? { pin: credential } : { password: credential },
           ),
         },
       );
       if (!alive.current || started !== accessEpoch()) return;
       if (response.status === 401) { forgetUnlock(); onSignedOut(); return; }
-      if (response.status === 409) { onUnlocked(); return; }
+
+      // The PIN may have been removed from another tab/device-management
+      // surface while this gate was visible. Re-check the session rather than
+      // treating 409 as a successful PIN verification.
+      if (response.status === 409) {
+        onUnlocked();
+        return;
+      }
+
       if (!response.ok) {
         if (response.headers.get("X-PIN-Password-Required") === "true") {
           setMode("password");
+          setValue("");
           setError("PIN attempts exhausted. Use your account password.");
         } else {
           setError(
             response.status === 429
               ? "Too many attempts. Try later."
-              : mode === "pin" ? "Incorrect PIN" : "Incorrect password",
+              : credentialMode === "pin" ? "Incorrect PIN" : "Incorrect password",
           );
         }
         return;
       }
+
       const result = await response.json();
-      if (alive.current && acceptUnlock(result.unlock_token, started)) {
-        onUnlocked();
+      if (!alive.current) return;
+      if (!acceptUnlock(result.unlock_token, started)) {
+        setError(
+          credentialMode === "pin"
+            ? "Device state changed. Enter your PIN again."
+            : "Device state changed. Try your password again.",
+        );
+        return;
       }
+      onUnlocked();
     } catch {
       if (alive.current) {
         setError("Network unavailable. Unlock requires a connection.");
       }
     } finally {
-      if (alive.current) setBusy(false);
+      requestInFlight.current = false;
+      if (alive.current) {
+        setBusy(false);
+        if (credentialMode === "pin") {
+          window.requestAnimationFrame(() => pinInputRef.current?.focus());
+        }
+      }
+    }
+  }
+
+  function submitPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || mode !== "password") return;
+    const credential = value;
+    setValue("");
+    void submitCredential("password", credential);
+  }
+
+  function updatePinValue(nextRaw: string) {
+    if (busy || mode !== "pin") return;
+    const next = nextRaw.replace(/\D/g, "").slice(0, 4);
+    setValue(next);
+    if (next.length === 4) {
+      void submitCredential("pin", next);
     }
   }
 
   async function unlockWithBiometrics() {
-    if (busy || mode !== "pin" || !biometricEnabled || !biometricAvailable) return;
+    if (requestInFlight.current || busy || mode !== "pin" || !biometricEnabled || !biometricAvailable) return;
+    requestInFlight.current = true;
     setBusy(true); setError(null);
     const started = accessEpoch();
     const label = biometricLabel(biometricKind);
@@ -207,6 +264,7 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
       if (!alive.current || isNativeBiometricCancellation(reason)) return;
       setError(`${label} is unavailable. Use your PIN.`);
     } finally {
+      requestInFlight.current = false;
       if (alive.current) setBusy(false);
     }
   }
@@ -254,28 +312,53 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
           {busy ? "Checking…" : `Unlock with ${nativeLabel}`}
         </button>
       ) : null}
-      <form className="auth-form" onSubmit={submit}>
-        <label>{mode === "pin" ? "Device PIN" : "Account password"}
-          <input
-            key={mode}
-            name={mode}
-            type="password"
-            inputMode={mode === "pin" ? "numeric" : "text"}
-            autoComplete={mode === "pin" ? "off" : "current-password"}
-            required
-            pattern={mode === "pin" ? "[0-9]{4}" : undefined}
-            minLength={mode === "pin" ? 4 : 1}
-            maxLength={mode === "pin" ? 4 : 1024}
-            className={mode === "pin" ? "device-pin-input" : undefined}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            disabled={busy}
-          />
-        </label>
-        <button type="submit" className="secondary-button" disabled={busy}>
-          {busy ? "Checking…" : "Unlock"}
-        </button>
-      </form>
+      {mode === "pin" ? (
+        <div className="auth-form">
+          <label>Device PIN
+            <input
+              ref={pinInputRef}
+              key={mode}
+              name="pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              required
+              pattern="[0-9]{4}"
+              minLength={4}
+              maxLength={4}
+              className="device-pin-input"
+              value={value}
+              onChange={(event) => updatePinValue(event.target.value)}
+              disabled={busy}
+              autoFocus
+            />
+          </label>
+          <p className="device-access-help" aria-live="polite">
+            {busy ? "Checking PIN…" : "Unlocks automatically after four digits."}
+          </p>
+        </div>
+      ) : (
+        <form className="auth-form" onSubmit={submitPassword}>
+          <label>Account password
+            <input
+              key={mode}
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              minLength={1}
+              maxLength={1024}
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              disabled={busy}
+              autoFocus
+            />
+          </label>
+          <button type="submit" className="secondary-button" disabled={busy}>
+            {busy ? "Checking…" : "Unlock"}
+          </button>
+        </form>
+      )}
       {error && <p className="form-error" role="alert">{error}</p>}
       {mode === "pin" && <button
         type="button"
