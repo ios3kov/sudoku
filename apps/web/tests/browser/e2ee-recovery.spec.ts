@@ -30,6 +30,7 @@ async function unlockPrivate(page: Page) {
     isPrimary: true,
     buttons: 1,
   });
+  await page.waitForTimeout(110);
   await five.dispatchEvent("pointermove", {
     clientX: startX + 1,
     clientY: startY * 0.45,
@@ -37,6 +38,14 @@ async function unlockPrivate(page: Page) {
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
+  });
+  await five.dispatchEvent("pointerup", {
+    clientX: startX + 1,
+    clientY: startY * 0.45,
+    pointerId: 1,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
   });
 
   await expect(page.locator(".messenger-lock, .messenger-page").first()).toBeVisible();
