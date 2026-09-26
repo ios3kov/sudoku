@@ -332,17 +332,21 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
             (conversation) => conversation.encryption_required && conversation.e2ee_ready,
           );
           for (const conversation of encryptedConversations) {
-            void (async () => {
-              await adapter.syncTransport(conversation.id);
-              if (adapter.trackedConversationIds().includes(conversation.id)) {
-                await reconcileDeviceChange(adapter, conversation.id);
-                await adapter.syncTransport(conversation.id);
-              }
-            })().catch(() => {
-              setE2eeState("error");
-            });
+            void syncEncryptedConversation(adapter, conversation)
+              .then(() => {
+                refreshPendingDeviceConversations(adapter);
+              })
+              .catch((error: unknown) => {
+                setE2eeError(
+                  error instanceof Error ? error.message : "Secure transport recovery failed",
+                );
+                setE2eeState("error");
+              });
           }
-          void adapter.ensureKeyPackagePool(10).catch(() => {
+          void adapter.ensureKeyPackagePool(10).catch((error: unknown) => {
+            setE2eeError(
+              error instanceof Error ? error.message : "Secure device preparation failed",
+            );
             setE2eeState("error");
           });
         }
@@ -385,11 +389,28 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               || locallyTracked
             )
           ) {
-            void adapter.syncTransport(event.conversation_id).catch(() => {
-              setE2eeState("error");
-            });
+            const conversation = conversationsRef.current.find(
+              (item) => item.id === event.conversation_id,
+            );
+            const sync = conversation?.encryption_required
+              ? syncEncryptedConversation(adapter, conversation)
+              : adapter.syncTransport(event.conversation_id).then(() => true);
+
+            void sync
+              .then(() => {
+                refreshPendingDeviceConversations(adapter);
+              })
+              .catch((error: unknown) => {
+                setE2eeError(
+                  error instanceof Error ? error.message : "Secure transport recovery failed",
+                );
+                setE2eeState("error");
+              });
             if (event.type === "mls.control.created") {
-              void adapter.ensureKeyPackagePool(10).catch(() => {
+              void adapter.ensureKeyPackagePool(10).catch((error: unknown) => {
+                setE2eeError(
+                  error instanceof Error ? error.message : "Secure device preparation failed",
+                );
                 setE2eeState("error");
               });
             }
@@ -429,7 +450,15 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       realtimeRef.current = null;
       setRealtimeClient(null);
     };
-  }, [acknowledgeRead, loadConversations, reconcileDeviceChange, revokeLocalSession, user.id]);
+  }, [
+    acknowledgeRead,
+    loadConversations,
+    reconcileDeviceChange,
+    refreshPendingDeviceConversations,
+    revokeLocalSession,
+    syncEncryptedConversation,
+    user.id,
+  ]);
 
   async function enablePush() {
     setPushState("enabling");
