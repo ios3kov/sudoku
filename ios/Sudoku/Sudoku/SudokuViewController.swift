@@ -19,6 +19,7 @@ final class SudokuViewController: UIViewController {
         let controller = WKUserContentController()
         controller.add(self, name: Self.contactHandlerName)
         controller.add(self, name: Self.themeHandlerName)
+        hapticBridge.install(into: controller)
         mediaBridge.install(into: controller)
         videoPlayback.install(into: controller)
         videoPlayback.presenter = self
@@ -79,6 +80,7 @@ final class SudokuViewController: UIViewController {
 
     private let startupView = StartupView()
     private let privacyCover = PrivacyCoverView()
+    private let hapticBridge = NativeHapticBridge()
     private let mediaBridge = NativeMediaBridge()
     private let videoPlayback = NativeVideoPlayback()
     private var lifecycleState = NativeLifecycleState()
@@ -163,6 +165,7 @@ final class SudokuViewController: UIViewController {
             forName: Self.themeHandlerName
         )
         videoPlayback.uninstall(from: webView.configuration.userContentController)
+        hapticBridge.uninstall(from: webView.configuration.userContentController)
         mediaBridge.uninstall(
             from: webView.configuration.userContentController
         )
