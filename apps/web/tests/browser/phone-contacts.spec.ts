@@ -181,15 +181,19 @@ test("full iOS Contacts access syncs registered users and keeps local-name searc
   await login(page, testPhone(5));
 
   await page.evaluate(({ registeredPhone }) => {
+    let authorization = "not_determined";
     Object.defineProperty(window, "SudokuNativeContacts", {
       configurable: true,
       value: {
         select: async () => [],
-        status: async () => "not_determined",
-        all: async () => [
-          { name: ["Local Alice"], tel: [registeredPhone] },
-          { name: ["Only On Phone"], tel: ["+38267111222"] },
-        ],
+        status: async () => authorization,
+        all: async () => {
+          authorization = "authorized";
+          return [
+            { name: ["Local Alice"], tel: [registeredPhone] },
+            { name: ["Only On Phone"], tel: ["+38267111222"] },
+          ];
+        },
       },
     });
     window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
