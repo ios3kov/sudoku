@@ -1509,3 +1509,131 @@
 .selected-invite-contact small{
   color:#64748b;
 }
+
+
+.contact-section-label{
+  margin:14px 4px 4px;
+  color:#64748b;
+  font-size:.6875rem;
+  font-weight:800;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+.contact-section-label.secondary{
+  margin-top:22px;
+  color:#94a3b8;
+}
+
+.local-only-list{
+  opacity:.84;
+}
+
+.contact-row.local-only{
+  min-height:62px;
+  display:grid;
+  grid-template-columns:48px minmax(0,1fr);
+  align-items:center;
+  gap:12px;
+  padding:7px 4px;
+}
+
+.contact-full-access-state{
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  padding:0 12px;
+  border:1px solid #bbf7d0;
+  border-radius:14px;
+  background:#f0fdf4;
+  color:#166534;
+  font-size:.8125rem;
+  font-weight:700;
+}
+
+.contact-full-access-button{
+  border:1px solid #dbeafe!important;
+  border-radius:14px!important;
+  background:#fff!important;
+  color:#2563eb!important;
+  font-weight:700!important;
+}
+
+.contact-full-access-explanation{
+  display:grid;
+  gap:10px;
+  margin:8px 0;
+  padding:14px;
+  border:1px solid #dbeafe;
+  border-radius:16px;
+  background:#f8fbff;
+  color:#334155;
+}
+
+.contact-full-access-explanation p{
+  margin:0;
+  color:#64748b;
+  font-size:.8125rem;
+  line-height:1.45;
+}
+
+.contact-full-access-explanation>div{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+
+.invite-contact-search{
+  position:relative;
+  display:grid;
+  gap:6px;
+}
+
+.invite-contact-search>input{
+  width:100%;
+}
+
+.invite-contact-suggestions{
+  display:grid;
+  border:1px solid #e2e8f0;
+  border-radius:16px;
+  overflow:hidden;
+  background:#fff;
+  box-shadow:0 14px 34px rgba(15,23,42,.09);
+}
+
+.invite-contact-suggestions button{
+  width:100%;
+  min-height:62px;
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+  padding:8px 10px;
+  border:0;
+  border-bottom:1px solid #eef2f7;
+  background:#fff;
+  text-align:left;
+}
+
+.invite-contact-suggestions button:last-child{
+  border-bottom:0;
+}
+
+.invite-contact-suggestions button>span:last-child{
+  min-width:0;
+  display:grid;
+  gap:2px;
+}
+
+.invite-contact-suggestions strong,
+.invite-contact-suggestions small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.invite-contact-suggestions small{
+  color:#94a3b8;
+  font-size:.75rem;
+}
