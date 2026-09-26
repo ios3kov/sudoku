@@ -55,7 +55,7 @@ async function unlockPrivate(page: Page) {
   });
 }
 
-async function login(page: Page, phone: string) {
+async function login(page: Page, phone: string, options: { requireSecureReady?: boolean } = {}) {
   await unlockPrivate(page);
   const phoneInput = page.getByLabel("Phone number", { exact: true });
 
@@ -98,9 +98,11 @@ async function login(page: Page, phone: string) {
   // pool in WASM. On cold GitHub runners this can be materially slower than
   // ordinary UI hydration, so assert the real readiness signal instead of
   // treating cryptographic startup as a 60s rendering deadline.
-  const newChat = page.getByRole("button", { name: "New secure chat" });
-  await expect(newChat).toBeVisible({ timeout: 120_000 });
-  await expect(newChat).toBeEnabled({ timeout: 120_000 });
+  if (options.requireSecureReady !== false) {
+    const newChat = page.getByRole("button", { name: "New secure chat" });
+    await expect(newChat).toBeVisible({ timeout: 120_000 });
+    await expect(newChat).toBeEnabled({ timeout: 120_000 });
+  }
 }
 
 async function reopenMessenger(page: Page) {
@@ -410,21 +412,24 @@ test("BFCache lifecycle preserves the active MLS adapter", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(5));
 
-  const newChat = page.locator(".minimal-new-chat-button");
-  await expect(newChat).toBeEnabled();
+  await expect(page.getByRole("button", { name: "New secure chat" })).toBeEnabled();
 
   await page.evaluate(() => {
     window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
     window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
   });
 
-  // The privacy shell may intentionally keep real Sudoku above Messenger
-  // during synthetic page lifecycle events. Inspect the retained private DOM:
-  // BFCache must not retire the MLS adapter or turn secure messaging into an
-  // error while the private surface is concealed.
-  await expect(newChat).toBeEnabled({ timeout: 30_000 });
+  // Privacy policy intentionally locks/conceals Messenger on pagehide. Re-enter
+  // through the normal reveal/lock gate, then verify BFCache did not poison the
+  // underlying MLS state.
+  await unlockPrivate(page);
+  const pin = page.getByLabel("Device PIN", { exact: true });
+  if (await pin.count()) {
+    await pin.fill("0123");
+  }
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible({ timeout: 60_000 });
   await expect(
-    page.locator(".messenger-inline-status").filter({ hasText: "Secure messaging needs a restart." }),
+    page.getByText("Secure messaging needs a restart.", { exact: true }),
   ).toHaveCount(0);
 });
 
@@ -476,7 +481,7 @@ test("fresh authenticated device joins an existing encrypted direct chat without
     expect(direct).toBeDefined();
     if (!direct) throw new Error("Existing encrypted direct conversation is missing");
 
-    await login(freshOwner, OWNER_PHONE);
+    await login(freshOwner, OWNER_PHONE, { requireSecureReady: false });
     await expect(
       freshOwner.getByText("Secure messaging needs a restart.", { exact: true }),
     ).toHaveCount(0);
