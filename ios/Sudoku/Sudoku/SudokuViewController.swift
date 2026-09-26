@@ -174,7 +174,8 @@ final class SudokuViewController: UIViewController {
 
     private func renderLifecycle(animatedStartup: Bool) {
         let showStartup = lifecycleState.startupVisible
-        let showPrivacy = lifecycleState.privacyVisible && currentSurface == .messenger
+        let showPrivacy = lifecycleState.privacyVisible
+            && NativeSurfacePolicy.requiresPrivacyCover(for: currentSurface)
 
         webView.accessibilityElementsHidden = showStartup || showPrivacy
 
