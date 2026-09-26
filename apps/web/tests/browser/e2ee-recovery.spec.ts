@@ -437,7 +437,6 @@ test("fresh authenticated device joins an existing encrypted direct chat without
   test.setTimeout(360_000);
   const primaryPhone = testPhone(3);
   const peerPhone = testPhone(5);
-  const primaryName = "PIN Member";
   const peerName = "PIN Skip";
 
   const ownerContext = await browser.newContext();
