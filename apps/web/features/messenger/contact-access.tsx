@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
-import { NATIVE_CONTACTS_READY_EVENT, nativeContactsAvailable, nativeFullContactsAvailable, readAllNativeContacts, selectNativeContacts } from "./native-contact-access";
+import { NATIVE_CONTACTS_READY_EVENT, nativeContactsAuthorization, nativeContactsAvailable, nativeFullContactsAvailable, readAllNativeContacts, selectNativeContacts, type NativeContactsAuthorization } from "./native-contact-access";
 import { canonicalizePhone, initialPhoneCountry, PhoneInput } from "./phone-input";
 
 type PickerContact = { name?: string[]; tel?: string[] };
@@ -26,12 +26,25 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   const [pickerAvailable, setPickerAvailable] = useState(false);
   const [nativePickerAvailable, setNativePickerAvailable] = useState(false);
   const [nativeFullAvailable, setNativeFullAvailable] = useState(false);
+  const [fullAuthorization, setFullAuthorization] = useState<NativeContactsAuthorization>("unknown");
   const [showFullExplanation, setShowFullExplanation] = useState(false);
 
   useEffect(() => {
     function refreshNativeAvailability() {
+      const fullAvailable = nativeFullContactsAvailable();
       setNativePickerAvailable(nativeContactsAvailable());
-      setNativeFullAvailable(nativeFullContactsAvailable());
+      setNativeFullAvailable(fullAvailable);
+      if (fullAvailable) {
+        void nativeContactsAuthorization()
+          .then((status) => {
+            if (!cancelled) setFullAuthorization(status);
+          })
+          .catch(() => {
+            if (!cancelled) setFullAuthorization("unknown");
+          });
+      } else {
+        setFullAuthorization("unknown");
+      }
     }
 
     refreshNativeAvailability();
@@ -114,6 +127,7 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
         return;
       }
       const matched = await messengerApi.syncContacts(normalized, true);
+      setFullAuthorization(await nativeContactsAuthorization().catch(() => "unknown"));
       setNotice(`${matched.length} registered contact${matched.length === 1 ? "" : "s"} available.`);
       setShowFullExplanation(false);
       onSynced();
@@ -142,18 +156,24 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
           </button>
         ) : null}
         {nativeFullAvailable ? (
-          <button
-            type="button"
-            className="contact-full-access-button"
-            disabled={busy}
-            onClick={() => {
-              setError(null);
-              setNotice(null);
-              setShowFullExplanation(true);
-            }}
-          >
-            Allow all contacts
-          </button>
+          fullAuthorization === "authorized" || fullAuthorization === "limited" ? (
+            <div className="contact-full-access-state" role="status">
+              Full Contacts access {fullAuthorization === "limited" ? "limited" : "enabled"}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="contact-full-access-button"
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setNotice(null);
+                setShowFullExplanation(true);
+              }}
+            >
+              Allow all contacts
+            </button>
+          )
         ) : null}
         <form onSubmit={submitManual} className="contact-manual-form">
           <PhoneInput
