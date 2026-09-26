@@ -664,6 +664,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               )}
           </p>
         </section>
+        <SudokuEscapeButton onHide={onHide} />
       </main>
     );
   }
@@ -689,6 +690,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
             }}
           />
         </section>
+        <SudokuEscapeButton onHide={onHide} />
       </main>
     );
   }
