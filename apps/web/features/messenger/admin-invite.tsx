@@ -62,12 +62,6 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
         const status = await nativeContactsAuthorization();
         if (cancelled) return;
         setFullStatus(status);
-        if (status === "granted" || status === "limited") {
-          const raw = await requestAllNativeContacts();
-          if (!cancelled) {
-            setContacts(normalizeNativeContacts(raw, countryCode));
-          }
-        }
       } catch {
         if (!cancelled) setFullStatus(null);
       }
@@ -181,7 +175,7 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
                 {loadingContacts
                   ? "Loading…"
                   : fullStatus === "granted" || fullStatus === "limited"
-                    ? "Refresh contacts"
+                    ? contacts.length > 0 ? "Refresh contacts" : "Load contacts"
                     : "Allow all contacts"}
               </button>
             ) : null}
