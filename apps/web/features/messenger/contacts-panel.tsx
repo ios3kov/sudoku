@@ -73,7 +73,6 @@ export function ContactsPanel({
             <div className="settings-row" key={contact.id}>
               <button
                 type="button"
-                className="settings-row-main"
                 disabled={!chatEnabled || openingId === contact.id}
                 onClick={() => void open(contact)}
                 aria-label={`Open chat with ${contact.display_name}`}
