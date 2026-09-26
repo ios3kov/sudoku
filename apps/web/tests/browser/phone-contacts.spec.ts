@@ -241,7 +241,7 @@ test("native full Contacts permission syncs only registered matches", async ({ p
           status = "granted";
           return [
             { name: ["Registered"], tel: [registeredPhone] },
-            { name: ["Not registered"], tel: ["+199999999999999"] },
+            { name: ["Not registered"], tel: ["+15555550199"] },
           ];
         },
       },
