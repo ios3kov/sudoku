@@ -154,6 +154,62 @@ test("native iOS contact bridge syncs only explicitly selected phones", async ({
   await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
 });
 
+test("native full Contacts permission syncs only registered matches", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(5));
+
+  await page.evaluate(({ registeredPhone }) => {
+    let status = "not_determined";
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["Selected"], tel: [registeredPhone] }],
+        status: async () => status,
+        requestAll: async () => {
+          status = "granted";
+          return [
+            { name: ["Registered"], tel: [registeredPhone] },
+            { name: ["Not registered"], tel: ["+15555550199"] },
+          ];
+        },
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  }, { registeredPhone: testPhone(2) });
+
+  await page.getByRole("button", { name: "New secure chat", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Allow all contacts", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Allow all contacts", exact: true }).click();
+
+  await expect(page.getByRole("status")).toContainText("1 registered contact matched from Contacts.");
+  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sync all contacts", exact: true })).toBeVisible();
+});
+
+test("denied full Contacts access keeps picker and manual fallback available", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(5));
+
+  await page.evaluate(({ selectedPhone }) => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["Selected"], tel: [selectedPhone] }],
+        status: async () => "denied",
+        requestAll: async () => {
+          throw new Error("denied");
+        },
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  }, { selectedPhone: testPhone(2) });
+
+  await page.getByRole("button", { name: "New secure chat", exact: true }).click();
+  await expect(page.getByText("Full Contacts access is off. Picker and manual entry still work.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose phone contacts", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Add contact by phone", { exact: true })).toBeVisible();
+});
+
 test("manual phone fallback syncs a contact when picker is unavailable", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(4));
