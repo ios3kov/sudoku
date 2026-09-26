@@ -277,6 +277,18 @@ Product removal sequence:
 
 PIN + account password remain the supported local/recovery paths.
 
+### #112 implementation checkpoint — 2026-09-26
+
+Biometric unlock has been removed from the product surface.
+
+- PIN + account password are the supported local/recovery paths;
+- DevicePinUnlock no longer detects, offers or calls Face ID / Touch ID;
+- Devices settings no longer offers biometric enrollment/removal;
+- the native WKWebView biometric bridge and Secure Enclave key-store files are removed;
+- `LocalAuthentication.framework` is removed from the iOS target;
+- `NSFaceIDUsageDescription` is removed from Info.plist;
+- server biometric endpoints and migration `0018_session_biometrics` remain dormant for compatibility and later maintenance cleanup.
+
 ## 2.4 Display name / nickname onboarding — #109
 
 After registration / first successful account setup:
