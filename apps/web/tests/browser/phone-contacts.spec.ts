@@ -37,7 +37,7 @@ async function login(page: Page, phone: string) {
   await page.getByLabel("Phone number", { exact: true }).fill(phone);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Set PIN", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Not now", exact: true }).click();
   await expect(page.getByRole("button", { name: "New secure chat", exact: true })).toBeEnabled({ timeout: 120_000 });
 }
@@ -172,4 +172,69 @@ test("Contacts panel lists and removes an allowed contact", async ({ page }) => 
 
   await panel.getByRole("button", { name: "Close", exact: true }).click();
   await expect(panel).toHaveCount(0);
+});
+
+
+test("full iOS Contacts access syncs registered users and keeps local-name search local", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(5));
+
+  await page.evaluate(({ registeredPhone }) => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [],
+        status: async () => "not_determined",
+        all: async () => [
+          { name: ["Local Alice"], tel: [registeredPhone] },
+          { name: ["Only On Phone"], tel: ["+38267111222"] },
+        ],
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  }, { registeredPhone: testPhone(3) });
+
+  await page.getByRole("button", { name: "Contacts", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  await expect(panel.getByRole("button", { name: "Allow all contacts", exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "Allow all contacts", exact: true }).click();
+
+  const explanation = panel.getByRole("dialog", { name: "Allow all contacts", exact: true });
+  await expect(explanation).toContainText("phone numbers");
+  await explanation.getByRole("button", { name: "Continue", exact: true }).click();
+
+  await expect(panel.getByText("Full Contacts access enabled", { exact: true })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Open chat with PIN Member", exact: true })).toBeVisible();
+  await expect(panel.getByText("Only On Phone", { exact: true })).toBeVisible();
+
+  await panel.getByLabel("Search contacts", { exact: true }).fill("Local Alice");
+  await expect(panel.getByRole("button", { name: "Open chat with PIN Member", exact: true })).toBeVisible();
+  await expect(panel.getByText("Local Alice", { exact: true })).toBeVisible();
+});
+
+test("denied full Contacts access keeps picker and manual fallback available", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(5));
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [],
+        status: async () => "not_determined",
+        all: async () => { throw new DOMException("Denied", "NotAllowedError"); },
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  });
+
+  await page.getByRole("button", { name: "Contacts", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  await panel.getByRole("button", { name: "Allow all contacts", exact: true }).click();
+  await panel.getByRole("dialog", { name: "Allow all contacts", exact: true })
+    .getByRole("button", { name: "Continue", exact: true }).click();
+
+  await expect(panel.getByRole("alert")).toContainText("You can still choose contacts or add a number manually");
+  await expect(panel.getByRole("button", { name: "Choose contacts", exact: true })).toBeVisible();
+  await expect(panel.getByLabel("Add contact by phone", { exact: true })).toBeVisible();
 });
