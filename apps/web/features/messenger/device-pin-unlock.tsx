@@ -89,10 +89,11 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
   useEffect(() => {
     if (mode !== "pin" || busy) return;
     const frame = window.requestAnimationFrame(() => {
-      pinInputRef.current?.focus();
+      const input = pinInputRef.current;
+      if (input && document.activeElement !== input) input.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [biometricAvailable, biometricEnabled, busy, mode]);
+  });
 
   async function submitCredential(
     credentialMode: "pin" | "password",
