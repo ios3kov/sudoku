@@ -15,6 +15,10 @@ enum NativeSurfacePolicy {
         }
     }
 
+    static func requiresPrivacyCover(for surface: NativeSurface) -> Bool {
+        surface == .messenger
+    }
+
     static func statusBarStyle(for surface: NativeSurface) -> UIStatusBarStyle {
         switch surface {
         case .sudoku:
