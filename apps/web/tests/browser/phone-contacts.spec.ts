@@ -103,7 +103,80 @@ test("manual contact accepts local RU trunk prefix and syncs canonical contact",
   await page.getByRole("button", { name: "Add contact", exact: true }).click();
 
   await expect(page.getByRole("status")).toContainText("registered contact");
-  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.locator(".contact-chat-row").filter({ hasText: testPhone(2) })).toBeVisible();
+});
+
+test("admin invite searches local Contacts by name and RU phone variants", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(4));
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["Иван Петров"], tel: ["+7 (926) 237-36-09"] }],
+        status: async () => "granted",
+        requestAll: async () => [
+          { name: ["Иван Петров"], tel: ["+7 (926) 237-36-09"] },
+        ],
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  });
+
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  const invite = page.getByRole("dialog", { name: "Create invite", exact: true });
+  await expect(invite).toBeVisible();
+
+  await invite.getByRole("button", { name: "Load contacts", exact: true }).click();
+  await expect(invite.getByRole("button", { name: "Refresh contacts", exact: true })).toBeVisible();
+  await invite.getByLabel("Invite phone country", { exact: true }).selectOption("RU");
+  const search = invite.getByPlaceholder("Name or phone number", { exact: true });
+  await search.fill("Иван");
+  await expect(invite.getByRole("option").filter({ hasText: "Иван Петров" })).toBeVisible();
+
+  await search.fill("8926");
+  const suggestion = invite.getByRole("option").filter({ hasText: "Иван Петров" });
+  await expect(suggestion).toBeVisible();
+  await suggestion.click();
+
+  const selected = invite.getByLabel("Selected invite contact");
+  await expect(selected).toContainText("Иван Петров");
+  await expect(selected).toContainText("+7 (926) 237-36-09");
+
+  const createRequest = page.waitForRequest((request) =>
+    request.method() === "POST" && request.url().endsWith("/v1/invites")
+  );
+  await invite.getByRole("button", { name: "Create invite", exact: true }).click();
+  const request = await createRequest;
+  expect(request.postDataJSON().phone).toBe("+79262373609");
+  await expect(invite.locator("code")).toBeVisible();
+});
+
+test("admin invite keeps picker fallback when full Contacts access is denied", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(4));
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["Picker Person"], tel: ["+79262373609"] }],
+        status: async () => "denied",
+        requestAll: async () => {
+          throw new Error("denied");
+        },
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  });
+
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  const invite = page.getByRole("dialog", { name: "Create invite", exact: true });
+  await expect(invite.getByText("Full Contacts access is off. Picker and manual number entry still work.", { exact: true })).toBeVisible();
+  await invite.getByRole("button", { name: "Choose contact", exact: true }).click();
+  await expect(invite.getByLabel("Selected invite contact")).toContainText("Picker Person");
+  await expect(invite.getByRole("button", { name: "Create invite", exact: true })).toBeEnabled();
 });
 
 test("system contact picker sync exposes only selected registered contacts", async ({ page }) => {
@@ -120,10 +193,10 @@ test("system contact picker sync exposes only selected registered contacts", asy
 
   await login(page, testPhone(5));
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Phone contacts" })).toBeVisible();
 
-  const directory = page.locator(".directory-item");
-  await expect(directory).toHaveCount(0);
+  const directory = page.locator(".contact-chat-row");
+  await expect(directory.filter({ hasText: testPhone(3) })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("1 registered contact");
@@ -147,11 +220,67 @@ test("native iOS contact bridge syncs only explicitly selected phones", async ({
   }, { selectedPhone: testPhone(2) });
 
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Phone contacts" })).toBeVisible();
 
   await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("registered contact");
-  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.locator(".contact-chat-row").filter({ hasText: testPhone(2) })).toBeVisible();
+});
+
+test("native full Contacts permission syncs only registered matches", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(5));
+
+  await page.evaluate(({ registeredPhone }) => {
+    let status = "not_determined";
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["Selected"], tel: [registeredPhone] }],
+        status: async () => status,
+        requestAll: async () => {
+          status = "granted";
+          return [
+            { name: ["Registered"], tel: [registeredPhone] },
+            { name: ["Not registered"], tel: ["+15555550199"] },
+          ];
+        },
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  }, { registeredPhone: testPhone(2) });
+
+  await page.getByRole("button", { name: "New secure chat", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Allow all contacts", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Allow all contacts", exact: true }).click();
+
+  await expect(page.getByRole("status")).toContainText("1 registered contact matched from Contacts.");
+  await expect(page.locator(".contact-chat-row").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sync all contacts", exact: true })).toBeVisible();
+});
+
+test("denied full Contacts access keeps picker and manual fallback available", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(5));
+
+  await page.evaluate(({ selectedPhone }) => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["Selected"], tel: [selectedPhone] }],
+        status: async () => "denied",
+        requestAll: async () => {
+          throw new Error("denied");
+        },
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  }, { selectedPhone: testPhone(2) });
+
+  await page.getByRole("button", { name: "New secure chat", exact: true }).click();
+  await expect(page.getByText("Full Contacts access is off. Picker and manual entry still work.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose phone contacts", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Add contact by phone", { exact: true })).toBeVisible();
 });
 
 test("manual phone fallback syncs a contact when picker is unavailable", async ({ page }) => {
@@ -163,11 +292,34 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
   await page.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(2));
   await page.getByRole("button", { name: "Add contact", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("registered contact");
-  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.locator(".contact-chat-row").filter({ hasText: testPhone(2) })).toBeVisible();
 });
 
 
 
+
+test("New chat opens searchable Contacts and keeps group creation available", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(3));
+
+  await page.getByRole("button", { name: "New secure chat", exact: true }).click();
+  const contacts = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  await contacts.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(5));
+  await contacts.getByRole("button", { name: "Add contact", exact: true }).click();
+  await expect(contacts.getByRole("status")).toContainText("registered contact");
+  await expect(contacts).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Create secure chat", exact: true })).toHaveCount(0);
+
+  const search = contacts.getByLabel("Search contacts", { exact: true });
+  await search.fill("PIN Skip");
+  await expect(contacts.locator(".contact-chat-row").filter({ hasText: "PIN Skip" })).toBeVisible();
+
+  await contacts.getByRole("button", { name: "Create group", exact: true }).click();
+  const group = page.getByRole("dialog", { name: "Create secure chat", exact: true });
+  await expect(group).toBeVisible();
+  await expect(group.getByRole("button", { name: "Direct", exact: true })).toHaveCount(0);
+  await expect(group.getByRole("button", { name: "Group", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
 
 test("registered contact opens or reuses one direct chat from Contacts in one tap", async ({ page }) => {
   test.setTimeout(240_000);

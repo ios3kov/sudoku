@@ -37,7 +37,8 @@ async function mount(page: import("@playwright/test").Page, mode: string) {
 
 test("admin invite create, copy and close buttons perform their actions", async ({ page }) => {
   await mount(page, "invite");
-  await page.getByLabel("Phone number", { exact: true }).fill("+70000000003");
+  await page.getByPlaceholder("Name or phone number", { exact: true }).fill("+70000000003");
+  await page.getByRole("option", { name: /Invite this number/ }).click();
   await page.getByRole("button", { name: "Create invite", exact: true }).click();
   await expect(page.getByText("invite-token", { exact: true })).toBeVisible();
 

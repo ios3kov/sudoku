@@ -177,6 +177,13 @@ code{overflow-wrap:anywhere}
 .selected-count{margin:0;color:var(--muted);font-size:12px}
 .settings-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
 .settings-row>div:first-child{min-width:0;display:grid;gap:3px}
+.contacts-primary-panel{gap:12px}
+.contacts-primary-search{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:center;border:1px solid var(--line);border-radius:11px;padding:0 10px;background:var(--surface)}
+.contacts-primary-search input{min-width:0;min-height:44px;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0}
+.contacts-primary-list{max-height:min(52vh,520px);overflow:auto}
+.contacts-group-action{width:100%}
+.contact-status{margin-top:3px!important;font-size:11px!important;color:var(--muted)!important}
+.contact-status.is-active{color:var(--accent)!important}
 .contact-chat-row{align-items:stretch;padding:0}
 .contact-chat-action{flex:1;min-width:0;border:0;background:transparent;display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 0;text-align:left;cursor:pointer}
 .contact-chat-action:hover{background:var(--surface-2)}
@@ -195,6 +202,25 @@ code{overflow-wrap:anywhere}
 .member-search small{display:block;color:var(--muted)}
 .preference-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0}
 .admin-invite-panel,.settings-panel,.group-settings,.message-search-panel{border-bottom:1px solid var(--line)}
+.invite-contact-flow{display:grid;gap:12px}
+.invite-contact-actions{display:flex;flex-wrap:wrap;gap:8px}
+.invite-contact-actions button{min-height:42px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:0 12px}
+.invite-search-field{display:grid;gap:7px;font-size:13px;font-weight:600}
+.invite-search-control{display:grid;grid-template-columns:auto minmax(0,1fr);border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--surface)}
+.invite-search-control:focus-within{border-color:var(--accent)}
+.invite-search-control select{min-width:86px;border:0;border-right:1px solid var(--line);background:var(--surface-2);padding:0 9px}
+.invite-search-control input{min-width:0;min-height:46px;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0 12px}
+.invite-suggestions{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.invite-suggestions>button{width:100%;border:0;border-bottom:1px solid var(--line);background:var(--surface);display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px;align-items:center;padding:10px;text-align:left}
+.invite-suggestions>button:last-of-type{border-bottom:0}
+.invite-suggestions>button:hover{background:var(--surface-2)}
+.invite-suggestions strong,.invite-suggestions small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.invite-suggestions small{margin-top:2px;color:var(--muted)}
+.invite-suggestions>p{padding:11px;margin:0}
+.invite-selected-contact{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.invite-selected-contact small,.invite-selected-contact strong,.invite-selected-contact span{display:block}
+.invite-selected-contact>span:nth-child(2){min-width:0}
+.invite-selected-contact>button{border:0;background:transparent;font-size:22px;color:var(--muted)}
 .invite-result{display:grid;gap:10px}
 .invite-result code{display:block;padding:12px;border-radius:10px;background:var(--surface-2);font-size:13px}
 .create-group-button{width:100%}

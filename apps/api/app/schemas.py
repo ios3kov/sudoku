@@ -73,7 +73,7 @@ class UpdatePhoneRequest(BaseModel):
 
 
 class ContactSyncRequest(BaseModel):
-    phones: list[str] = Field(min_length=1, max_length=500)
+    phones: list[str] = Field(min_length=0, max_length=500)
     replace: bool = False
 
 

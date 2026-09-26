@@ -147,23 +147,12 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await login(peer, PEER_PHONE);
     await login(owner, OWNER_PHONE);
 
-    let directoryRequests = 0;
-    owner.on("request", (request) => {
-      if (request.url().includes("/v1/users?q=")) directoryRequests += 1;
-    });
-
     await owner.getByRole("button", { name: "New secure chat" }).click();
-    await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
-    await expect(owner.getByRole("button", { name: "Direct", exact: true })).toHaveAttribute("aria-pressed", "true");
-
-    await expect.poll(() => directoryRequests).toBeGreaterThan(0);
-
-    const peopleSearch = owner.getByPlaceholder("Search people");
-    await peopleSearch.fill("Browser Peer");
-    const peerResult = owner.locator(".directory-item").filter({ hasText: PEER_PHONE });
+    const contacts = owner.getByRole("dialog", { name: "Phone contacts", exact: true });
+    await expect(contacts).toBeVisible();
+    const peerResult = contacts.locator(".contact-chat-row").filter({ hasText: PEER_PHONE });
     await expect(peerResult).toBeVisible();
-    expect(directoryRequests).toBeGreaterThan(0);
-    await peerResult.click();
+    await peerResult.locator(".contact-chat-action").click();
 
     await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
       timeout: 60_000,
@@ -455,16 +444,15 @@ test("fresh authenticated device joins an existing encrypted direct chat without
     await login(owner, primaryPhone);
 
     await owner.getByRole("button", { name: "New secure chat" }).click();
-    await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
-    await owner.getByLabel("Add contact by phone", { exact: true }).fill(peerPhone);
-    await owner.getByRole("button", { name: "Add contact", exact: true }).click();
-    await expect(owner.getByRole("status")).toContainText("registered contact");
+    const contacts = owner.getByRole("dialog", { name: "Phone contacts", exact: true });
+    await expect(contacts).toBeVisible();
+    await contacts.getByLabel("Add contact by phone", { exact: true }).fill(peerPhone);
+    await contacts.getByRole("button", { name: "Add contact", exact: true }).click();
+    await expect(contacts.getByRole("status")).toContainText("registered contact");
 
-    const peopleSearch = owner.getByPlaceholder("Search people");
-    await peopleSearch.fill(peerName);
-    const peerResult = owner.locator(".directory-item").filter({ hasText: peerPhone });
+    const peerResult = contacts.locator(".contact-chat-row").filter({ hasText: peerPhone });
     await expect(peerResult).toBeVisible();
-    await peerResult.click();
+    await peerResult.locator(".contact-chat-action").click();
 
     const resumeSetup = owner.getByRole("button", { name: "Resume secure setup", exact: true });
     if (await resumeSetup.count()) {

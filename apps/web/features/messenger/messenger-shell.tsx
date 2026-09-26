@@ -514,9 +514,17 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       setShowDevices(true);
       return;
     }
+    setCreating(false);
     setShowInvite(false);
     setShowDevices(false);
+    setShowProfile(false);
+    setShowContacts(true);
+  }
+
+  function openGroupCreation() {
     setShowContacts(false);
+    setShowInvite(false);
+    setShowDevices(false);
     setShowProfile(false);
     setCreating(true);
   }
@@ -764,6 +772,8 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
             onCreated={addConversation}
             onCancel={() => setCreating(false)}
             adapter={e2eeState === "ready" ? e2eeAdapter : null}
+            initialMode="group"
+            directEnabled={false}
           />
         ) : (
           <>
@@ -876,6 +886,12 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         {showContacts ? <ContactsPanel
           onClose={() => setShowContacts(false)}
           onOpenChat={openContactChat}
+          conversationPeerIds={conversations
+            .filter((conversation) => conversation.type === "direct")
+            .flatMap((conversation) => conversation.members)
+            .filter((member) => member.id !== user.id)
+            .map((member) => member.id)}
+          onCreateGroup={openGroupCreation}
         /> : null}
         {showProfile ? <ProfilePanel
           user={user}

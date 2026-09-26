@@ -139,6 +139,37 @@ async def test_contact_sync_controls_directory_and_new_conversations() -> None:
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_contact_sync_does_not_persist_unmatched_phone_numbers() -> None:
+    seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 150000
+    owner = await create_user(seed, "Privacy Owner")
+    peer = await create_user(seed + 1, "Registered Peer")
+    unmatched = "+1999" + str(uuid.uuid4().int % 10_000_000).zfill(7)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=ORIGIN,
+        headers=HEADERS,
+    ) as client:
+        await phone_login(client, owner)
+        response = await client.post(
+            "/v1/contacts/sync",
+            json={"phones": [peer.phone_e164, unmatched], "replace": True},
+        )
+        assert response.status_code == 200, response.text
+        assert [item["id"] for item in response.json()] == [str(peer.id)]
+
+    async with SessionFactory() as db:
+        edges = (
+            await db.execute(
+                select(UserContact.contact_user_id)
+                .where(UserContact.owner_user_id == owner.id)
+            )
+        ).scalars().all()
+        assert edges == [peer.id]
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_phone_update_disables_legacy_email_login_for_migrated_account() -> None:
     seed = int(uuid.uuid4().hex[:6], 16) % 100000 + 200000
     legacy = await create_user(seed, "Legacy", phone=False)
