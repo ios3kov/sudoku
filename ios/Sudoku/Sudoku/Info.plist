@@ -21,7 +21,12 @@
   <key>CFBundleVersion</key>
   <string>$(CURRENT_PROJECT_VERSION)</string>
   <key>UILaunchScreen</key>
-  <dict/>
+  <dict>
+    <key>UIColorName</key>
+    <string>LaunchBackground</string>
+  </dict>
+  <key>UIStatusBarStyle</key>
+  <string>UIStatusBarStyleLightContent</string>
   <key>LSRequiresIPhoneOS</key>
   <true/>
   <key>NSContactsUsageDescription</key>
