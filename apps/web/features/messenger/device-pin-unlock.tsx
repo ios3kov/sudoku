@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { acceptUnlock, accessEpoch, forgetUnlock } from "./device-access";
+import { PinCodeField } from "./pin-code-field";
 import {
   NATIVE_BIOMETRICS_READY_EVENT,
   biometricLabel,
@@ -313,28 +314,18 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
         </button>
       ) : null}
       {mode === "pin" ? (
-        <div className="auth-form">
-          <label>Device PIN
-            <input
-              ref={pinInputRef}
-              key={mode}
-              name="pin"
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              required
-              pattern="[0-9]{4}"
-              minLength={4}
-              maxLength={4}
-              className="device-pin-input"
-              value={value}
-              onChange={(event) => updatePinValue(event.target.value)}
-              disabled={busy}
-              autoFocus
-            />
-          </label>
+        <div className="auth-form pin-auth-form">
+          <PinCodeField
+            ref={pinInputRef}
+            label="Device PIN"
+            value={value}
+            onChange={updatePinValue}
+            disabled={busy}
+            autoFocus
+            invalid={Boolean(error)}
+          />
           <p className="device-access-help" aria-live="polite">
-            {busy ? "Checking PIN…" : "Unlocks automatically after four digits."}
+            {busy ? "Checking PIN…" : "Enter four digits to unlock."}
           </p>
         </div>
       ) : (
