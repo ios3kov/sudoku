@@ -144,6 +144,13 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     await login(peer, PEER_PHONE);
     await login(owner, OWNER_PHONE);
 
+    // A BFCache lifecycle transition freezes and resumes the same document.
+    // It must not retire the only active MLS writer.
+    await owner.evaluate(() => {
+      window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+
     let directoryRequests = 0;
     owner.on("request", (request) => {
       if (request.url().includes("/v1/users?q=")) directoryRequests += 1;
