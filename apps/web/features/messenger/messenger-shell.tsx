@@ -365,6 +365,41 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     setShowContacts((value) => !value);
   }
 
+  async function openContactChat(contact: { id: string; display_name: string }) {
+    const existing = conversationsRef.current.find(
+      (conversation) =>
+        conversation.type === "direct"
+        && conversation.members.some((member) => member.id === contact.id),
+    );
+
+    if (existing) {
+      setCreating(false);
+      setShowInvite(false);
+      setShowDevices(false);
+      setShowContacts(false);
+      setSelectedId(existing.id);
+      return;
+    }
+
+    const adapter = e2eeRef.current;
+    if (!adapter || e2eeState !== "ready") {
+      throw new Error("Secure messaging is still preparing on this device.");
+    }
+
+    let conversation = await messengerApi.createDirect(contact.id, true);
+    if (!conversation.e2ee_ready) {
+      try {
+        conversation = await adapter.bootstrapConversation(conversation);
+      } catch {
+        // The server-side direct conversation is durable/idempotent. Open its
+        // secure-setup state instead of making the contact tap a no-op.
+      }
+    }
+
+    addConversation(conversation);
+    setShowContacts(false);
+  }
+
   function addConversation(conversation: Conversation) {
     setConversations((current) => {
       const without = current.filter((item) => item.id !== conversation.id);
@@ -622,7 +657,10 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           onCurrentRevoked={revokeLocalSession}
           onPhoneUpdated={(phone) => onUserUpdated({ ...user, phone_e164: phone })}
         /> : null}
-        {showContacts ? <ContactsPanel onClose={() => setShowContacts(false)} /> : null}
+        {showContacts ? <ContactsPanel
+          onClose={() => setShowContacts(false)}
+          onOpenChat={openContactChat}
+        /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
           {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}
