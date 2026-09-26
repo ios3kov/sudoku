@@ -132,15 +132,10 @@ async def create_conversation(
                     status_code=409,
                     detail="Existing direct conversation encryption mode does not match request",
                 )
-            if (
-                existing.encryption_required
-                and not existing.e2ee_ready
-                and existing.created_by != auth.user.id
-            ):
-                raise HTTPException(
-                    status_code=409,
-                    detail="Secure conversation setup is still pending",
-                )
+            # A pending direct conversation is still the unique direct chat
+            # for this user pair. The other participant must be able to open it
+            # while the creator finishes MLS bootstrap instead of receiving a
+            # 409 and turning contact -> chat into a dead end.
             membership = await require_membership(db, existing.id, auth.user.id)
             return await conversation_response(db, existing, membership)
 
