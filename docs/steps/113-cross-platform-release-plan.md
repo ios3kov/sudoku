@@ -54,6 +54,26 @@ Any behavior correction made for one client becomes a parity requirement for the
 
 ---
 
+
+## 2026-09-26 Phase 1 implementation checkpoint
+
+Branch `fix/cross-platform-privacy-parity-20260926` implements the shared web/PWA privacy half of cross-platform parity:
+
+- the real Sudoku surface remains mounted beneath Messenger instead of being replaced by a decorative privacy screen;
+- retained Sudoku is inert and its game clock is paused while Messenger is active;
+- the reveal hook clears transient transforms/classes after Messenger becomes active so the retained Sudoku remains a clean full-frame snapshot source;
+- `pagehide` / hidden visibility synchronously raise the retained Sudoku above Messenger through the privacy-shield class;
+- restore waits for the private-surface timeout decision before dropping the shield;
+- the generic Sudoku grid remains fallback-only before the first usable Sudoku state hydrates;
+- browser regression coverage now verifies real retained Sudoku on privacy shielding, no generic grid after hydration, release-only commit, fast-flick commit below the normal distance threshold, and paused Sudoku timing beneath Messenger.
+
+Pending before Phase 1 can be marked complete:
+
+- branch CI;
+- merge/post-merge verification;
+- physical Android/PWA Recents/task-switcher acceptance;
+- physical iPhone acceptance remains a separate Phase 2 gate.
+
 # Phase 2 — Physical iPhone QA
 
 Verify on the exact release candidate:
