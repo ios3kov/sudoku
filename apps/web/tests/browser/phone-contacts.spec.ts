@@ -133,6 +133,10 @@ test("registered contact tap creates and then reuses one E2EE direct chat", asyn
       (element as HTMLButtonElement).click();
       (element as HTMLButtonElement).click();
     });
+    await expect(panel).toHaveCount(0);
+    await expect(
+      owner.locator(".messenger-topbar").filter({ hasText: "Wave1 Contact Peer" }),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
       timeout: 60_000,
     });
