@@ -213,12 +213,17 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         if (!cancelled) refreshE2eeState(currentAdapter);
       } catch (error) {
         if (!cancelled) {
-          e2eeRef.current = null;
-          setE2eeAdapter(null);
-          setE2eeError(
-            error instanceof Error ? error.message : "Secure messaging failed to initialize",
-          );
-          setE2eeState("fatal_error");
+          const message = error instanceof Error ? error.message : "Secure messaging failed to initialize";
+          setE2eeError(message);
+          if (adapter?.ready) {
+            e2eeRef.current = adapter;
+            setE2eeAdapter(adapter);
+            setE2eeState("recoverable_error");
+          } else {
+            e2eeRef.current = null;
+            setE2eeAdapter(null);
+            setE2eeState("fatal_error");
+          }
         }
       }
     })();
