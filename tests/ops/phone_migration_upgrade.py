@@ -176,6 +176,7 @@ def main() -> None:
         )
         sender_device_column = cursor.fetchone()
         # 0019 is intentionally nullable so pre-existing transport rows remain readable.
+        # Keep this assertion in the upgrade smoke so schema provenance cannot regress silently.
         assert sender_device_column == ("YES", "uuid"), sender_device_column
 
         cursor.execute(
