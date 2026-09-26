@@ -227,6 +227,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         refreshPendingDeviceConversations(currentAdapter, latestConversations);
         setE2eeState("ready");
       } catch (error) {
+        adapter?.retire();
         if (!cancelled) {
           e2eeRef.current = null;
           setE2eeAdapter(null);
