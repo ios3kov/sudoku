@@ -184,6 +184,38 @@ final class SudokuViewController: UIViewController {
         )
     }
 
+    private func contactsAuthorizationStatus() -> String {
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+        if #available(iOS 18.0, *), status == .limited {
+            return "limited"
+        }
+        switch status {
+        case .notDetermined:
+            return "not_determined"
+        case .restricted:
+            return "restricted"
+        case .denied:
+            return "denied"
+        case .authorized:
+            return "authorized"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    private func resolveContactValue(requestID: String, value: Any) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeContactsResolve(id, value);",
+            arguments: [
+                "id": requestID,
+                "value": value,
+            ],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
     private func presentContactPicker(requestID: String) {
         guard pendingContactRequestID == nil, presentedViewController == nil else {
             rejectContactRequest(requestID: requestID, message: "Contact picker is already open")
@@ -327,6 +359,9 @@ final class SudokuViewController: UIViewController {
         },
         all() {
           return request("all");
+        },
+        status() {
+          return request("status");
         }
       };
 
@@ -425,9 +460,15 @@ extension SudokuViewController: WKScriptMessageHandler {
             return
         }
 
-        if (body["action"] as? String) == "all" {
+        switch body["action"] as? String {
+        case "all":
             requestAllContacts(requestID: requestID)
-        } else {
+        case "status":
+            resolveContactValue(
+                requestID: requestID,
+                value: contactsAuthorizationStatus()
+            )
+        default:
             presentContactPicker(requestID: requestID)
         }
     }
