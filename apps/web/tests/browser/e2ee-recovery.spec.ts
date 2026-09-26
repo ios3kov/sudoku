@@ -455,17 +455,12 @@ test("fresh authenticated device joins an existing encrypted direct chat without
     await login(peer, peerPhone);
     await login(owner, primaryPhone);
 
-    const ownerSync = await owner.request.post("/v1/contacts/sync", {
-      data: { phones: [peerPhone], replace: false },
-    });
-    expect(ownerSync.ok()).toBe(true);
-    const peerSync = await peer.request.post("/v1/contacts/sync", {
-      data: { phones: [primaryPhone], replace: false },
-    });
-    expect(peerSync.ok()).toBe(true);
-
     await owner.getByRole("button", { name: "New secure chat" }).click();
     await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+    await owner.getByLabel("Add contact by phone", { exact: true }).fill(peerPhone);
+    await owner.getByRole("button", { name: "Add contact", exact: true }).click();
+    await expect(owner.getByRole("status")).toContainText("registered contact");
+
     const peopleSearch = owner.getByPlaceholder("Search people");
     await peopleSearch.fill(peerName);
     const peerResult = owner.locator(".directory-item").filter({ hasText: peerPhone });
