@@ -163,7 +163,19 @@ def main() -> None:
             FROM alembic_version
             """
         )
-        assert cursor.fetchone() == ("0018_session_biometrics",)
+        assert cursor.fetchone() == ("0019_transport_sender_device",)
+
+        cursor.execute(
+            """
+            SELECT is_nullable, data_type
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'conversation_transport_events'
+              AND column_name = 'sender_device_id'
+            """
+        )
+        sender_device_column = cursor.fetchone()
+        assert sender_device_column == ("YES", "uuid"), sender_device_column
 
         cursor.execute(
             """
