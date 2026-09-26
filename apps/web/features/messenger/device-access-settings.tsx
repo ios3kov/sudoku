@@ -10,25 +10,10 @@ import {
   rememberPhone,
   savedPhone,
 } from "./device-access";
-import {
-  NATIVE_BIOMETRICS_READY_EVENT,
-  biometricLabel,
-  enrollNativeBiometricCredential,
-  getNativeBiometricAvailability,
-  nativeBiometricsAvailable,
-  removeNativeBiometricCredential,
-  type NativeBiometricKind,
-} from "./native-biometric-access";
 import "./device-access.css";
 
 export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (phone: string) => void }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
-  const [biometricBridgePresent, setBiometricBridgePresent] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricKind, setBiometricKind] = useState<NativeBiometricKind>("none");
-  const [biometricPassword, setBiometricPassword] = useState("");
-  const [biometricBusy, setBiometricBusy] = useState(false);
   const [phone, setPhone] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
   const [phonePassword, setPhonePassword] = useState("");
@@ -45,35 +30,6 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
   useEffect(() => {
     alive.current = true;
 
-    const refreshNativeBiometrics = () => {
-      const bridgePresent = nativeBiometricsAvailable();
-      if (alive.current) setBiometricBridgePresent(bridgePresent);
-      if (!bridgePresent) {
-        if (alive.current) {
-          setBiometricAvailable(false);
-          setBiometricKind("none");
-        }
-        return;
-      }
-      void getNativeBiometricAvailability()
-        .then((status) => {
-          if (!alive.current) return;
-          setBiometricAvailable(status.available);
-          setBiometricKind(status.kind);
-        })
-        .catch(() => {
-          if (!alive.current) return;
-          setBiometricAvailable(false);
-          setBiometricKind("none");
-        });
-    };
-
-    refreshNativeBiometrics();
-    window.addEventListener(
-      NATIVE_BIOMETRICS_READY_EVENT,
-      refreshNativeBiometrics,
-    );
-
     void Promise.all([
       privateFetch("/v1/auth/device-access", {
         credentials: "include",
@@ -87,7 +43,6 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       if (alive.current) {
         const currentPhone = user.phone_e164 ?? "";
         setEnabled(Boolean(settings.pin_enabled));
-        setBiometricEnabled(Boolean(settings.biometric_enabled));
         setPhone(currentPhone);
         setPhoneDraft(currentPhone);
         setRemember(Boolean(currentPhone) && savedPhone() === currentPhone);
@@ -100,10 +55,6 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
 
     return () => {
       alive.current = false;
-      window.removeEventListener(
-        NATIVE_BIOMETRICS_READY_EVENT,
-        refreshNativeBiometrics,
-      );
     };
   }, []);
 
@@ -176,11 +127,6 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       const result = await response.json();
       if (!alive.current || started !== accessEpoch()) return;
 
-      // PIN replacement/removal invalidates the server-side biometric binding.
-      // Remove the corresponding Secure Enclave key as well.
-      await removeNativeBiometricCredential().catch(() => undefined);
-      setBiometricEnabled(false);
-
       if (remove) forgetUnlock();
       else if (!acceptUnlock(result.unlock_token, started)) {
         throw new Error("Missing unlock capability");
@@ -203,99 +149,6 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       }
     }
   }
-
-  async function configureBiometric(remove = false) {
-    if (
-      biometricBusy
-      || !biometricBridgePresent
-      || enabled !== true
-      || !biometricPassword
-      || (!remove && !biometricAvailable)
-    ) {
-      if (!biometricPassword) setError("Enter your account password.");
-      return;
-    }
-
-    const label = biometricLabel(biometricKind);
-    setBiometricBusy(true);
-    setError(null);
-    setNotice(null);
-
-    try {
-      if (remove) {
-        const response = await privateFetch(
-          "/v1/auth/device-access/biometric",
-          {
-            method: "DELETE",
-            credentials: "include",
-            cache: "no-store",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ password: biometricPassword }),
-          },
-        );
-        if (!response.ok) {
-          setError(
-            response.status === 403
-              ? "Incorrect account password."
-              : "Unable to disable biometric unlock.",
-          );
-          return;
-        }
-
-        await removeNativeBiometricCredential().catch(() => undefined);
-        if (!alive.current) return;
-        setBiometricEnabled(false);
-        setNotice(`${label} unlock disabled.`);
-        return;
-      }
-
-      const publicKey = await enrollNativeBiometricCredential();
-      const response = await privateFetch(
-        "/v1/auth/device-access/biometric",
-        {
-          method: "PUT",
-          credentials: "include",
-          cache: "no-store",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            password: biometricPassword,
-            public_key_x963_b64: publicKey,
-          }),
-        },
-      );
-      if (!response.ok) {
-        await removeNativeBiometricCredential().catch(() => undefined);
-        setError(
-          response.status === 403
-            ? "Incorrect account password."
-            : response.status === 409
-              ? "Set a device PIN before enabling biometric unlock."
-              : "Unable to enable biometric unlock.",
-        );
-        return;
-      }
-
-      if (!alive.current) return;
-      setBiometricEnabled(true);
-      setNotice(`${label} unlock enabled. Your PIN remains the fallback.`);
-    } catch {
-      if (alive.current) {
-        setError(`${label} is unavailable on this device.`);
-      }
-    } finally {
-      if (alive.current) {
-        setBiometricBusy(false);
-        setBiometricPassword("");
-      }
-    }
-  }
-
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    void save();
-  }
-
-  const nativeLabel = biometricLabel(biometricKind);
 
   return <section className="device-access-panel" aria-label="Login and device PIN">
     <h3>Login and device PIN</h3>
@@ -429,63 +282,6 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       Five incorrect PIN attempts require your account password. PIN unlock needs an internet connection.
     </p>
 
-    {biometricBridgePresent ? (
-      <div className="auth-form">
-        <p>
-          {enabled
-            ? biometricEnabled
-              ? biometricAvailable
-                ? `${nativeLabel} unlock is enabled.`
-                : "Biometric unlock is enabled but currently unavailable on this iPhone."
-              : biometricAvailable
-                ? `${nativeLabel} unlock is available.`
-                : "Biometric unlock is unavailable on this iPhone."
-            : `Set a device PIN before enabling ${nativeLabel}.`}
-        </p>
-        <label>Account password for {nativeLabel}
-          <input
-            type="password"
-            name="biometric-password"
-            autoComplete="current-password"
-            maxLength={1024}
-            value={biometricPassword}
-            onChange={(e) => setBiometricPassword(e.target.value)}
-            disabled={biometricBusy || enabled !== true}
-          />
-        </label>
-        {biometricEnabled ? (
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={
-              biometricBusy
-              || enabled !== true
-              || !biometricPassword
-            }
-            onClick={() => void configureBiometric(true)}
-          >
-            {biometricBusy ? "Updating…" : `Disable ${nativeLabel}`}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="primary-button"
-            disabled={
-              biometricBusy
-              || enabled !== true
-              || !biometricAvailable
-              || !biometricPassword
-            }
-            onClick={() => void configureBiometric(false)}
-          >
-            {biometricBusy ? "Enabling…" : `Enable ${nativeLabel}`}
-          </button>
-        )}
-        <p className="device-access-help">
-          The private key stays in the iPhone Secure Enclave. The server stores only its public key.
-        </p>
-      </div>
-    ) : null}
 
     {error && <p className="form-error" role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
