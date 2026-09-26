@@ -27,7 +27,7 @@ function queryDigitVariants(query: string, countryCode: string): string[] {
     variants.add(digits.slice(country.dial.length));
   }
 
-  if (countryCode === "RU" && digits.length === 11 && (digits.startsWith("8") || digits.startsWith("7"))) {
+  if (countryCode === "RU" && digits.length > 1 && (digits.startsWith("8") || digits.startsWith("7"))) {
     variants.add(digits.slice(1));
   }
 
