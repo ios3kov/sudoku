@@ -9,7 +9,7 @@ The native binary is intentionally small:
 - UIKit application shell;
 - persistent `WKWebView` loading `https://sudoku.moscow`;
 - app-bound domains for `sudoku.moscow` and `assets.sudoku.moscow`;
-- synchronous native privacy cover for app-switcher/background snapshots;
+- synchronous native privacy cover for app-switcher/background snapshots; it caches the last real Sudoku frame and never snapshots Messenger;
 - explicit system contact selection through `CNContactPickerViewController`;
 - Face ID / Touch ID unlock through a Secure Enclave P-256 key and LocalAuthentication;
 - native Photos selection through `PHPickerViewController`;
@@ -48,3 +48,10 @@ In Xcode:
 4. select the physical iPhone and Run.
 
 No production/TestFlight/App Store release is authorized merely by generating or running this project.
+
+
+## App-switcher privacy contract
+
+The web layer reports whether the visible surface is Sudoku or private Messenger content. The native host refreshes the cached Sudoku image when Sudoku resigns active and also captures Sudoku at the start of the hold-5 reveal gesture. If the app is backgrounded from Messenger, the privacy cover renders that cached Sudoku image instead of Messenger or a loading screen. The generic Sudoku grid is fallback-only before the first usable Sudoku snapshot exists.
+
+The hold-5 reveal gesture remains web-driven. Dragging follows the finger continuously; the app does not auto-complete while the pointer is still down. Release commits from distance plus recent upward velocity/projected travel, otherwise it returns to Sudoku.
