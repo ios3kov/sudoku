@@ -173,15 +173,14 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     let cancelled = false;
     let adapter: OpenMlsProtocolAdapter | null = null;
 
-    // pagehide can destroy the document before React cleanup finishes. Retire
-    // the adapter synchronously so an old page cannot write MLS state after a
-    // reloaded page has already rehydrated the same device state.
-    const retireAdapter = () => { adapter?.retire(); };
-    const retireWhenHidden = () => {
-      if (document.visibilityState === "hidden") retireAdapter();
+    // Retire only when the document is actually leaving. Ordinary
+    // visibility:hidden (backgrounding, Control Center, app switcher) freezes
+    // the page but must not permanently kill the active MLS writer. BFCache
+    // pages also stay alive and resume the same adapter on pageshow.
+    const retireAdapter = (event: PageTransitionEvent) => {
+      if (!event.persisted) adapter?.retire();
     };
     window.addEventListener("pagehide", retireAdapter);
-    document.addEventListener("visibilitychange", retireWhenHidden);
 
     setE2eeState("initializing");
     setE2eeError(null);
@@ -243,7 +242,6 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       cancelled = true;
       adapter?.retire();
       window.removeEventListener("pagehide", retireAdapter);
-      document.removeEventListener("visibilitychange", retireWhenHidden);
       if (e2eeRef.current === adapter) e2eeRef.current = null;
       if (currentDeviceIdRef.current && adapter) currentDeviceIdRef.current = null;
     };
