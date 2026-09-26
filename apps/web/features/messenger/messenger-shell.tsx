@@ -15,13 +15,29 @@ import { enableMaskedPush } from "./push";
 import { DeviceSessions } from "./device-sessions";
 import { ContactsPanel } from "./contacts-panel";
 import { OpenMlsProtocolAdapter } from "./crypto/openmls-adapter";
-import type { Conversation, CurrentUser, RealtimeEvent } from "./types";
+import type { ContactDirectoryItem, Conversation, CurrentUser, RealtimeEvent } from "./types";
 
 function sortConversations(items: Conversation[]): Conversation[] {
   return [...items].sort((a, b) => {
     if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
     return b.created_at.localeCompare(a.created_at);
   });
+}
+
+type E2eeState =
+  | "initializing"
+  | "ready"
+  | "new_device_pending"
+  | "rekey_pending"
+  | "history_unavailable_on_this_device"
+  | "recoverable_error"
+  | "fatal_error";
+
+function e2eeOperational(state: E2eeState): boolean {
+  return state === "ready"
+    || state === "new_device_pending"
+    || state === "rekey_pending"
+    || state === "history_unavailable_on_this_device";
 }
 
 export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { user: CurrentUser; onHide: () => void; onLoggedOut: () => void; onUserUpdated: (user: CurrentUser) => void }) {
@@ -42,12 +58,15 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   const [secureSetupBusy, setSecureSetupBusy] = useState(false);
   const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
   const [deviceRekeyError, setDeviceRekeyError] = useState<string | null>(null);
-  const [e2eeState, setE2eeState] = useState<"initializing" | "ready" | "error">("initializing");
+  const [e2eeState, setE2eeState] = useState<E2eeState>("initializing");
+  const [e2eeError, setE2eeError] = useState<string | null>(null);
+  const [e2eeRetryTick, setE2eeRetryTick] = useState(0);
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const [e2eeAdapter, setE2eeAdapter] = useState<OpenMlsProtocolAdapter | null>(null);
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
+  const directOpenRef = useRef(new Map<string, Promise<void>>());
   const concealCallbacks = useRef({onHide, onLoggedOut});
   useEffect(() => { concealCallbacks.current = {onHide, onLoggedOut}; }, [onHide, onLoggedOut]);
   const revokeLocalSession = useCallback(() => {
@@ -85,6 +104,23 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     void loadConversations(true);
   }, [loadConversations]);
 
+  const refreshE2eeState = useCallback((adapter: OpenMlsProtocolAdapter) => {
+    const encrypted = conversationsRef.current.filter(
+      (conversation) => conversation.encryption_required && conversation.e2ee_ready,
+    );
+    const tracked = new Set(adapter.trackedConversationIds());
+    if (encrypted.some((conversation) => !tracked.has(conversation.id))) {
+      setE2eeState("new_device_pending");
+      return;
+    }
+    const historyUnavailable = new Set(adapter.historyUnavailableConversationIds());
+    if (encrypted.some((conversation) => historyUnavailable.has(conversation.id))) {
+      setE2eeState("history_unavailable_on_this_device");
+      return;
+    }
+    setE2eeState("ready");
+  }, []);
+
   const reconcileDeviceChange = useCallback(async (
     adapter: OpenMlsProtocolAdapter,
     conversationId: string,
@@ -99,19 +135,24 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     if (!conversation) return false;
 
     try {
+      setE2eeState((current) =>
+        current === "new_device_pending" ? current : "rekey_pending"
+      );
       const changed = await adapter.reconcilePendingDeviceChange(conversation);
       if (changed) {
         setDeviceRekeyError(null);
         await loadConversations();
       }
+      refreshE2eeState(adapter);
       return changed;
     } catch (error) {
-      setDeviceRekeyError(
-        error instanceof Error ? error.message : "Secure device rekey is blocked",
-      );
+      const message = error instanceof Error ? error.message : "Secure device rekey is blocked";
+      setDeviceRekeyError(message);
+      setE2eeError(message);
+      setE2eeState("recoverable_error");
       return false;
     }
-  }, [loadConversations]);
+  }, [loadConversations, refreshE2eeState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,6 +170,8 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
 
     void (async () => {
       try {
+        setE2eeState("initializing");
+        setE2eeError(null);
         const sessions = await messengerApi.sessions();
         if (cancelled) return;
         const current = sessions.find((session) => session.current);
@@ -144,7 +187,6 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         if (cancelled) { currentAdapter.retire(); return; }
         e2eeRef.current = currentAdapter;
         setE2eeAdapter(currentAdapter);
-        setE2eeState("ready");
 
         const latestConversations = sortConversations(
           await messengerApi.conversations(),
@@ -158,21 +200,25 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         );
         for (const conversation of encryptedConversations) {
           if (cancelled) return;
-          // Unified transport is authoritative for recovery. It includes both
-          // MLS control events and application messages in one durable order,
-          // so a Welcome must never be consumed first through the legacy
-          // control-only feed and then replayed from transport sequence 0.
+          // Unified transport remains authoritative. On a fresh device the
+          // adapter deliberately advances over old-epoch application events
+          // until its assigned Welcome arrives, instead of trying to decrypt
+          // history for which this device never possessed keys.
           await currentAdapter.syncTransport(conversation.id);
           if (currentAdapter.trackedConversationIds().includes(conversation.id)) {
             await reconcileDeviceChange(currentAdapter, conversation.id);
             await currentAdapter.syncTransport(conversation.id);
           }
         }
-      } catch {
+        if (!cancelled) refreshE2eeState(currentAdapter);
+      } catch (error) {
         if (!cancelled) {
           e2eeRef.current = null;
           setE2eeAdapter(null);
-          setE2eeState("error");
+          setE2eeError(
+            error instanceof Error ? error.message : "Secure messaging failed to initialize",
+          );
+          setE2eeState("fatal_error");
         }
       }
     })();
@@ -184,7 +230,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       document.removeEventListener("visibilitychange", retireWhenHidden);
       e2eeRef.current = null;
     };
-  }, [reconcileDeviceChange, user.id]);
+  }, [e2eeRetryTick, reconcileDeviceChange, refreshE2eeState, user.id]);
 
   const acknowledgeRead = useCallback((conversationId: string, sequence: number, readerId = user.id) => {
     setConversations((current) => {
@@ -212,12 +258,15 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
                 await reconcileDeviceChange(adapter, conversation.id);
                 await adapter.syncTransport(conversation.id);
               }
-            })().catch(() => {
-              setE2eeState("error");
+              refreshE2eeState(adapter);
+            })().catch((error: unknown) => {
+              setE2eeError(error instanceof Error ? error.message : "Secure messaging recovery failed");
+              setE2eeState("recoverable_error");
             });
           }
-          void adapter.ensureKeyPackagePool(10).catch(() => {
-            setE2eeState("error");
+          void adapter.ensureKeyPackagePool(10).catch((error: unknown) => {
+            setE2eeError(error instanceof Error ? error.message : "Unable to prepare secure device keys");
+            setE2eeState("recoverable_error");
           });
         }
       },
@@ -259,16 +308,21 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               || locallyTracked
             )
           ) {
-            void adapter.syncTransport(event.conversation_id).catch(() => {
-              setE2eeState("error");
-            });
+            void adapter.syncTransport(event.conversation_id)
+              .then(() => refreshE2eeState(adapter))
+              .catch((error: unknown) => {
+                setE2eeError(error instanceof Error ? error.message : "Secure messaging recovery failed");
+                setE2eeState("recoverable_error");
+              });
             if (event.type === "mls.control.created") {
-              void adapter.ensureKeyPackagePool(10).catch(() => {
-                setE2eeState("error");
+              void adapter.ensureKeyPackagePool(10).catch((error: unknown) => {
+                setE2eeError(error instanceof Error ? error.message : "Unable to prepare secure device keys");
+                setE2eeState("recoverable_error");
               });
             }
             if (event.type === "mls.device.rekeyed") {
-              void reconcileDeviceChange(adapter, event.conversation_id);
+              void reconcileDeviceChange(adapter, event.conversation_id)
+                .then(() => refreshE2eeState(adapter));
             }
           }
         }
@@ -277,10 +331,11 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           && event.conversation_id
           && e2eeRef.current
         ) {
+          const adapter = e2eeRef.current;
           void reconcileDeviceChange(
-            e2eeRef.current,
+            adapter,
             event.conversation_id,
-          );
+          ).then(() => refreshE2eeState(adapter));
         }
         if (event.type === "conversation.member_removed" && event.conversation_id && (event.payload as { user_id?: string } | undefined)?.user_id === user.id) {
           setSelectedId((current) => current === event.conversation_id ? null : current);
@@ -303,7 +358,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       realtimeRef.current = null;
       setRealtimeClient(null);
     };
-  }, [acknowledgeRead, loadConversations, reconcileDeviceChange, revokeLocalSession, user.id]);
+  }, [acknowledgeRead, loadConversations, reconcileDeviceChange, refreshE2eeState, revokeLocalSession, user.id]);
 
   async function enablePush() {
     setPushState("enabling");
@@ -385,6 +440,47 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       return updated;
     });
   }
+
+  function openContactDirect(contact: ContactDirectoryItem): Promise<void> {
+    const existing = conversationsRef.current.find(
+      (conversation) =>
+        conversation.type === "direct"
+        && conversation.members.some((member) => member.id === contact.id),
+    );
+    if (existing) {
+      setShowContacts(false);
+      setSelectedId(existing.id);
+      return Promise.resolve();
+    }
+
+    const inFlight = directOpenRef.current.get(contact.id);
+    if (inFlight) return inFlight;
+
+    const operation = (async () => {
+      const adapter = e2eeRef.current;
+      if (!adapter || !e2eeOperational(e2eeState)) {
+        throw new Error("Secure messaging is still preparing on this device");
+      }
+
+      let conversation = await messengerApi.createDirect(contact.id, true);
+      if (!conversation.e2ee_ready && conversation.created_by === user.id) {
+        try {
+          conversation = await adapter.bootstrapConversation(conversation);
+        } catch {
+          // The direct conversation is already durably unique on the server.
+          // Open its pending secure state instead of making the contact tap a no-op.
+        }
+      }
+      setShowContacts(false);
+      addConversation(conversation);
+    })().finally(() => {
+      directOpenRef.current.delete(contact.id);
+    });
+    directOpenRef.current.set(contact.id, operation);
+    return operation;
+  }
+
+  const e2eeReadyForActions = Boolean(e2eeAdapter) && e2eeOperational(e2eeState);
 
   const visibleConversations = conversations.filter((conversation) =>
     conversationTitle(conversation, user.id)
