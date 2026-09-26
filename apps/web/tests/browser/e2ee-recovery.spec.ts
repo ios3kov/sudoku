@@ -14,9 +14,8 @@ async function unlockPrivate(page: Page) {
   const five = page.getByRole("button", { name: "5", exact: true });
   await expect(five).toBeVisible();
 
-  // Dispatch the real 50%-threshold gesture. The available swipe path runs
-  // from the digit's current Y position to the top edge; crossing 50% lets the
-  // finishing animation take over automatically.
+  // Dispatch the real release-driven gesture. The drag tracks the finger;
+  // only pointer release commits the reveal from distance/velocity.
   const box = await five.boundingBox();
   expect(box).not.toBeNull();
   const startX = (box?.x ?? 0) + (box?.width ?? 0) / 2;
@@ -37,6 +36,14 @@ async function unlockPrivate(page: Page) {
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
+  });
+  await five.dispatchEvent("pointerup", {
+    clientX: startX + 1,
+    clientY: startY * 0.45,
+    pointerId: 1,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
   });
 
   await expect(page.locator(".messenger-lock, .messenger-page").first()).toBeVisible();
