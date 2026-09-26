@@ -252,17 +252,30 @@ test("new invite account chooses display name after registration", async ({ page
   await expect(page.getByText("Messages", { exact: true })).toBeVisible();
 
   const invitedPhone = testPhone(9);
-  const inviteResponse = await page.request.post("/v1/invites", {
-    data: {
-      phone: invitedPhone,
-      expires_hours: 1,
-      max_uses: 1,
-    },
-  });
-  expect(inviteResponse.status()).toBe(201);
-  const invite = await inviteResponse.json() as { token: string };
+  const invite = await page.evaluate(async (phone) => {
+    const response = await fetch("/v1/invites", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        phone,
+        expires_hours: 1,
+        max_uses: 1,
+      }),
+    });
+    if (!response.ok) throw new Error(`Invite creation failed: ${response.status}`);
+    return await response.json() as { token: string };
+  }, invitedPhone);
 
-  await page.request.post("/v1/auth/logout");
+  await page.evaluate(async () => {
+    const response = await fetch("/v1/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok && response.status !== 401) {
+      throw new Error(`Logout failed: ${response.status}`);
+    }
+  });
   await page.reload();
   await revealCurrentPage(page);
 
