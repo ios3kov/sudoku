@@ -6,6 +6,7 @@ import { MessengerRevealPreview } from "./messenger-reveal-preview";
 import { ConversationDraftProvider } from "./conversation-drafts";
 import { DevicePinUnlock } from "./device-pin-unlock";
 import { DevicePinOnboarding } from "./device-pin-onboarding";
+import { DisplayNameOnboarding, profileConfirmedKey } from "./display-name-onboarding";
 import { PhoneInput } from "./phone-input";
 import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import type { CurrentUser } from "./types";
@@ -19,6 +20,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   const [loading, setLoading] = useState(true);
   const [pinRequired, setPinRequired] = useState(false);
   const [pendingLogin, setPendingLogin] = useState<CurrentUser | null>(null);
+  const [pendingProfile, setPendingProfile] = useState<CurrentUser | null>(null);
   const [view, setView] = useState<AuthView>("login");
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(false);
@@ -30,16 +32,31 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   const signedOut = useCallback(() => {
     loginPasswordRef.current = null;
     setPendingLogin(null);
+    setPendingProfile(null);
     forgetUnlock(); setUser(null); setPinRequired(false); setError(null); setLoading(false);
   }, []);
   const hide = useCallback(() => { lockDevice(); hideRef.current(); }, []);
 
-  const completePendingLogin = useCallback(() => {
-    if (!pendingLogin) return;
+  const finishIdentitySetup = useCallback((current: CurrentUser) => {
     loginPasswordRef.current = null;
     setPendingLogin(null);
-    setUser(pendingLogin);
-  }, [pendingLogin]);
+    let confirmed = false;
+    try {
+      confirmed = localStorage.getItem(profileConfirmedKey(current.id)) === "1";
+    } catch {
+      confirmed = false;
+    }
+    if (confirmed) {
+      setUser(current);
+    } else {
+      setPendingProfile(current);
+    }
+  }, []);
+
+  const completePendingLogin = useCallback(() => {
+    if (!pendingLogin) return;
+    finishIdentitySetup(pendingLogin);
+  }, [finishIdentitySetup, pendingLogin]);
 
   const configurePendingPin = useCallback(async (pin: string) => {
     const password = loginPasswordRef.current;
@@ -61,10 +78,8 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
     if (!acceptUnlock(result.unlock_token, started)) {
       throw new Error("Device state changed. Try again.");
     }
-    loginPasswordRef.current = null;
-    setPendingLogin(null);
-    setUser(pendingLogin);
-  }, [pendingLogin]);
+    finishIdentitySetup(pendingLogin);
+  }, [finishIdentitySetup, pendingLogin]);
 
   const checkSession = useCallback(async () => {
     const id = ++requestId.current;
@@ -108,8 +123,8 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   useEffect(() => {
     // AuthGate also lives beneath the game as a reveal preview. A background
     // session check or PIN onboarding is not a successful messenger entry.
-    if (active && user && !loading && !pinRequired && !pendingLogin) rememberMessengerEntry();
-  }, [active, user, loading, pinRequired, pendingLogin]);
+    if (active && user && !loading && !pinRequired && !pendingLogin && !pendingProfile) rememberMessengerEntry();
+  }, [active, user, loading, pinRequired, pendingLogin, pendingProfile]);
 
   if (loading) return <main className="page" aria-label="Private area">
     <section className="messenger-lock"><p>Checking…</p><button type="button" onClick={hide}>Return to Sudoku</button></section>
@@ -121,6 +136,15 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
     onSetPin={configurePendingPin}
     onSkip={completePendingLogin}
     onHide={() => { completePendingLogin(); hide(); }}
+  />;
+
+  if (pendingProfile) return <DisplayNameOnboarding
+    user={pendingProfile}
+    onDone={(updated) => {
+      setPendingProfile(null);
+      setUser(updated);
+    }}
+    onHide={hide}
   />;
 
   if (user) {
@@ -135,7 +159,10 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       {view === "login" ? <LoginForm onSuccess={(current, password) => {
         loginPasswordRef.current = password;
         setPendingLogin(current);
-      }} onError={setError} /> : <InviteForm onSuccess={setUser} onError={setError} />}
+      }} onError={setError} /> : <InviteForm onSuccess={(current, password) => {
+        loginPasswordRef.current = password;
+        setPendingLogin(current);
+      }} onError={setError} />}
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="secondary-button" type="button" onClick={() => { setError(null); setView(view === "login" ? "invite" : "login"); }}>
         {view === "login" ? "Use an invite" : "I already have an account"}
@@ -187,7 +214,7 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, pass
   </form>;
 }
 
-function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => void; onError: (message: string | null) => void }) {
+function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, password: string) => void; onError: (message: string | null) => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [phone, setPhone] = useState("");
   const alive = useRef(false);
@@ -199,11 +226,12 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
     setSubmitting(true); onError(null);
     const data = new FormData(event.currentTarget);
     const token = String(data.get("invite") ?? "").trim();
+    const password = String(data.get("password") ?? "");
     const started = accessEpoch();
     try {
       const response = await fetch("/v1/invites/accept", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, phone, display_name: data.get("display_name"), password: data.get("password"), device_name: "Sudoku web app" }),
+        body: JSON.stringify({ token, phone, display_name: data.get("display_name"), password, device_name: "Sudoku web app" }),
       });
       if (!alive.current || started !== accessEpoch()) return;
       if (!response.ok) {
@@ -215,7 +243,7 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
         return;
       }
       const current = await response.json() as CurrentUser;
-      if (alive.current && started === accessEpoch()) { forgetUnlock(); onSuccess(current); }
+      if (alive.current && started === accessEpoch()) { forgetUnlock(); onSuccess(current, password); }
     } catch { if (alive.current) onError("Network unavailable"); }
     finally { if (alive.current) setSubmitting(false); }
   }
