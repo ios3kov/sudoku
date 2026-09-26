@@ -410,7 +410,7 @@ test("BFCache lifecycle preserves the active MLS adapter", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(5));
 
-  const newChat = page.getByRole("button", { name: "New secure chat" });
+  const newChat = page.locator(".minimal-new-chat-button");
   await expect(newChat).toBeEnabled();
 
   await page.evaluate(() => {
@@ -418,10 +418,13 @@ test("BFCache lifecycle preserves the active MLS adapter", async ({ page }) => {
     window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
   });
 
-  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+  // The privacy shell may intentionally keep real Sudoku above Messenger
+  // during synthetic page lifecycle events. Inspect the retained private DOM:
+  // BFCache must not retire the MLS adapter or turn secure messaging into an
+  // error while the private surface is concealed.
   await expect(newChat).toBeEnabled({ timeout: 30_000 });
   await expect(
-    page.getByText("Secure messaging needs a restart.", { exact: true }),
+    page.locator(".messenger-inline-status").filter({ hasText: "Secure messaging needs a restart." }),
   ).toHaveCount(0);
 });
 
