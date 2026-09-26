@@ -143,8 +143,9 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await page.getByRole("button", { name: "1", exact: true }).click();
   await expect(givenCell).toHaveText(givenValue!);
 
-  // 49% is deliberately below the unlock threshold. The entire Sudoku screen
-  // must still follow the finger, then return instead of opening the messenger.
+  // 49% is deliberately below the distance threshold. Hold briefly before
+  // release so this models a slow drag rather than a fast upward flick; a fast
+  // flick is intentionally allowed to commit from projected release velocity.
   const belowThreshold = await dragFive(page, 0.49, 6);
   await expect(page.locator(".private-reveal-layer")).toBeVisible();
   // Pointer moves publish their transform on requestAnimationFrame. The
@@ -157,6 +158,7 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
     { timeout: 2_000 },
   ).toBeLessThan(-100);
   await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+  await page.waitForTimeout(150);
   await belowThreshold.five.dispatchEvent("pointerup", {
     clientX: belowThreshold.startX + 1,
     clientY: belowThreshold.targetY,
