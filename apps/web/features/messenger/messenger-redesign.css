@@ -1451,3 +1451,61 @@
   color:#2563eb;
   font-weight:700;
 }
+
+
+.invite-contact-form{
+  gap:12px;
+}
+
+.contact-picker-card{
+  width:100%;
+  min-height:66px;
+  display:grid;
+  grid-template-columns:46px minmax(0,1fr) auto;
+  align-items:center;
+  gap:11px;
+  padding:10px 12px;
+  border:1px solid #dbeafe;
+  border-radius:16px;
+  background:#f8fbff;
+  color:#334155;
+  text-align:left;
+}
+
+.contact-picker-card>span:nth-child(2){
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+
+.contact-picker-card strong,
+.contact-picker-card small{
+  display:block;
+}
+
+.contact-picker-card small{
+  color:#94a3b8;
+  font-size:.75rem;
+}
+
+.contact-picker-card>span:last-child{
+  color:#cbd5e1;
+  font-size:1.4rem;
+}
+
+.selected-invite-contact{
+  display:grid;
+  gap:2px;
+  padding:10px 12px;
+  border-radius:14px;
+  background:#eff6ff;
+  color:#1e3a8a;
+}
+
+.selected-invite-contact span{
+  font-weight:750;
+}
+
+.selected-invite-contact small{
+  color:#64748b;
+}
