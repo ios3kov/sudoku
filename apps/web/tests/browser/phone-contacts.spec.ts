@@ -111,8 +111,8 @@ test("registered contact tap creates and then reuses one E2EE direct chat", asyn
   const owner = await ownerContext.newPage();
 
   try {
-    await login(peer, testPhone(2));
-    await login(owner, testPhone(4));
+    await login(peer, testPhone(7));
+    await login(owner, testPhone(6));
 
     let createRequests = 0;
     owner.on("request", (request) => {
@@ -124,11 +124,11 @@ test("registered contact tap creates and then reuses one E2EE direct chat", asyn
 
     await owner.getByRole("button", { name: "Contacts", exact: true }).click();
     let panel = owner.getByRole("dialog", { name: "Phone contacts", exact: true });
-    await panel.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(2));
+    await panel.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(7));
     await panel.getByRole("button", { name: "Add contact", exact: true }).click();
-    await expect(panel.getByText(testPhone(2), { exact: true })).toBeVisible();
+    await expect(panel.getByText(testPhone(7), { exact: true })).toBeVisible();
 
-    const openPeer = panel.getByRole("button", { name: "Open chat with Browser Peer", exact: true });
+    const openPeer = panel.getByRole("button", { name: "Open chat with Wave1 Contact Peer", exact: true });
     await openPeer.evaluate((element) => {
       (element as HTMLButtonElement).click();
       (element as HTMLButtonElement).click();
@@ -141,7 +141,7 @@ test("registered contact tap creates and then reuses one E2EE direct chat", asyn
     await owner.getByRole("button", { name: "Back to conversations", exact: true }).click();
     await owner.getByRole("button", { name: "Contacts", exact: true }).click();
     panel = owner.getByRole("dialog", { name: "Phone contacts", exact: true });
-    await panel.getByRole("button", { name: "Open chat with Browser Peer", exact: true }).click();
+    await panel.getByRole("button", { name: "Open chat with Wave1 Contact Peer", exact: true }).click();
     await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
