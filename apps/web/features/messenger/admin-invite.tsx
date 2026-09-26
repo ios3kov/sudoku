@@ -17,8 +17,7 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     setError(null);
     setToken(null);
-    const data = new FormData(event.currentTarget);
-    if (!phone) {
+     if (!phone) {
       setSubmitting(false);
       setError("Phone number is required");
       return;
