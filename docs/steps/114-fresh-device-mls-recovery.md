@@ -1,7 +1,7 @@
 # Step 114 — Fresh-device MLS recovery
 
 Date: 2026-09-26  
-Status: implementation candidate  
+Status: repository implementation verified  
 Issue: #108  
 Scope: Messenger OpenMLS lifecycle and new-device recovery
 
@@ -115,3 +115,16 @@ Browser behavior is now:
 API regression verifies message transport exposes the sender device. The fresh-device Browser E2E verifies that a sibling device of the same account can send after rekey and the newly added device can decrypt the message.
 
 The E2E fixture also uses dedicated users `6/7` so it cannot create MLS membership changes that contaminate later PIN/Contacts browser scenarios.
+
+## Final main verification — 2026-09-26
+
+Current `main` commit `1e99caf512217434bb74cbeb127301d16fe93daf` contains the fresh-device MLS recovery, sender-device provenance, migration `0019_transport_sender_device`, the dedicated fresh-device Browser fixtures, and the integrated PIN/Contacts Wave-1 fixes.
+
+Post-merge workflows on this exact SHA are green:
+
+- `ci` 36267845828;
+- `device-access` 36267845819;
+- `beat-runtime` 36267845796;
+- `api-shutdown` 36267845844.
+
+Repository verification for #108 is complete. Remaining acceptance is physical-device validation. Production is unchanged.
