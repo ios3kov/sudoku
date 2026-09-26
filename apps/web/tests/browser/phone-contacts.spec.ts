@@ -40,6 +40,13 @@ async function reveal(page: Page) {
   await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "");
 }
 
+async function replaceContacts(page: Page, phones: string[]) {
+  const response = await page.request.post("/v1/contacts/sync", {
+    data: { phones, replace: true },
+  });
+  expect(response.ok()).toBe(true);
+}
+
 async function login(page: Page, phone: string) {
   await reveal(page);
   await page.getByLabel("Phone number", { exact: true }).fill(phone);
@@ -129,6 +136,7 @@ test("admin invite searches local Contacts by name and RU phone variants", async
   await expect(invite).toBeVisible();
 
   await invite.getByRole("button", { name: "Load contacts", exact: true }).click();
+  await expect(invite.getByRole("button", { name: "Refresh contacts", exact: true })).toBeVisible();
   await invite.getByLabel("Invite phone country", { exact: true }).selectOption("RU");
   const search = invite.getByLabel("Search contact or phone", { exact: true });
   await search.fill("Иван");
@@ -191,6 +199,7 @@ test("system contact picker sync exposes only selected registered contacts", asy
   }, { selectedPhone: testPhone(3) });
 
   await login(page, testPhone(5));
+  await replaceContacts(page, []);
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Phone contacts" })).toBeVisible();
 
@@ -300,6 +309,7 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
 test("New chat opens searchable Contacts and keeps group creation available", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(3));
+  await replaceContacts(page, [testPhone(5)]);
 
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
   const contacts = page.getByRole("dialog", { name: "Phone contacts", exact: true });

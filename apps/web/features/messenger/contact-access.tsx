@@ -153,9 +153,9 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
           .filter((phone): phone is string => Boolean(phone)),
       )];
 
-      const matched = normalized.length > 0
-        ? await messengerApi.syncContacts(normalized)
-        : [];
+      // Full-address-book sync is authoritative: contacts removed from the
+      // device address book must also leave the server-side allowlist.
+      const matched = await messengerApi.syncContacts(normalized, true);
       const status = await nativeContactsAuthorization().catch(() => null);
       if (status) setFullContactsStatus(status);
       setNotice(

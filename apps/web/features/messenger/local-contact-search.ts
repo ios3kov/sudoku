@@ -8,7 +8,7 @@ export type LocalContactSuggestion = {
 };
 
 function nationalDigits(e164: string): string {
-  const digits = e164.replace(/D/g, "");
+  const digits = e164.replace(/\D/g, "");
   const country = PHONE_COUNTRIES
     .slice()
     .sort((a, b) => b.dial.length - a.dial.length)
@@ -17,7 +17,7 @@ function nationalDigits(e164: string): string {
 }
 
 function queryDigitVariants(query: string, countryCode: string): string[] {
-  const digits = query.replace(/D/g, "");
+  const digits = query.replace(/\D/g, "");
   if (!digits) return [];
 
   const variants = new Set([digits]);
@@ -75,7 +75,7 @@ export function searchLocalContacts(
       if (contact.name.toLocaleLowerCase().includes(nameQuery)) return true;
       if (digitQueries.length === 0) return false;
 
-      const canonicalDigits = contact.phone.replace(/D/g, "");
+      const canonicalDigits = contact.phone.replace(/\D/g, "");
       const localDigits = nationalDigits(contact.phone);
       return digitQueries.some((digits) =>
         canonicalDigits.includes(digits) || localDigits.includes(digits)

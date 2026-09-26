@@ -128,3 +128,13 @@ The native host now supports an optional full-address-book path in addition to t
 - The existing Contacts entry in `PrivacyInfo.xcprivacy` remains linked/App Functionality/no tracking and is reviewed against App Store privacy disclosure.
 
 Physical iPhone authorization/revocation behavior remains an acceptance gate.
+
+
+## Contacts-primary CI remediation — 2026-09-27
+
+- **New secure chat** now intentionally opens the registered Contacts panel; direct-chat E2E coverage follows that production path instead of the retired directory-first dialog.
+- Full-address-book sync is authoritative (`replace=true`): contacts removed from the device address book are removed from the server-side allowlist on the next full sync.
+- An empty full address book can clear the allowlist; picker/manual sync remains additive.
+- Local RU phone search now strips non-digits correctly before matching national/canonical variants.
+- Browser fixtures explicitly seed/replace their contact state instead of depending on state left by earlier tests.
+- Admin-invite browser coverage now targets the contact-search/selection UX and waits for native contact loading to finish.
