@@ -129,7 +129,12 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         && !tracked.has(conversation.id)
       )
       .map((conversation) => conversation.id);
-    setPendingDeviceConversationIds(pending);
+    setPendingDeviceConversationIds((current) =>
+      current.length === pending.length
+      && current.every((id, index) => id === pending[index])
+        ? current
+        : pending
+    );
     return pending;
   }, []);
 
@@ -247,6 +252,64 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     refreshPendingDeviceConversations,
     syncEncryptedConversation,
     user.id,
+  ]);
+
+  useEffect(() => {
+    if (
+      e2eeState !== "ready"
+      || !e2eeAdapter
+      || pendingDeviceConversationIds.length === 0
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let running = false;
+
+    const syncPendingDevice = async () => {
+      if (running || cancelled) return;
+      running = true;
+      try {
+        const pendingSet = new Set(pendingDeviceConversationIds);
+        const pendingConversations = conversationsRef.current.filter(
+          (conversation) => pendingSet.has(conversation.id),
+        );
+
+        for (const conversation of pendingConversations) {
+          if (cancelled) return;
+          await syncEncryptedConversation(e2eeAdapter, conversation);
+        }
+
+        if (!cancelled) {
+          refreshPendingDeviceConversations(e2eeAdapter);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setE2eeError(
+            error instanceof Error ? error.message : "Secure device setup failed",
+          );
+          setE2eeState("error");
+        }
+      } finally {
+        running = false;
+      }
+    };
+
+    void syncPendingDevice();
+    const timer = window.setInterval(() => {
+      void syncPendingDevice();
+    }, 4_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    e2eeAdapter,
+    e2eeState,
+    pendingDeviceConversationIds,
+    refreshPendingDeviceConversations,
+    syncEncryptedConversation,
   ]);
 
   const acknowledgeRead = useCallback((conversationId: string, sequence: number, readerId = user.id) => {
