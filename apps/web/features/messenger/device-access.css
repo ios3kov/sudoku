@@ -75,3 +75,45 @@
 }
 .profile-name-preview small { display: block; color: #64748b; margin-bottom: 2px; }
 .profile-name-preview strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+.smart-phone-field { display: grid; gap: 8px; min-width: 0; }
+.smart-phone-field > span:first-child { font-size: 14px; font-weight: 600; color: #334155; }
+.smart-phone-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.smart-phone-control:focus-within { border-color: #64748b; box-shadow: 0 0 0 3px rgb(100 116 139 / 12%); }
+.smart-phone-control select {
+  min-width: 88px;
+  border: 0;
+  border-right: 1px solid #e2e8f0;
+  border-radius: 0;
+  background: #f8fafc;
+  padding: 0 10px;
+  font: inherit;
+  color: #334155;
+}
+.smart-phone-control input {
+  min-width: 0;
+  min-height: 48px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 12px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.smart-phone-control input:focus { outline: none; }
+.phone-input-error { color: #b91c1c; font-size: 12px; line-height: 1.35; }
+.contact-access-actions form .smart-phone-field { min-width: 0; }
+
+@media (max-width: 420px) {
+  .smart-phone-control { grid-template-columns: 84px minmax(0, 1fr); }
+  .smart-phone-control select { min-width: 84px; padding-inline: 8px; }
+}

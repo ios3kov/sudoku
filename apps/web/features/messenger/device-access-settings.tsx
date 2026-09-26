@@ -10,11 +10,13 @@ import {
   rememberPhone,
   savedPhone,
 } from "./device-access";
+import { PhoneInput } from "./phone-input";
 import "./device-access.css";
 
 export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (phone: string) => void }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [phone, setPhone] = useState("");
+  const [phoneDraftDisplay, setPhoneDraftDisplay] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
   const [phonePassword, setPhonePassword] = useState("");
   const [phoneBusy, setPhoneBusy] = useState(false);
@@ -44,6 +46,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
         const currentPhone = user.phone_e164 ?? "";
         setEnabled(Boolean(settings.pin_enabled));
         setPhone(currentPhone);
+        setPhoneDraftDisplay(currentPhone);
         setPhoneDraft(currentPhone);
         setRemember(Boolean(currentPhone) && savedPhone() === currentPhone);
       }
@@ -66,6 +69,7 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       const next = user.phone_e164 ?? "";
       if (!alive.current) return;
       setPhone(next);
+      setPhoneDraftDisplay(next);
       setPhoneDraft(next);
       if (next) onPhoneUpdated?.(next);
       if (remember && next) rememberPhone(next, true);
@@ -160,17 +164,15 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
     <p>PIN applies only to this device. Your account password is not saved.</p>
 
     <div className="auth-form">
-      <label>Phone number
-        <input
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          placeholder="+382..."
-          value={phoneDraft}
-          onChange={(e) => setPhoneDraft(e.target.value)}
-          disabled={phoneBusy}
-        />
-      </label>
+      <PhoneInput
+        label="Phone number"
+        value={phoneDraftDisplay}
+        disabled={phoneBusy}
+        onValueChange={(canonical, display) => {
+          setPhoneDraftDisplay(display);
+          setPhoneDraft(canonical ?? "");
+        }}
+      />
       <label>Account password for phone change
         <input
           type="password"
