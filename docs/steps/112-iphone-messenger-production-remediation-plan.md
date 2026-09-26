@@ -621,3 +621,78 @@ Full Contacts permission does **not** upload the whole address book as stored co
 ### Verification status
 
 Wave 2 code and targeted regressions are prepared. Exact-head API/web/browser/iOS CI and physical-iPhone acceptance remain required before merge or deployment.
+
+
+---
+
+## Wave 3 implementation log — 2026-09-26
+
+Branch: `feat/wave3-ios-native-polish`  
+Baseline: verified Wave 2 candidate `c38a99cf5d0b146c3da19358ab7ab281a0eae02f`  
+Production deployment: **not performed**
+
+Implemented:
+
+- **#102 status bar / safe-area seam**
+  - native surface policy explicitly distinguishes `sudoku` and `messenger`;
+  - web sends only the active surface name through the narrow `sudokuTheme` bridge;
+  - Sudoku uses the dark `#1a1a1a` native canvas + light status bar;
+  - Messenger uses the light `#eef2f7` native canvas + dark status bar;
+  - no DOM inspection and no private/account/message data crosses this bridge.
+- **#104 dedicated startup preloader**
+  - system launch screen uses a dark named color asset to avoid the initial white flash;
+  - `StartupView` is a separate dark branded native surface with the Sudoku mark and `SUDOKU.MOSCOW`;
+  - it remains visible until WKWebView reports ready, then fades independently of the privacy cover.
+- **#103 privacy lifecycle**
+  - `PrivacyCoverView` is now a deliberate dark/branded Sudoku surface rather than the old pale placeholder;
+  - resign-active/background transitions synchronously cover the WKWebView before snapshots can expose Messenger content;
+  - foreground activation removes only the privacy cover; startup state remains independently governed by web readiness;
+  - the browser/PWA privacy fallback uses the same dark Sudoku visual language.
+- **#101 + #105 reveal gesture**
+  - reveal handlers remain attached only to keypad digit 5;
+  - gesture now uses a short hold/arming delay before drag takeover;
+  - pre-arm movement beyond a small slop cancels reveal instead of jumping the screen;
+  - once armed, vertical movement tracks the finger while diagonal noise is ignored;
+  - commit happens on release by distance threshold or fresh upward velocity, with a short spring-like finish;
+  - early/settled release springs back to Sudoku;
+  - ordinary tap on 5 remains an ordinary Sudoku input;
+  - optional native haptics are limited to `selection` on arm and `impact` on commit.
+
+Native structure/tests added:
+
+- `NativeLifecyclePolicy` for startup/privacy state;
+- `NativeSurfacePolicy` for background/status-bar state;
+- `NativeContactsPolicy` for Contacts permission mapping;
+- pure web reveal-motion policy for arm cancellation and commit decisions;
+- iOS unit coverage for lifecycle, surface policy and Contacts mapping;
+- browser regressions for digit-5-only reveal, diagonal noise, threshold/velocity decisions and hold-drag-release behavior.
+
+### Verification status
+
+Wave 3 code is prepared. Exact-head web/browser/iOS CI and physical-iPhone acceptance remain required before merge or deployment.
+
+
+### Physical iPhone QA follow-up — 2026-09-26
+
+Accepted on physical iPhone:
+
+- branded startup/preloader;
+- no light status-bar seam;
+- reveal starts only from digit 5;
+- Messenger reveal is smooth enough to validate the interaction path;
+- remaining previously listed Wave 3 visual checks reported OK.
+
+Two follow-up requirements were added from physical QA:
+
+1. **App-switcher presentation**
+   - when Sudoku itself is active, iOS may show the live current Sudoku state;
+   - when Messenger is active, the app-switcher must show the **last safe Sudoku state that existed immediately before reveal**, not the branded startup/loading screen and never Messenger;
+   - the pre-reveal Sudoku snapshot is captured before the private transition starts.
+
+2. **Reveal completion physics**
+   - crossing a fixed progress point while the finger remains down must never auto-complete;
+   - the gesture stays interactive until release;
+   - on release, completion/cancel is decided from current progress plus projected upward velocity;
+   - completion duration derives from remaining distance and release velocity so fast swipes finish faster and slow incomplete swipes spring back.
+
+New automated regressions cover no-auto-commit-while-held, projected release behavior, and the native safe-surface privacy policy. Physical re-check remains required for app-switcher fidelity and final gesture feel.

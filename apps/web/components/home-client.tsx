@@ -5,6 +5,7 @@ import { shouldLockPrivateSurface } from "@sudoku/domain";
 import { SudokuBoard } from "../features/sudoku/sudoku-board";
 import { AuthGate } from "../features/messenger/auth-gate";
 import { useAppStore } from "../store/app-store";
+import { syncNativeSurfaceTheme } from "../features/sudoku/native-surface-theme";
 
 export function HomeClient() {
   const mode = useAppStore((state) => state.mode);
@@ -16,6 +17,10 @@ export function HomeClient() {
   const hidePrivate = useCallback(() => {
     hidePrivateSurface();
   }, [hidePrivateSurface]);
+
+  useEffect(() => {
+    syncNativeSurfaceTheme(mode === "sudoku" ? "sudoku" : "messenger");
+  }, [mode]);
 
   useEffect(() => {
     function forceSudoku() {
@@ -57,7 +62,13 @@ export function HomeClient() {
   }, [hidePrivateSurface, mode]);
 
   if (privacyCover) {
-    return <main className="shell"><section className="card"><h1>Sudoku</h1><div className="privacy-grid" aria-hidden="true" /></section></main>;
+    return <main className="shell privacy-shell">
+      <section className="card privacy-card">
+        <div className="privacy-brand-mark" aria-hidden="true" />
+        <h1 aria-label="Sudoku">SUDOKU.MOSCOW</h1>
+        <div className="privacy-grid" aria-hidden="true" />
+      </section>
+    </main>;
   }
 
   const privateActive = mode === "messenger-lock";

@@ -4,10 +4,10 @@ import UIKit
 import WebKit
 
 final class SudokuViewController: UIViewController {
-    private static let canvasColor = UIColor(red: 244 / 255.0, green: 241 / 255.0, blue: 232 / 255.0, alpha: 1)
     private static let appURL = URL(string: "https://sudoku.moscow/")!
     private static let trustedHost = "sudoku.moscow"
     private static let contactHandlerName = "sudokuContacts"
+    private static let themeHandlerName = "sudokuTheme"
 
     private lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
@@ -18,6 +18,8 @@ final class SudokuViewController: UIViewController {
 
         let controller = WKUserContentController()
         controller.add(self, name: Self.contactHandlerName)
+        controller.add(self, name: Self.themeHandlerName)
+        hapticBridge.install(into: controller)
         mediaBridge.install(into: controller)
         videoPlayback.install(into: controller)
         videoPlayback.presenter = self
@@ -70,17 +72,31 @@ final class SudokuViewController: UIViewController {
         webView.scrollView.showsVerticalScrollIndicator = false
         webView.scrollView.showsHorizontalScrollIndicator = false
         webView.isOpaque = false
-        webView.backgroundColor = Self.canvasColor
-        webView.scrollView.backgroundColor = Self.canvasColor
+        webView.backgroundColor = SudokuNativePalette.gameBackground
+        webView.scrollView.backgroundColor = SudokuNativePalette.gameBackground
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         return webView
     }()
 
+    private let startupView = StartupView()
     private let privacyCover = PrivacyCoverView()
+    private let hapticBridge = NativeHapticBridge()
     private let mediaBridge = NativeMediaBridge()
     private let videoPlayback = NativeVideoPlayback()
+    private var lifecycleState = NativeLifecycleState()
+    private var currentSurface: NativeSurface = .sudoku
+    private var lastSudokuSnapshot: UIImage?
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
+
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        if lifecycleState.startupVisible || lifecycleState.privacyVisible {
+            return .lightContent
+        }
+        return NativeSurfacePolicy.statusBarStyle(for: currentSurface)
+    }
+
+    override var preferredStatusBarUpdateAnimation: UIStatusBarAnimation { .fade }
 
     func restorePortraitOrientation() {
         if #available(iOS 16.0, *) {
@@ -96,11 +112,13 @@ final class SudokuViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        view.backgroundColor = Self.canvasColor
+        view.backgroundColor = NativeSurfacePolicy.background(for: currentSurface)
 
+        startupView.translatesAutoresizingMaskIntoConstraints = false
         privacyCover.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(webView)
+        view.addSubview(startupView)
         view.addSubview(privacyCover)
 
         // Keep controls below the notch. Extend the web canvas under the home
@@ -113,13 +131,18 @@ final class SudokuViewController: UIViewController {
             webView.topAnchor.constraint(equalTo: contentArea.topAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
+            startupView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            startupView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            startupView.topAnchor.constraint(equalTo: view.topAnchor),
+            startupView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
             privacyCover.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             privacyCover.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             privacyCover.topAnchor.constraint(equalTo: view.topAnchor),
             privacyCover.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
-        showPrivacyCover()
+        renderLifecycle(animatedStartup: false)
 
         NotificationCenter.default.addObserver(
             self,
@@ -139,29 +162,113 @@ final class SudokuViewController: UIViewController {
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.contactHandlerName
         )
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: Self.themeHandlerName
+        )
         videoPlayback.uninstall(from: webView.configuration.userContentController)
+        hapticBridge.uninstall(from: webView.configuration.userContentController)
         mediaBridge.uninstall(
             from: webView.configuration.userContentController
         )
     }
 
+    private func renderLifecycle(animatedStartup: Bool) {
+        let showStartup = lifecycleState.startupVisible
+        let showPrivacy = lifecycleState.privacyVisible
+            && NativeSurfacePolicy.requiresPrivacyCover(for: currentSurface)
+
+        webView.accessibilityElementsHidden = showStartup || showPrivacy
+
+        if showStartup {
+            startupView.layer.removeAllAnimations()
+            startupView.alpha = 1
+            startupView.isHidden = false
+        } else if !startupView.isHidden {
+            let finish = { [weak self] in
+                self?.startupView.alpha = 0
+                self?.startupView.isHidden = true
+            }
+            if animatedStartup {
+                UIView.animate(
+                    withDuration: 0.18,
+                    delay: 0,
+                    options: [.beginFromCurrentState, .curveEaseOut],
+                    animations: { [weak self] in self?.startupView.alpha = 0 },
+                    completion: { _ in finish() }
+                )
+            } else {
+                finish()
+            }
+        }
+
+        privacyCover.layer.removeAllAnimations()
+        privacyCover.isHidden = !showPrivacy
+        privacyCover.alpha = 1
+        if showPrivacy {
+            view.bringSubviewToFront(privacyCover)
+        } else if showStartup {
+            view.bringSubviewToFront(startupView)
+        }
+
+        setNeedsStatusBarAppearanceUpdate()
+    }
+
     func showPrivacyCover() {
         videoPlayback.cancel()
-        webView.accessibilityElementsHidden = true
-        privacyCover.isHidden = false
-        view.bringSubviewToFront(privacyCover)
+        privacyCover.setSudokuSnapshot(lastSudokuSnapshot)
+        lifecycleState.apply(.willResignActive)
+        renderLifecycle(animatedStartup: false)
     }
 
     func hidePrivacyCoverAfterResume() {
-        guard webContentLoaded else { return }
-        updatePreferredTextSize()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            guard let self else { return }
-            guard self.view.window?.windowScene?.activationState == .foregroundActive else { return }
-            self.privacyCover.isHidden = true
-            self.webView.accessibilityElementsHidden = false
+        lifecycleState.apply(.didBecomeActive)
+        if webContentLoaded {
+            updatePreferredTextSize()
         }
+        renderLifecycle(animatedStartup: false)
+    }
+
+    func didEnterBackground() {
+        videoPlayback.cancel()
+        privacyCover.setSudokuSnapshot(lastSudokuSnapshot)
+        lifecycleState.apply(.didEnterBackground)
+        renderLifecycle(animatedStartup: false)
+    }
+
+    private func applySurface(_ surface: NativeSurface) {
+        guard surface != currentSurface else {
+            if surface == .sudoku { scheduleSudokuSnapshot() }
+            return
+        }
+
+        currentSurface = surface
+        let background = NativeSurfacePolicy.background(for: surface)
+        view.backgroundColor = background
+        webView.backgroundColor = background
+        webView.scrollView.backgroundColor = background
+        setNeedsStatusBarAppearanceUpdate()
+
+        if surface == .sudoku {
+            scheduleSudokuSnapshot()
+        }
+    }
+
+    private func scheduleSudokuSnapshot() {
+        guard currentSurface == .sudoku, webContentLoaded else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.captureSudokuSnapshot()
+        }
+    }
+
+    private func captureSudokuSnapshot() {
+        guard currentSurface == .sudoku, webContentLoaded, view.bounds.width > 0 else { return }
+
+        let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
+        let image = renderer.image { _ in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+        }
+        lastSudokuSnapshot = image
+        privacyCover.setSudokuSnapshot(image)
     }
 
     @objc private func updatePreferredTextSize() {
@@ -185,22 +292,9 @@ final class SudokuViewController: UIViewController {
     }
 
     private func contactsAuthorizationStatus() -> String {
-        let status = CNContactStore.authorizationStatus(for: .contacts)
-        if #available(iOS 18.0, *), status == .limited {
-            return "limited"
-        }
-        switch status {
-        case .notDetermined:
-            return "not_determined"
-        case .restricted:
-            return "restricted"
-        case .denied:
-            return "denied"
-        case .authorized:
-            return "authorized"
-        @unknown default:
-            return "unknown"
-        }
+        NativeContactsPolicy.name(
+            for: CNContactStore.authorizationStatus(for: .contacts)
+        )
     }
 
     private func resolveContactValue(requestID: String, value: Any) {
@@ -394,7 +488,10 @@ final class SudokuViewController: UIViewController {
 extension SudokuViewController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         webContentLoaded = true
-        hidePrivacyCoverAfterResume()
+        lifecycleState.apply(.webLoaded)
+        updatePreferredTextSize()
+        renderLifecycle(animatedStartup: true)
+        scheduleSudokuSnapshot()
     }
 
     func webView(
@@ -447,14 +544,31 @@ extension SudokuViewController: WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard message.name == Self.contactHandlerName else { return }
         guard message.frameInfo.isMainFrame else { return }
         guard let sourceURL = message.frameInfo.request.url,
               sourceURL.scheme == "https",
               sourceURL.host == Self.trustedHost else {
             return
         }
-        guard let body = message.body as? [String: Any],
+
+        if message.name == Self.themeHandlerName {
+            guard let body = message.body as? [String: Any] else { return }
+
+            if (body["action"] as? String) == "captureSudokuSnapshot" {
+                captureSudokuSnapshot()
+                return
+            }
+
+            guard let rawSurface = body["surface"] as? String,
+                  let surface = NativeSurface(rawValue: rawSurface) else {
+                return
+            }
+            applySurface(surface)
+            return
+        }
+
+        guard message.name == Self.contactHandlerName,
+              let body = message.body as? [String: Any],
               let requestID = body["id"] as? String,
               !requestID.isEmpty else {
             return

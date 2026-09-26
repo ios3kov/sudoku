@@ -30,6 +30,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
-        sudokuViewController?.showPrivacyCover()
+        sudokuViewController?.didEnterBackground()
     }
 }
