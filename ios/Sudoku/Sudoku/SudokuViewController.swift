@@ -365,11 +365,11 @@ final class SudokuViewController: UIViewController {
         }
       };
 
-      window.__sudokuNativeContactsResolve = (id, contacts) => {
+      window.__sudokuNativeContactsResolve = (id, value) => {
         const item = pending.get(id);
         if (!item) return;
         pending.delete(id);
-        item.resolve(Array.isArray(contacts) ? contacts : []);
+        item.resolve(value);
       };
 
       window.__sudokuNativeContactsCancel = (id) => {
