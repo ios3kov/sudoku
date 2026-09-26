@@ -83,6 +83,7 @@ final class SudokuViewController: UIViewController {
     private let privacyCover = PrivacyCoverView()
     private let mediaBridge = NativeMediaBridge()
     private let videoPlayback = NativeVideoPlayback()
+    private let contactStore = CNContactStore()
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
 
@@ -215,6 +216,90 @@ final class SudokuViewController: UIViewController {
         )
     }
 
+    private func contactAuthorizationState() -> String {
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+
+        if #available(iOS 18.0, *), status == .limited {
+            return "limited"
+        }
+
+        switch status {
+        case .authorized:
+            return "granted"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        case .notDetermined:
+            return "not_determined"
+        @unknown default:
+            return "restricted"
+        }
+    }
+
+    private func resolveContactValue(requestID: String, value: Any) {
+        webView.callAsyncJavaScript(
+            "window.__sudokuNativeContactsResolve(id, value);",
+            arguments: [
+                "id": requestID,
+                "value": value,
+            ],
+            in: nil,
+            in: .page,
+            completionHandler: nil
+        )
+    }
+
+    private func fetchAllContacts(requestID: String) {
+        guard pendingContactRequestID == nil else {
+            rejectContactRequest(requestID: requestID, message: "Another contacts request is already active")
+            return
+        }
+
+        pendingContactRequestID = requestID
+        let keys: [CNKeyDescriptor] = [
+            CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
+            CNContactPhoneNumbersKey as CNKeyDescriptor,
+        ]
+        let request = CNContactFetchRequest(keysToFetch: keys)
+        var contacts: [CNContact] = []
+
+        do {
+            try contactStore.enumerateContacts(with: request) { contact, _ in
+                if !contact.phoneNumbers.isEmpty {
+                    contacts.append(contact)
+                }
+            }
+            resolveContacts(contacts)
+        } catch {
+            pendingContactRequestID = nil
+            rejectContactRequest(requestID: requestID, message: "Unable to read Contacts")
+        }
+    }
+
+    private func requestAllContacts(requestID: String) {
+        let state = contactAuthorizationState()
+        if state == "granted" || state == "limited" {
+            fetchAllContacts(requestID: requestID)
+            return
+        }
+        guard state == "not_determined" else {
+            rejectContactRequest(requestID: requestID, message: "Contacts access is not allowed")
+            return
+        }
+
+        contactStore.requestAccess(for: .contacts) { [weak self] granted, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if granted {
+                    self.fetchAllContacts(requestID: requestID)
+                } else {
+                    self.rejectContactRequest(requestID: requestID, message: "Contacts access was denied")
+                }
+            }
+        }
+    }
+
     private func presentContactPicker(requestID: String) {
         guard pendingContactRequestID == nil, presentedViewController == nil else {
             rejectContactRequest(requestID: requestID, message: "Contact picker is already open")
@@ -248,10 +333,10 @@ final class SudokuViewController: UIViewController {
         }
 
         webView.callAsyncJavaScript(
-            "window.__sudokuNativeContactsResolve(id, contacts);",
+            "window.__sudokuNativeContactsResolve(id, value);",
             arguments: [
                 "id": requestID,
-                "contacts": payload,
+                "value": payload,
             ],
             in: nil,
             in: .page,
@@ -292,21 +377,29 @@ final class SudokuViewController: UIViewController {
       const pending = new Map();
       let sequence = 0;
 
+      const call = (operation) => new Promise((resolve, reject) => {
+        const id = String(++sequence);
+        pending.set(id, { resolve, reject });
+        window.webkit.messageHandlers.sudokuContacts.postMessage({ id, operation });
+      });
+
       window.SudokuNativeContacts = {
         select() {
-          return new Promise((resolve, reject) => {
-            const id = String(++sequence);
-            pending.set(id, { resolve, reject });
-            window.webkit.messageHandlers.sudokuContacts.postMessage({ id });
-          });
+          return call("select");
+        },
+        status() {
+          return call("status");
+        },
+        requestAll() {
+          return call("requestAll");
         }
       };
 
-      window.__sudokuNativeContactsResolve = (id, contacts) => {
+      window.__sudokuNativeContactsResolve = (id, value) => {
         const item = pending.get(id);
         if (!item) return;
         pending.delete(id);
-        item.resolve(Array.isArray(contacts) ? contacts : []);
+        item.resolve(value);
       };
 
       window.__sudokuNativeContactsCancel = (id) => {
@@ -413,7 +506,17 @@ extension SudokuViewController: WKScriptMessageHandler {
             return
         }
 
-        presentContactPicker(requestID: requestID)
+        let operation = body["operation"] as? String ?? "select"
+        switch operation {
+        case "status":
+            resolveContactValue(requestID: requestID, value: contactAuthorizationState())
+        case "requestAll":
+            requestAllContacts(requestID: requestID)
+        case "select":
+            presentContactPicker(requestID: requestID)
+        default:
+            rejectContactRequest(requestID: requestID, message: "Unsupported contacts operation")
+        }
     }
 }
 
