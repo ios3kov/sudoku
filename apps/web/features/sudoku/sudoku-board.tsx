@@ -297,10 +297,9 @@ export function SudokuBoard({
                     }, (_, i) => <span className="note" key={i}>{cellNotes.includes(i + 1) ? i + 1 : ""}</span>)}</span> : null)}</button>;
               })}
             </div>
-            <div className="controls"><div className="digits" aria-label="Digits" style={{
-                gridTemplateColumns: `repeat(${game.puzzle.size},minmax(0,1fr))`
-              }}>
-              {Array.from({
+            <div className="controls">
+              <div className="digits" aria-label="Digits">
+                {Array.from({
                   length: game.puzzle.size
                 }, (_, i) => i + 1).map(value => <button key={value}
                   className={`digit${value === 5 ? " secret-digit" : ""}`} type="button"
@@ -312,19 +311,20 @@ export function SudokuBoard({
                   if (value === 5 && consumeFiveClick()) return;
                   enter(value);
                 }}>{value}</button>)}
-            </div><div className="actions">
-              <button className="action" disabled={solved || selected === null} onClick={() => {
+              </div>
+              <div className="actions">
+                <button className="action" disabled={!game.history.length} onClick={() => act({
+                  type: "undo"
+                })}><GameIcon name="undo" />Undo</button>
+                <button className="action" disabled={solved || selected === null} onClick={() => {
                   if (selected !== null) act({
                     type: "erase",
                     index: selected
                   });
                 }}><GameIcon name="erase" />Erase</button>
-              <button className={`action${notesMode ? " active" : ""}`} aria-pressed={notesMode} onClick={() => setNotesMode(!notesMode)}><GameIcon name="notes" />Notes</button>
-              <button className="action" disabled={!game.history.length} onClick={() => act({
-                  type: "undo"
-                })}><GameIcon name="undo" />Undo</button>
-
-            </div></div>
+                <button className={`action${notesMode ? " active" : ""}`} aria-pressed={notesMode} onClick={() => setNotesMode(!notesMode)}><GameIcon name="notes" />Notes</button>
+              </div>
+            </div>
           </>
         </>}
         {notice && <p className="game-notice" role="status">{notice}</p>}
