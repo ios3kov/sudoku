@@ -88,6 +88,18 @@ export function formatCanonicalPhone(value: string): string {
   return `${item.dial}${groups.length ? " " : ""}${groups.join(" ")}`.trim();
 }
 
+function rebasePhoneCountry(
+  value: string,
+  from: CountryCode,
+  to: CountryCode,
+): string {
+  if (!value) return "";
+  const digits = value.replace(/\D/g, "");
+  const fromDial = countryByCode(from).dial.slice(1);
+  const local = digits.startsWith(fromDial) ? digits.slice(fromDial.length) : digits;
+  return canonicalizePhone(local, to);
+}
+
 function caretForDigitCount(formatted: string, digitCount: number): number {
   if (digitCount <= 0) return formatted.startsWith("+") ? 1 : 0;
   let seen = 0;
@@ -139,8 +151,8 @@ export function PhoneInput({
           disabled={disabled}
           onChange={(event) => {
             const nextCountry = event.target.value as CountryCode;
+            const canonical = rebasePhoneCountry(value, country, nextCountry);
             setCountry(nextCountry);
-            const canonical = canonicalizePhone(value, nextCountry);
             onChange(canonical);
             window.requestAnimationFrame(() => {
               const input = inputRef.current;
