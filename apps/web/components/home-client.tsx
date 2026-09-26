@@ -5,6 +5,7 @@ import { shouldLockPrivateSurface } from "@sudoku/domain";
 import { SudokuBoard } from "../features/sudoku/sudoku-board";
 import { AuthGate } from "../features/messenger/auth-gate";
 import { useAppStore } from "../store/app-store";
+import { syncNativeSurfaceTheme } from "../features/sudoku/native-surface-theme";
 
 export function HomeClient() {
   const mode = useAppStore((state) => state.mode);
@@ -16,6 +17,10 @@ export function HomeClient() {
   const hidePrivate = useCallback(() => {
     hidePrivateSurface();
   }, [hidePrivateSurface]);
+
+  useEffect(() => {
+    syncNativeSurfaceTheme(mode === "sudoku" ? "sudoku" : "messenger");
+  }, [mode]);
 
   useEffect(() => {
     function forceSudoku() {
