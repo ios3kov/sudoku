@@ -1034,7 +1034,11 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       try {
         do {
           record.rerun = false;
-          processed += await this.syncTransportOnce(conversationId);
+          let batchProcessed = 0;
+          do {
+            batchProcessed = await this.syncTransportOnce(conversationId);
+            processed += batchProcessed;
+          } while (batchProcessed > 0);
         } while (record.rerun);
         return processed;
       } finally {
