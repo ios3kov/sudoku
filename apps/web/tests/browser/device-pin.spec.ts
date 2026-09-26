@@ -13,6 +13,7 @@ async function revealCurrentPage(page: Page) {
   const x = box.x + box.width / 2, y = box.y + box.height / 2;
   await five.dispatchEvent("pointerdown", { clientX: x, clientY: y, pointerId: 1, pointerType: "touch", isPrimary: true, buttons: 1 });
   await five.dispatchEvent("pointermove", { clientX: x + 1, clientY: y * .45, pointerId: 1, pointerType: "touch", isPrimary: true, buttons: 1 });
+  await five.dispatchEvent("pointerup", { clientX: x + 1, clientY: y * .45, pointerId: 1, pointerType: "touch", isPrimary: true, buttons: 0 });
   await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "");
 }
 

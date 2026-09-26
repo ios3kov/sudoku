@@ -8,6 +8,8 @@ final class SudokuViewController: UIViewController {
     private static let appURL = URL(string: "https://sudoku.moscow/")!
     private static let trustedHost = "sudoku.moscow"
     private static let contactHandlerName = "sudokuContacts"
+    private static let privacyStateHandlerName = "sudokuPrivacyState"
+    private static let privacySnapshotHandlerName = "sudokuPrivacySnapshot"
 
     private lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
@@ -18,6 +20,8 @@ final class SudokuViewController: UIViewController {
 
         let controller = WKUserContentController()
         controller.add(self, name: Self.contactHandlerName)
+        controller.add(self, name: Self.privacyStateHandlerName)
+        controller.add(self, name: Self.privacySnapshotHandlerName)
         biometricBridge.install(into: controller)
         mediaBridge.install(into: controller)
         videoPlayback.install(into: controller)
@@ -95,6 +99,8 @@ final class SudokuViewController: UIViewController {
     }
     private var pendingContactRequestID: String?
     private var webContentLoaded = false
+    private var privateSurfaceVisible = false
+    private var latestSudokuSnapshot: UIImage?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -142,6 +148,12 @@ final class SudokuViewController: UIViewController {
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.contactHandlerName
         )
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: Self.privacyStateHandlerName
+        )
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: Self.privacySnapshotHandlerName
+        )
         videoPlayback.uninstall(from: webView.configuration.userContentController)
         biometricBridge.uninstall(
             from: webView.configuration.userContentController
@@ -153,9 +165,28 @@ final class SudokuViewController: UIViewController {
 
     func showPrivacyCover() {
         videoPlayback.cancel()
+
+        if !privateSurfaceVisible {
+            captureVisibleSudokuSnapshot()
+        }
+
+        privacyCover.setSnapshot(latestSudokuSnapshot)
         webView.accessibilityElementsHidden = true
         privacyCover.isHidden = false
         view.bringSubviewToFront(privacyCover)
+    }
+
+    private func captureVisibleSudokuSnapshot() {
+        guard webContentLoaded, webView.bounds.width > 0, webView.bounds.height > 0 else { return }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = view.window?.screen.scale ?? UIScreen.main.scale
+        format.opaque = true
+
+        let renderer = UIGraphicsImageRenderer(bounds: webView.bounds, format: format)
+        latestSudokuSnapshot = renderer.image { _ in
+            webView.drawHierarchy(in: webView.bounds, afterScreenUpdates: false)
+        }
     }
 
     func hidePrivacyCoverAfterResume() {
@@ -359,13 +390,29 @@ extension SudokuViewController: WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard message.name == Self.contactHandlerName else { return }
         guard message.frameInfo.isMainFrame else { return }
         guard let sourceURL = message.frameInfo.request.url,
               sourceURL.scheme == "https",
               sourceURL.host == Self.trustedHost else {
             return
         }
+
+        if message.name == Self.privacyStateHandlerName {
+            guard let body = message.body as? [String: Any],
+                  let state = body["state"] as? String else {
+                return
+            }
+            privateSurfaceVisible = state == "private"
+            return
+        }
+
+        if message.name == Self.privacySnapshotHandlerName {
+            guard !privateSurfaceVisible else { return }
+            captureVisibleSudokuSnapshot()
+            return
+        }
+
+        guard message.name == Self.contactHandlerName else { return }
         guard let body = message.body as? [String: Any],
               let requestID = body["id"] as? String,
               !requestID.isEmpty else {

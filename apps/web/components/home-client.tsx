@@ -6,6 +6,15 @@ import { SudokuBoard } from "../features/sudoku/sudoku-board";
 import { AuthGate } from "../features/messenger/auth-gate";
 import { useAppStore } from "../store/app-store";
 
+type NativeMessageHandler = { postMessage: (message: unknown) => void };
+type NativeWindow = Window & {
+  webkit?: { messageHandlers?: Record<string, NativeMessageHandler> };
+};
+
+function notifyNativePrivacyState(state: "sudoku" | "private") {
+  (window as NativeWindow).webkit?.messageHandlers?.sudokuPrivacyState?.postMessage({ state });
+}
+
 export function HomeClient() {
   const mode = useAppStore((state) => state.mode);
   const showMessengerLock = useAppStore((state) => state.showMessengerLock);
@@ -16,6 +25,10 @@ export function HomeClient() {
   const hidePrivate = useCallback(() => {
     hidePrivateSurface();
   }, [hidePrivateSurface]);
+
+  useEffect(() => {
+    notifyNativePrivacyState(mode === "sudoku" ? "sudoku" : "private");
+  }, [mode]);
 
   useEffect(() => {
     function forceSudoku() {

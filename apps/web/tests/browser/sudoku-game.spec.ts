@@ -109,3 +109,48 @@ test("restoring a suspended page does not add the suspension to playing time", a
   const [minutes, seconds] = (await time.innerText()).split(":").map(Number);
   expect(minutes! * 60 + seconds!).toBeLessThan(10);
 });
+
+
+test("messenger reveal waits for release instead of auto-finishing mid-drag", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Free Mode", exact: true }).click();
+  await page.getByRole("button", { name: "Start game", exact: true }).click();
+
+  const five = page.getByRole("button", { name: "5", exact: true });
+  const box = await five.boundingBox();
+  expect(box).not.toBeNull();
+  const x = box!.x + box!.width / 2;
+  const y = box!.y + box!.height / 2;
+
+  await five.dispatchEvent("pointerdown", {
+    clientX: x,
+    clientY: y,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
+  await five.dispatchEvent("pointermove", {
+    clientX: x,
+    clientY: y * 0.4,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
+
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+  await expect(page.locator(".sudoku-reveal-screen")).toHaveClass(/is-dragging/);
+
+  await five.dispatchEvent("pointerup", {
+    clientX: x,
+    clientY: y * 0.4,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+  });
+
+  await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "");
+});

@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef } from "react";
 
 const CLICK_SUPPRESS_PX = 12;
 const UNLOCK_PROGRESS = 0.5;
+const RELEASE_PROJECTION_MS = 180;
+const FLICK_MIN_VELOCITY_PX_PER_MS = 0.45;
+const VELOCITY_STALE_MS = 120;
 const RETURN_MS = 320;
 const FINISH_MIN_MS = 260;
 const FINISH_MAX_MS = 420;
@@ -16,6 +19,17 @@ function motionDuration(defaultMs: number): number {
 
 function clamp(min: number, max: number, value: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+type NativeMessageHandler = { postMessage: (message: unknown) => void };
+type NativeWindow = Window & {
+  webkit?: { messageHandlers?: Record<string, NativeMessageHandler> };
+};
+
+function notifyNativeSnapshotRequest() {
+  (window as NativeWindow).webkit?.messageHandlers?.sudokuPrivacySnapshot?.postMessage({
+    reason: "messenger-reveal-start",
+  });
 }
 
 interface SecretUnlockOptions {
@@ -225,6 +239,7 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
     suppressNextFiveClick.current = false;
 
     applyOffset(0);
+    notifyNativeSnapshotRequest();
 
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -246,21 +261,15 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
     const dt = now - lastMoveAt.current;
     if (dt > 0) {
       const instantVelocity = (nextOffset - lastMoveOffset.current) / dt;
-      upwardVelocity.current = Math.max(
-        0,
-        upwardVelocity.current * 0.65 + instantVelocity * 0.35,
-      );
+      upwardVelocity.current =
+        upwardVelocity.current * 0.65 + instantVelocity * 0.35;
     }
     lastMoveAt.current = now;
     lastMoveOffset.current = nextOffset;
 
     queueOffset(nextOffset);
-
-    if (nextOffset >= unlockThreshold.current) {
-      event.preventDefault();
-      animateUnlock();
-    }
-  }, [animateUnlock, queueOffset]);
+    if (nextOffset > CLICK_SUPPRESS_PX) event.preventDefault();
+  }, [queueOffset]);
 
   const onFivePointerUp = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (!pointerActive.current || unlocking.current) return;
@@ -268,7 +277,18 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
     pointerActive.current = false;
     startY.current = null;
 
-    if (currentOffset.current >= unlockThreshold.current) {
+    const velocityAge = performance.now() - lastMoveAt.current;
+    const releaseVelocity =
+      velocityAge <= VELOCITY_STALE_MS ? upwardVelocity.current : 0;
+    const projectedOffset =
+      currentOffset.current + Math.max(0, releaseVelocity) * RELEASE_PROJECTION_MS;
+    const crossedDistanceThreshold =
+      currentOffset.current >= unlockThreshold.current;
+    const projectedPastThreshold =
+      releaseVelocity >= FLICK_MIN_VELOCITY_PX_PER_MS &&
+      projectedOffset >= unlockThreshold.current;
+
+    if (crossedDistanceThreshold || projectedPastThreshold) {
       event.preventDefault();
       animateUnlock();
       return;
