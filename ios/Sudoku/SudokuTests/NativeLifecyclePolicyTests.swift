@@ -45,6 +45,11 @@ final class NativeLifecyclePolicyTests: XCTestCase {
         )
     }
 
+    func testAppSwitcherPrivacyUsesSudokuAsSafeSurface() {
+        XCTAssertFalse(NativeSurfacePolicy.requiresPrivacyCover(for: .sudoku))
+        XCTAssertTrue(NativeSurfacePolicy.requiresPrivacyCover(for: .messenger))
+    }
+
     func testContactsAuthorizationMapping() {
         XCTAssertEqual(NativeContactsPolicy.name(for: .notDetermined), "not_determined")
         XCTAssertEqual(NativeContactsPolicy.name(for: .restricted), "restricted")
