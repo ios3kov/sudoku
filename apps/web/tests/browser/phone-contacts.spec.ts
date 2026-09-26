@@ -50,6 +50,38 @@ async function login(page: Page, phone: string) {
   await expect(page.getByRole("button", { name: "New secure chat", exact: true })).toBeEnabled({ timeout: 120_000 });
 }
 
+test("smart RU phone input sends canonical E.164 for login", async ({ page }) => {
+  test.setTimeout(120_000);
+  await reveal(page);
+
+  const country = page.getByLabel("Phone country").first();
+  await country.selectOption("RU");
+  const phone = page.getByLabel("Phone number", { exact: true });
+  await phone.fill("80000000003");
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+
+  const loginRequest = page.waitForRequest((request) =>
+    request.method() === "POST" && request.url().endsWith("/v1/auth/login")
+  );
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const request = await loginRequest;
+  expect(request.postDataJSON().phone).toBe(testPhone(3));
+  await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toBeVisible();
+});
+
+test("manual contact accepts local RU trunk prefix and syncs canonical contact", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(4));
+  await page.getByRole("button", { name: "New secure chat", exact: true }).click();
+
+  await page.getByLabel("Phone country").selectOption("RU");
+  await page.getByLabel("Add contact by phone", { exact: true }).fill("80000000002");
+  await page.getByRole("button", { name: "Add contact", exact: true }).click();
+
+  await expect(page.getByRole("status")).toContainText("registered contact");
+  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+});
+
 test("system contact picker sync exposes only selected registered contacts", async ({ page }) => {
   test.setTimeout(180_000);
   await page.addInitScript(({ selectedPhone }) => {
