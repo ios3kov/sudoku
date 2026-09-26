@@ -2,16 +2,21 @@ export type PhoneCountry = {
   code: string;
   dial: string;
   name: string;
-  nationalDigits: number;
+  minNationalDigits: number;
+  maxNationalDigits: number;
 };
 
 export const PHONE_COUNTRIES: PhoneCountry[] = [
-  { code: "ME", dial: "382", name: "Montenegro", nationalDigits: 8 },
-  { code: "RU", dial: "7", name: "Russia", nationalDigits: 10 },
-  { code: "US", dial: "1", name: "United States", nationalDigits: 10 },
-  { code: "GB", dial: "44", name: "United Kingdom", nationalDigits: 10 },
-  { code: "DE", dial: "49", name: "Germany", nationalDigits: 10 },
-  { code: "FR", dial: "33", name: "France", nationalDigits: 9 },
+  { code: "ME", dial: "382", name: "Montenegro", minNationalDigits: 8, maxNationalDigits: 8 },
+  { code: "RU", dial: "7", name: "Russia", minNationalDigits: 10, maxNationalDigits: 10 },
+  { code: "US", dial: "1", name: "United States", minNationalDigits: 10, maxNationalDigits: 10 },
+  { code: "GB", dial: "44", name: "United Kingdom", minNationalDigits: 10, maxNationalDigits: 10 },
+  { code: "DE", dial: "49", name: "Germany", minNationalDigits: 7, maxNationalDigits: 11 },
+  { code: "FR", dial: "33", name: "France", minNationalDigits: 9, maxNationalDigits: 9 },
+  { code: "HR", dial: "385", name: "Croatia", minNationalDigits: 8, maxNationalDigits: 9 },
+  { code: "RS", dial: "381", name: "Serbia", minNationalDigits: 8, maxNationalDigits: 9 },
+  { code: "BA", dial: "387", name: "Bosnia and Herzegovina", minNationalDigits: 8, maxNationalDigits: 9 },
+  { code: "UA", dial: "380", name: "Ukraine", minNationalDigits: 9, maxNationalDigits: 9 },
 ];
 
 export function countryFromLocale(locale?: string): string {
@@ -46,12 +51,16 @@ export function toE164(value: string, countryCode: string): string | null {
     return `+7${digits}`;
   }
 
-  if (digits.startsWith(country.dial) && digits.length === country.dial.length + country.nationalDigits) {
+  if (
+    digits.startsWith(country.dial)
+    && digits.length >= country.dial.length + country.minNationalDigits
+    && digits.length <= country.dial.length + country.maxNationalDigits
+  ) {
     return `+${digits}`;
   }
 
   if (digits.startsWith("0") && country.code !== "US") digits = digits.slice(1);
-  if (digits.length !== country.nationalDigits) return null;
+  if (digits.length < country.minNationalDigits || digits.length > country.maxNationalDigits) return null;
   return `+${country.dial}${digits}`;
 }
 
@@ -87,6 +96,8 @@ export function formatPhone(value: string, countryCode: string): string {
           .sort((a, b) => b.dial.length - a.dial.length)
           .find((country) => rawDigits.startsWith(country.dial))
       : null;
+    if (explicitInternational && !inferred) return `+${rawDigits}`;
+
     const country = inferred ?? fallbackCountry;
     const national = explicitInternational && inferred
       ? rawDigits.slice(inferred.dial.length)
