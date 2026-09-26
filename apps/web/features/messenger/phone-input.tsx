@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type CountryCode = "ME" | "RU" | "BA" | "RS" | "HR" | "US";
+export type CountryCode = "ME" | "RU" | "BA" | "RS" | "HR" | "US";
 
 const COUNTRIES: Array<{ code: CountryCode; name: string; dial: string }> = [
   { code: "ME", name: "Montenegro", dial: "+382" },
