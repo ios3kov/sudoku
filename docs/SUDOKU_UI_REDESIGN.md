@@ -43,3 +43,23 @@ Redraw and approve elements individually:
 9. Difficulty / mode setup
 
 No merge to `main` until the redesign is explicitly approved.
+
+
+## Geometry pass — approved reference
+
+Implemented the exact approved gameplay hierarchy:
+
+- full outer gold frame around the gameplay surface;
+- header with menu / centered SUDOKU.MOSCOW / pause;
+- centered decorative divider placeholder under the header;
+- three framed HUD cards for Difficulty / Timer / Mistakes;
+- dominant 9×9 board with gold 3×3 separators and framed perimeter;
+- selected/error cell uses the approved red state;
+- bottom controls are now a strict 4×3 matrix:
+  - row 1: Undo / 1 / 2 / 3
+  - row 2: Erase / 4 / 5 / 6
+  - row 3: Notes / 7 / 8 / 9
+- Notes active state uses bright blue;
+- the entire composition scales down as a unit on shorter/narrower screens.
+
+This pass intentionally uses CSS placeholder ornament. Final gold frame pieces, corners, star divider and button skins will be replaced with optimized artwork after geometry approval.
