@@ -34,7 +34,7 @@ export function PinCellsInput({
   return (
     <label className={`pin-cells-field${hasError ? " is-error" : ""}`}>
       <span className="sr-only">{label}</span>
-      <span className="pin-cells" role="group" aria-label={label}>
+      <span className="pin-cells">
         {Array.from({ length: 4 }, (_, index) => {
           const filled = index < value.length;
           const visible = revealed?.index === index && index === value.length - 1;
