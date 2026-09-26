@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ensureSudokuGame } from "./support/sudoku-start";
 import { acceptedMessage } from "./support/accepted-message";
 import { observeRealtimeSocket, verifyActiveComposition } from "./support/active-composition";
+import type { Conversation } from "../../features/messenger/types";
 
 const testPhone = (index: number) => "+" + String(70000000000 + index);
 const OWNER_PHONE = testPhone(1);
