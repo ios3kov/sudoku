@@ -9,15 +9,20 @@ The native binary is intentionally small:
 - UIKit application shell;
 - persistent `WKWebView` loading `https://sudoku.moscow`;
 - app-bound domains for `sudoku.moscow` and `assets.sudoku.moscow`;
-- synchronous native privacy cover for app-switcher/background snapshots;
+- dedicated branded startup/preloader while WKWebView becomes ready;
+- fail-closed privacy handling for Messenger app-switcher/background snapshots;
+- the app switcher shows the current Sudoku screen when Sudoku is active, or the last safe pre-reveal Sudoku snapshot when Messenger is active;
 - explicit system contact selection through `CNContactPickerViewController`;
-- Face ID / Touch ID unlock through a Secure Enclave P-256 key and LocalAuthentication;
+- optional explicit full Contacts permission for local name/phone discovery;
 - native Photos selection through `PHPickerViewController`;
 - native Files selection through `UIDocumentPickerViewController`;
-- no broad Contacts or Photo Library permission;
+- narrow native surface-theme and haptic bridges;
+- no Face ID / Touch ID product path;
 - no native plaintext upload path: selected files return to the existing web encryption/upload pipeline.
 
-The existing web client remains responsible for auth, PIN, MLS state, E2EE, contacts sync, conversations and encrypted attachments. Native biometrics never store the four-digit PIN: the Secure Enclave signs a one-time server challenge, and the server returns the same bounded unlock capability used by PIN unlock. Native media selection only supplies an explicitly selected browser `File`; encrypted conversations still encrypt bytes before object-store upload.
+The web client remains responsible for auth, 4-digit PIN, MLS state, E2EE, contacts sync, conversations and encrypted attachments. Native Contacts access reads names and phone numbers only; unmatched address-book entries remain local and the backend stores only matched registered-user contact edges.
+
+The reveal gesture remains web-owned but uses a narrow native haptic bridge. It arms only from digit 5, tracks the finger interactively, and decides completion only on release using progress plus projected velocity.
 
 ## Generate the Xcode project
 
