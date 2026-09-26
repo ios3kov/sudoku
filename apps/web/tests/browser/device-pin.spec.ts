@@ -173,7 +173,9 @@ test("correct PIN auto-submits once and unlocks on the first attempt after repea
   const wrong = await enterPin(page, "1357");
   expect((await wrong).status()).toBe(403);
   await expect(page.getByLabel("Device PIN", { exact: true })).toHaveValue("");
-  await expect(page.getByRole("alert")).toContainText("Incorrect PIN");
+  await expect(
+    page.getByRole("main", { name: "Private area locked", exact: true }).getByRole("alert"),
+  ).toContainText("Incorrect PIN");
 
   const retry = await enterPin(page, "2468");
   expect((await retry).status()).toBe(200);
