@@ -17,3 +17,44 @@
 .contact-access-actions input { min-width: 0; }
 .contact-access-actions button { min-height: 44px; }
 .contact-access-help { margin: 6px 0 0; font-size: 13px; line-height: 1.4; }
+
+
+.pin-auth-form { gap: 14px; }
+.pin-code-field { position: relative; display: grid; gap: 10px; cursor: text; }
+.pin-code-label { font-size: 14px; font-weight: 600; color: #334155; }
+.pin-code-cells { display: grid; grid-template-columns: repeat(4, minmax(52px, 1fr)); gap: 10px; }
+.pin-code-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-height: 58px;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  background: #fff;
+  font-size: 28px;
+  line-height: 1;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+.pin-code-cell.is-filled { border-color: #94a3b8; box-shadow: 0 0 0 3px rgb(148 163 184 / 12%); }
+.pin-code-cells.is-invalid .pin-code-cell { border-color: #ef4444; box-shadow: 0 0 0 3px rgb(239 68 68 / 10%); }
+.pin-code-input {
+  position: absolute;
+  inset: 28px 0 0;
+  width: 100%;
+  height: calc(100% - 28px);
+  opacity: .01;
+  color: transparent;
+  caret-color: transparent;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.pin-code-field:focus-within .pin-code-cell { border-color: #64748b; box-shadow: 0 0 0 3px rgb(100 116 139 / 12%); }
+.pin-code-field:focus-within .pin-code-cells.is-invalid .pin-code-cell { border-color: #ef4444; box-shadow: 0 0 0 3px rgb(239 68 68 / 10%); }
+
+@media (max-width: 420px) {
+  .pin-code-cells { gap: 8px; }
+  .pin-code-cell { min-height: 52px; border-radius: 14px; }
+}
