@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   PHONE_COUNTRIES,
   countryFromLocale,
@@ -51,6 +51,7 @@ export function PhoneInput({
   autoComplete?: string;
   autoFocus?: boolean;
 }) {
+  const inputId = useId();
   const fallbackCountry = useMemo(
     () => countryFromLocale(typeof navigator !== "undefined" ? navigator.language : undefined),
     [],
@@ -111,8 +112,8 @@ export function PhoneInput({
   const canonical = toE164(display, countryCode);
 
   return (
-    <label className="smart-phone-field">
-      <span>{label}</span>
+    <div className="smart-phone-field">
+      <label htmlFor={inputId}>{label}</label>
       <span className="smart-phone-control">
         <select
           aria-label="Phone country"
@@ -128,6 +129,7 @@ export function PhoneInput({
         </select>
         <input
           ref={inputRef}
+          id={inputId}
           type="tel"
           inputMode="tel"
           autoComplete={autoComplete}
@@ -149,6 +151,6 @@ export function PhoneInput({
       {display && !canonical ? (
         <small className="phone-input-error">Enter a valid phone number.</small>
       ) : null}
-    </label>
+    </div>
   );
 }
