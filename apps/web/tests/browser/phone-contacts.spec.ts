@@ -21,6 +21,7 @@ async function reveal(page: Page) {
     isPrimary: true,
     buttons: 1,
   });
+  await page.waitForTimeout(110);
   await five.dispatchEvent("pointermove", {
     clientX: x + 1,
     clientY: y * 0.45,
@@ -28,6 +29,14 @@ async function reveal(page: Page) {
     pointerType: "touch",
     isPrimary: true,
     buttons: 1,
+  });
+  await five.dispatchEvent("pointerup", {
+    clientX: x + 1,
+    clientY: y * 0.45,
+    pointerId: 91,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
   });
   await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "");
 }
