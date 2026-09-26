@@ -534,8 +534,6 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       return;
     }
 
-    setSecureSetupBusy(true);
-    setSecureSetupError(null);
     const operation = e2eeAdapter.bootstrapConversation(selected)
       .then((ready) => updateConversation(ready))
       .catch((error: unknown) => {
