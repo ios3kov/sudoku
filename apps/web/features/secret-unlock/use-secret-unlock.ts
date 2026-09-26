@@ -228,7 +228,7 @@ export function useSecretUnlock({ enabled = true, onUnlock }: SecretUnlockOption
   }, [clearFrame, clearPhaseTimer, resetInlineMotion]);
 
   const onFivePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
-    if (unlocking.current) return;
+    if (!enabled || unlocking.current) return;
 
     clearFrame();
     clearPhaseTimer();
