@@ -174,6 +174,34 @@ for (const role of ["member", "admin"]) {
   });
 }
 
+test("pending profile completes Unicode display-name onboarding and can edit it later", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await passwordLogin(page, testPhone(8));
+  await page.getByRole("button", { name: "Not now", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "How should people see you?", exact: true })).toBeVisible();
+  const displayName = page.getByLabel("Display name", { exact: true });
+  await expect(displayName).toBeFocused();
+  await displayName.fill("Élijah ✦");
+  await expect(page.getByLabel("Display name preview")).toContainText("Élijah ✦");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+  await expect(page.locator(".minimal-list-heading")).toContainText("Élijah ✦");
+
+  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  const profile = page.getByRole("dialog", { name: "Profile", exact: true });
+  await expect(profile).toBeVisible();
+  await profile.getByLabel("Display name", { exact: true }).fill("Элайджа");
+  await profile.getByRole("button", { name: "Save name", exact: true }).click();
+  await expect(profile.getByRole("status")).toHaveText("Display name updated.");
+  await profile.getByRole("button", { name: "Close", exact: true }).click();
+
+  await expect(page.locator(".minimal-list-heading")).toContainText("Элайджа");
+  await expect(page.locator(".minimal-list-heading")).not.toContainText(testPhone(8));
+});
+
 test("Not now enters the app without enabling a device PIN", async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 390, height: 844 });
