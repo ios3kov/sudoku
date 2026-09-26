@@ -11,10 +11,14 @@ import {
   savedPhone,
 } from "./device-access";
 import { PinCellsInput } from "./pin-cells-input";
+import { PhoneInput } from "./phone-input";
 import "./device-access.css";
 
-export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (phone: string) => void }) {
+export function DeviceAccessSettings({ onPhoneUpdated, onDisplayNameUpdated }: { onPhoneUpdated?: (phone: string) => void; onDisplayNameUpdated?: (displayName: string) => void }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [displayNameDraft, setDisplayNameDraft] = useState("");
+  const [displayNameBusy, setDisplayNameBusy] = useState(false);
   const [phone, setPhone] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
   const [phonePassword, setPhonePassword] = useState("");
@@ -43,6 +47,8 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
     ]).then(([settings, user]) => {
       if (!alive.current) return;
       const currentPhone = user.phone_e164 ?? "";
+      setDisplayName(user.display_name);
+      setDisplayNameDraft(user.display_name);
       setEnabled(Boolean(settings.pin_enabled));
       setPhone(currentPhone);
       setPhoneDraft(currentPhone);
@@ -53,6 +59,26 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
 
     return () => { alive.current = false; };
   }, []);
+
+  async function saveDisplayName() {
+    const next = displayNameDraft.trim();
+    if (displayNameBusy || !next || next === displayName) return;
+    setDisplayNameBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const user = await messengerApi.updateDisplayName(next);
+      if (!alive.current) return;
+      setDisplayName(user.display_name);
+      setDisplayNameDraft(user.display_name);
+      onDisplayNameUpdated?.(user.display_name);
+      setNotice("Display name updated.");
+    } catch {
+      if (alive.current) setError("Unable to update display name.");
+    } finally {
+      if (alive.current) setDisplayNameBusy(false);
+    }
+  }
 
   async function savePhone() {
     if (phoneBusy || !phoneDraft.trim() || !phonePassword) return;
@@ -159,17 +185,30 @@ export function DeviceAccessSettings({ onPhoneUpdated }: { onPhoneUpdated?: (pho
       </div>
 
       <div className="auth-form settings-form-card">
-        <label>Phone number
+        <label>Display name
           <input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="+382..."
-            value={phoneDraft}
-            onChange={(event) => setPhoneDraft(event.target.value)}
-            disabled={phoneBusy}
+            type="text"
+            autoComplete="name"
+            maxLength={120}
+            value={displayNameDraft}
+            onChange={(event) => setDisplayNameDraft(event.target.value)}
+            disabled={displayNameBusy}
           />
         </label>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={displayNameBusy || !displayNameDraft.trim() || displayNameDraft.trim() === displayName}
+          onClick={() => void saveDisplayName()}
+        >
+          {displayNameBusy ? "Saving…" : "Save name"}
+        </button>
+        <PhoneInput
+          value={phoneDraft}
+          onChange={setPhoneDraft}
+          disabled={phoneBusy}
+          required
+        />
         <label>Account password for phone change
           <input
             type="password"
