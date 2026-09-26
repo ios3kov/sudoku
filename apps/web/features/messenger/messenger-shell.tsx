@@ -450,6 +450,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     const existing = conversationsRef.current.find(
       (conversation) =>
         conversation.type === "direct"
+        && conversation.encryption_required
         && conversation.members.some((member) => member.id === contact.id),
     );
     if (existing) {
