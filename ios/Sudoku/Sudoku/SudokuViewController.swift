@@ -86,7 +86,6 @@ final class SudokuViewController: UIViewController {
     private var lifecycleState = NativeLifecycleState()
     private var currentSurface: NativeSurface = .sudoku
     private var lastSudokuSnapshot: UIImage?
-    private var sudokuSnapshotWorkItem: DispatchWorkItem?
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
 
@@ -159,7 +158,6 @@ final class SudokuViewController: UIViewController {
     }
 
     deinit {
-        sudokuSnapshotWorkItem?.cancel()
         NotificationCenter.default.removeObserver(self)
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.contactHandlerName
@@ -255,23 +253,21 @@ final class SudokuViewController: UIViewController {
     }
 
     private func scheduleSudokuSnapshot() {
-        sudokuSnapshotWorkItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in
+        guard currentSurface == .sudoku, webContentLoaded else { return }
+        DispatchQueue.main.async { [weak self] in
             self?.captureSudokuSnapshot()
         }
-        sudokuSnapshotWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: item)
     }
 
     private func captureSudokuSnapshot() {
-        guard currentSurface == .sudoku, webContentLoaded else { return }
-        let configuration = WKSnapshotConfiguration()
-        configuration.rect = webView.bounds
-        webView.takeSnapshot(with: configuration) { [weak self] image, _ in
-            guard let self, self.currentSurface == .sudoku, let image else { return }
-            self.lastSudokuSnapshot = image
-            self.privacyCover.setSudokuSnapshot(image)
+        guard currentSurface == .sudoku, webContentLoaded, view.bounds.width > 0 else { return }
+
+        let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
+        let image = renderer.image { _ in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
         }
+        lastSudokuSnapshot = image
+        privacyCover.setSudokuSnapshot(image)
     }
 
     @objc private func updatePreferredTextSize() {
