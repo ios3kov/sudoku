@@ -177,6 +177,13 @@ code{overflow-wrap:anywhere}
 .selected-count{margin:0;color:var(--muted);font-size:12px}
 .settings-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
 .settings-row>div:first-child{min-width:0;display:grid;gap:3px}
+.contact-chat-row{align-items:stretch;padding:0}
+.contact-chat-action{flex:1;min-width:0;border:0;background:transparent;display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 0;text-align:left;cursor:pointer}
+.contact-chat-action:hover{background:var(--surface-2)}
+.contact-chat-action>span:nth-child(2){min-width:0}
+.contact-chat-action strong,.contact-chat-action small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.contact-chat-action>span:last-child{font-size:22px;color:var(--muted)}
+
 .settings-row small{color:var(--muted)}
 .member-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .member-actions button,.settings-row>button{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:0 9px;min-height:36px;font-size:12px}
