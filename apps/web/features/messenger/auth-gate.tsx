@@ -8,6 +8,7 @@ import { DevicePinUnlock } from "./device-pin-unlock";
 import { DevicePinOnboarding } from "./device-pin-onboarding";
 import { DisplayNameOnboarding, profileConfirmedKey } from "./display-name-onboarding";
 import { PhoneInput } from "./phone-input";
+import { SudokuEscapeButton } from "./sudoku-escape-button";
 import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import type { CurrentUser } from "./types";
 import { rememberMessengerEntry } from "../sudoku/startup-preference";
@@ -92,7 +93,22 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       if (started !== accessEpoch()) return;
       if (response.ok) {
         const current = await response.json() as CurrentUser;
-        if (alive.current && id === requestId.current && started === accessEpoch()) { setUser(current); setPinRequired(false); }
+        if (alive.current && id === requestId.current && started === accessEpoch()) {
+          let confirmed = false;
+          try {
+            confirmed = localStorage.getItem(profileConfirmedKey(current.id)) === "1";
+          } catch {
+            confirmed = false;
+          }
+          setPinRequired(false);
+          if (confirmed) {
+            setPendingProfile(null);
+            setUser(current);
+          } else {
+            setUser(null);
+            setPendingProfile(current);
+          }
+        }
       } else if (response.status === 401) {
         signedOut();
       } else setError("Unable to verify session");
@@ -127,7 +143,8 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
   }, [active, user, loading, pinRequired, pendingLogin, pendingProfile]);
 
   if (loading) return <main className="page" aria-label="Private area">
-    <section className="messenger-lock"><p>Checking…</p><button type="button" onClick={hide}>Return to Sudoku</button></section>
+    <section className="messenger-lock"><p>Checking…</p></section>
+    <SudokuEscapeButton onHide={hide} />
   </main>;
 
   if (pinRequired) return <DevicePinUnlock onUnlocked={checkSession} onSignedOut={signedOut} onHide={hide} />;
@@ -168,6 +185,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
         {view === "login" ? "Use an invite" : "I already have an account"}
       </button>
     </section>
+    <SudokuEscapeButton onHide={hide} />
   </main>;
 }
 
