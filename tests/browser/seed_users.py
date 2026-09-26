@@ -12,6 +12,8 @@ USERS = (
     ("browser-pin-member@example.com", "PIN Member"),
     ("browser-pin-admin@example.com", "PIN Admin"),
     ("browser-pin-skip@example.com", "PIN Skip"),
+    ("browser-mls-fresh-owner@example.com", "MLS Fresh Owner"),
+    ("browser-mls-fresh-peer@example.com", "MLS Fresh Peer"),
 )
 PASSWORD = "browser acceptance password"
 

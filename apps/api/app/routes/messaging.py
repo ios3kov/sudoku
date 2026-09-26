@@ -626,6 +626,7 @@ async def create_message(
             sequence=transport_sequence,
             kind="message",
             message_id=message.id,
+            sender_device_id=auth.session.id,
         )
     )
     for position, asset_id in enumerate(unique_asset_ids):

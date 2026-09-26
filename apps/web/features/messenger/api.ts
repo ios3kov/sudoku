@@ -5,8 +5,14 @@ import type { AssetSummary, ClaimedMlsKeyPackage, ContactDirectoryItem, Conversa
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, { credentials: "include", cache: "no-store", ...init });
   if (!response.ok) {
-    const error = new Error(`HTTP ${response.status}`) as Error & { status?: number };
+    const payload = await response.clone().json().catch(() => null) as { detail?: unknown } | null;
+    const detail = typeof payload?.detail === "string" ? payload.detail : null;
+    const error = new Error(detail ?? `HTTP ${response.status}`) as Error & {
+      status?: number;
+      detail?: string;
+    };
     error.status = response.status;
+    if (detail) error.detail = detail;
     throw error;
   }
   if (response.status === 204) return undefined as T;

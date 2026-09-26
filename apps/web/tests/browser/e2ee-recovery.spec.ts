@@ -2,11 +2,14 @@ import { expect, test, type Page } from "@playwright/test";
 import { ensureSudokuGame } from "./support/sudoku-start";
 import { acceptedMessage } from "./support/accepted-message";
 import { observeRealtimeSocket, verifyActiveComposition } from "./support/active-composition";
+import type { Conversation } from "../../features/messenger/types";
 
 const testPhone = (index: number) => "+" + String(70000000000 + index);
 const OWNER_PHONE = testPhone(1);
 const PEER_PHONE = testPhone(2);
 const PASSWORD = "browser acceptance password";
+
+type ObservedWindow = Window & { __sudokuE2eRealtimeSocket?: WebSocket };
 
 async function unlockPrivate(page: Page) {
   await page.goto("/");
@@ -52,7 +55,7 @@ async function unlockPrivate(page: Page) {
   });
 }
 
-async function login(page: Page, phone: string) {
+async function login(page: Page, phone: string, options: { requireSecureReady?: boolean } = {}) {
   await unlockPrivate(page);
   const phoneInput = page.getByLabel("Phone number", { exact: true });
 
@@ -95,9 +98,11 @@ async function login(page: Page, phone: string) {
   // pool in WASM. On cold GitHub runners this can be materially slower than
   // ordinary UI hydration, so assert the real readiness signal instead of
   // treating cryptographic startup as a 60s rendering deadline.
-  const newChat = page.getByRole("button", { name: "New secure chat" });
-  await expect(newChat).toBeVisible({ timeout: 120_000 });
-  await expect(newChat).toBeEnabled({ timeout: 120_000 });
+  if (options.requireSecureReady !== false) {
+    const newChat = page.getByRole("button", { name: "New secure chat" });
+    await expect(newChat).toBeVisible({ timeout: 120_000 });
+    await expect(newChat).toBeEnabled({ timeout: 120_000 });
+  }
 }
 
 async function reopenMessenger(page: Page) {
@@ -397,5 +402,188 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
       ownerContext.close(),
       peerContext.close(),
     ]);
+  }
+});
+
+
+
+
+test("BFCache lifecycle preserves the active MLS adapter", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(5));
+
+  await expect(page.getByRole("button", { name: "New secure chat" })).toBeEnabled();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  });
+
+  // Privacy policy intentionally locks/conceals Messenger on pagehide. Re-enter
+  // through the normal reveal/lock gate, then verify BFCache did not poison the
+  // underlying MLS state.
+  await unlockPrivate(page);
+  const pin = page.getByLabel("Device PIN", { exact: true });
+  if (await pin.count()) {
+    await pin.fill("0123");
+  }
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(
+    page.getByText("Secure messaging needs a restart.", { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("fresh authenticated device joins an existing encrypted direct chat without Reload", async ({ browser }) => {
+  test.setTimeout(360_000);
+  const primaryPhone = testPhone(6);
+  const peerPhone = testPhone(7);
+  const peerName = "MLS Fresh Peer";
+
+  const ownerContext = await browser.newContext();
+  const peerContext = await browser.newContext();
+  const freshContext = await browser.newContext();
+  const owner = await ownerContext.newPage();
+  const peer = await peerContext.newPage();
+  const freshOwner = await freshContext.newPage();
+
+  try {
+    await observeRealtimeSocket(owner);
+    await observeRealtimeSocket(peer);
+    await observeRealtimeSocket(freshOwner);
+
+    await login(peer, peerPhone);
+    await login(owner, primaryPhone);
+
+    await owner.getByRole("button", { name: "New secure chat" }).click();
+    await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+    await owner.getByLabel("Add contact by phone", { exact: true }).fill(peerPhone);
+    await owner.getByRole("button", { name: "Add contact", exact: true }).click();
+    await expect(owner.getByRole("status")).toContainText("registered contact");
+
+    const peopleSearch = owner.getByPlaceholder("Search people");
+    await peopleSearch.fill(peerName);
+    const peerResult = owner.locator(".directory-item").filter({ hasText: peerPhone });
+    await expect(peerResult).toBeVisible();
+    await peerResult.click();
+
+    const resumeSetup = owner.getByRole("button", { name: "Resume secure setup", exact: true });
+    if (await resumeSetup.count()) {
+      await resumeSetup.click();
+    }
+    await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
+      timeout: 60_000,
+    });
+
+    const response = await owner.request.get("/v1/conversations");
+    expect(response.ok()).toBe(true);
+    const items = await response.json() as Conversation[];
+    const direct = items.find((item) =>
+      item.type === "direct"
+      && item.members.some((member) => member.phone_e164 === peerPhone)
+    );
+    expect(direct).toBeDefined();
+    if (!direct) throw new Error("Encrypted direct conversation was not created");
+
+    await login(freshOwner, primaryPhone, { requireSecureReady: false });
+    await expect(
+      freshOwner.getByText("Secure messaging needs a restart.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      freshOwner.getByText(
+        "Preparing secure messaging on this device. Existing secure chats will become available automatically.",
+        { exact: true },
+      ),
+    ).toBeVisible({ timeout: 60_000 });
+
+    const pendingResponse = await owner.request.get(
+      `/v1/e2ee/conversations/${direct.id}/membership-changes/pending`,
+    );
+    expect(pendingResponse.ok()).toBe(true);
+    const pending = await pendingResponse.json() as {
+      change: { kind?: string; target_device_id?: string | null } | null;
+    };
+    expect(pending.change?.kind).toBe("device_add");
+    expect(pending.change?.target_device_id).toBeTruthy();
+
+    await owner.evaluate(({ conversationId }) => {
+      const socket = (window as ObservedWindow).__sudokuE2eRealtimeSocket;
+      if (!socket) throw new Error("Owner realtime observer is not installed");
+      socket.dispatchEvent(new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "mls.device.changed",
+          conversation_id: conversationId,
+          payload: {},
+        }),
+      }));
+    }, { conversationId: direct.id });
+
+    await expect.poll(async () => {
+      const pendingResult = await owner.request.get(
+        `/v1/e2ee/conversations/${direct.id}/membership-changes/pending`,
+      );
+      if (!pendingResult.ok()) return "request-failed";
+      const body = await pendingResult.json() as { change: unknown };
+      return body.change === null ? "ready" : "pending";
+    }, { timeout: 60_000 }).toBe("ready");
+
+    await expect(
+      freshOwner.getByText(
+        "Preparing secure messaging on this device. Existing secure chats will become available automatically.",
+        { exact: true },
+      ),
+    ).toHaveCount(0, { timeout: 60_000 });
+
+    await openConversation(freshOwner, peerName);
+    await owner.evaluate(() => window.dispatchEvent(new Event("online")));
+    await sendText(owner, "delivered after fresh-device rekey");
+    await expect(acceptedMessage(owner, "delivered after fresh-device rekey")).toBeVisible({
+      timeout: 60_000,
+    });
+    await freshOwner.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(acceptedMessage(freshOwner, "delivered after fresh-device rekey")).toBeVisible({
+      timeout: 60_000,
+    });
+  } finally {
+    await Promise.allSettled([
+      ownerContext.close(),
+      peerContext.close(),
+      freshContext.close(),
+    ]);
+  }
+});
+
+test("lost local MLS state never suggests Reload for the same authenticated session", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  try {
+    await login(page, testPhone(5));
+
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.deleteDatabase("sudoku-private-crypto");
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error ?? new Error("Unable to delete crypto database"));
+        request.onblocked = () => reject(new Error("Crypto database deletion was blocked"));
+      });
+    });
+
+    await page.reload();
+    await unlockPrivate(page);
+
+    await expect(
+      page.getByText(
+        "This device lost its secure local state. Sign in again to register it as a new secure device.",
+        { exact: true },
+      ),
+    ).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("button", { name: "Sign in again", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reload", exact: true })).toHaveCount(0);
+    await expect(
+      page.getByText("Secure messaging needs a restart.", { exact: true }),
+    ).toHaveCount(0);
+  } finally {
+    await context.close();
   }
 });

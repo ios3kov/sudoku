@@ -202,6 +202,7 @@ export type MlsTransportEvent =
       kind: "message";
       message_id: string;
       sender_user_id: string;
+      sender_device_id: string | null;
       message_sequence: number;
       created_at?: string;
       envelope: E2eeEnvelope;
