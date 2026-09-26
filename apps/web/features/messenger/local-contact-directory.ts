@@ -28,7 +28,7 @@ export function normalizeNativeAddressBook(
     )];
     if (phones.length === 0) continue;
     const name = (contact.name?.[0] ?? "").trim();
-    const key = `${name.casefold?.() ?? name.toLocaleLowerCase()}|${phones.join(",")}`;
+    const key = `${name.toLocaleLowerCase()}|${phones.join(",")}`;
     if (seen.has(key)) continue;
     seen.add(key);
     output.push({ name, phones });
