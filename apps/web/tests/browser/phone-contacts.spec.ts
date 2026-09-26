@@ -167,7 +167,8 @@ test("Contacts panel lists and removes an allowed contact", async ({ page }) => 
   await panel.getByRole("button", { name: "Add", exact: true }).click();
   await expect(panel.getByText(testPhone(5), { exact: true })).toBeVisible();
 
-  await panel.getByRole("button", { name: /Remove PIN Member/ }).click();
+  const contactRow = panel.locator(".contact-row").filter({ hasText: testPhone(5) });
+  await contactRow.locator(".contact-remove").click();
   await expect(panel.getByText(testPhone(5), { exact: true })).toHaveCount(0);
 
   await panel.getByRole("button", { name: "Close", exact: true }).click();
