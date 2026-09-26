@@ -390,6 +390,23 @@ Admin Invite becomes contact-first:
 - only canonical E.164 sent to invite API;
 - only singleton admin can issue/revoke invites.
 
+### #114 implementation checkpoint — 2026-09-26
+
+Admin invite is contact-first instead of manual-number-first.
+
+- singleton-admin Invite loads permitted Contacts locally when full access is already granted;
+- **Choose contact** remains the system-picker fallback;
+- one typeahead searches local address-book contacts by display name or phone digits;
+- RU partial/local forms such as `926… / 8926… / 7926… / +7926…` match the same canonical contact in RU context;
+- explicit country selector is available for manual/local number interpretation;
+- selected state shows contact name + formatted phone;
+- a valid number with no contact match becomes an **Invite this number** manual suggestion;
+- only the selected canonical E.164 number is sent to `/v1/invites`;
+- full Contacts denial does not block picker/manual invite;
+- local names/address-book contents are not uploaded for typeahead;
+- singleton-admin server authorization remains unchanged;
+- pure search and Browser E2E cover name search, phone variants, canonical request payload and denied-permission picker fallback.
+
 ## 2.8 Normal Messenger Contacts — #115
 
 Registered phone-book users appear as a normal messenger list:
