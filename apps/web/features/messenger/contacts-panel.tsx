@@ -7,6 +7,7 @@ import { ContactAccess } from "./contact-access";
 import {
   loadAuthorizedAddressBook,
   localNameForPhone,
+  phoneQueryMatches,
   searchLocalAddressBook,
   type LocalAddressBookContact,
 } from "./local-contact-directory";
@@ -67,7 +68,7 @@ export function ContactsPanel({
       const localName = localNameForPhone(localContacts, contact.phone_e164) ?? "";
       return contact.display_name.toLocaleLowerCase().includes(term)
         || localName.toLocaleLowerCase().includes(term)
-        || (digits && contact.phone_e164.replace(/\D/g, "").includes(digits));
+        || (digits && phoneQueryMatches(contact.phone_e164, query));
     });
   }, [contacts, localContacts, query]);
 
