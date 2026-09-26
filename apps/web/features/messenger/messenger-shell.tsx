@@ -108,7 +108,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     const encrypted = conversationsRef.current.filter(
       (conversation) => conversation.encryption_required && conversation.e2ee_ready,
     );
-    const tracked = new Set(adapter.trackedConversationIds());
+    const tracked = new Set(adapter.joinedConversationIds());
     if (encrypted.some((conversation) => !tracked.has(conversation.id))) {
       setE2eeState("new_device_pending");
       return;
@@ -125,7 +125,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     adapter: OpenMlsProtocolAdapter,
     conversationId: string,
   ) => {
-    if (!adapter.trackedConversationIds().includes(conversationId)) return false;
+    if (!adapter.joinedConversationIds().includes(conversationId)) return false;
     const conversation = conversationsRef.current.find(
       (item) =>
         item.id === conversationId
@@ -205,7 +205,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           // until its assigned Welcome arrives, instead of trying to decrypt
           // history for which this device never possessed keys.
           await currentAdapter.syncTransport(conversation.id);
-          if (currentAdapter.trackedConversationIds().includes(conversation.id)) {
+          if (currentAdapter.joinedConversationIds().includes(conversation.id)) {
             await reconcileDeviceChange(currentAdapter, conversation.id);
             await currentAdapter.syncTransport(conversation.id);
           }
@@ -254,7 +254,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           for (const conversation of encryptedConversations) {
             void (async () => {
               await adapter.syncTransport(conversation.id);
-              if (adapter.trackedConversationIds().includes(conversation.id)) {
+              if (adapter.joinedConversationIds().includes(conversation.id)) {
                 await reconcileDeviceChange(adapter, conversation.id);
                 await adapter.syncTransport(conversation.id);
               }
@@ -299,7 +299,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               conversation.id === event.conversation_id
               && conversation.encryption_required,
           );
-          const locallyTracked = adapter?.trackedConversationIds().includes(event.conversation_id) ?? false;
+          const locallyTracked = adapter?.joinedConversationIds().includes(event.conversation_id) ?? false;
           if (
             adapter
             && (
@@ -491,7 +491,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
 
   if (selected?.encryption_required) {
     const selectedTracked =
-      e2eeAdapter?.trackedConversationIds().includes(selected.id) ?? false;
+      e2eeAdapter?.joinedConversationIds().includes(selected.id) ?? false;
     if (
       !selected.e2ee_ready
       && selected.created_by === user.id
