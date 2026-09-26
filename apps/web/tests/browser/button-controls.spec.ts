@@ -214,3 +214,27 @@ test("PIN-protected attachment open button resolves a safe blob link", async ({ 
   expect(paths).toContain("/v1/assets/00000000-0000-4000-8000-000000000001/download-url");
   expect(paths).toContain("https://assets.example.test/signed");
 });
+
+
+test("phone input normalizes common Russian and non-Russian local formats", async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const normalize = window.__buttonAudit.phone.canonicalizePhone;
+    return {
+      ruLocal: normalize("926 123-45-67", "RU"),
+      ruEight: normalize("8 (926) 123-45-67", "RU"),
+      ruSeven: normalize("7 926 123 45 67", "RU"),
+      ruPlus: normalize("+7 (926) 123-45-67", "RU"),
+      montenegro: normalize("067 123 456", "ME"),
+      inferredRu: window.__buttonAudit.phone.initialPhoneCountry("ru-RU"),
+      inferredBa: window.__buttonAudit.phone.initialPhoneCountry("bs-BA"),
+    };
+  });
+
+  expect(result.ruLocal).toBe("+79261234567");
+  expect(result.ruEight).toBe("+79261234567");
+  expect(result.ruSeven).toBe("+79261234567");
+  expect(result.ruPlus).toBe("+79261234567");
+  expect(result.montenegro).toBe("+38267123456");
+  expect(result.inferredRu).toBe("RU");
+  expect(result.inferredBa).toBe("BA");
+});
