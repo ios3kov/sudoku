@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type CountryCode = "ME" | "RU" | "BA" | "RS" | "HR" | "US";
 
@@ -64,13 +64,17 @@ export function formatCanonicalPhone(value: string): string {
 
   if (value.startsWith("+7") && digits.length > 1) {
     const local = digits.slice(1);
-    const groups = [
-      local.slice(0, 3),
-      local.slice(3, 6),
-      local.slice(6, 8),
-      local.slice(8, 10),
-    ].filter(Boolean);
-    return `+7 ${groups.join(" ")}`.trim();
+    if (!local) return "+7";
+    const area = local.slice(0, 3);
+    const first = local.slice(3, 6);
+    const second = local.slice(6, 8);
+    const third = local.slice(8, 10);
+    let output = "+7";
+    if (area) output += ` (${area}${area.length === 3 ? ")" : ""}`;
+    if (first) output += ` ${first}`;
+    if (second) output += `-${second}`;
+    if (third) output += `-${third}`;
+    return output;
   }
 
   const country = countryFromCanonical(value);
@@ -78,8 +82,20 @@ export function formatCanonicalPhone(value: string): string {
   const item = countryByCode(country);
   const local = digits.slice(item.dial.length - 1);
   const groups: string[] = [];
-  for (let index = 0; index < local.length; index += 3) groups.push(local.slice(index, index + 3));
+  for (let index = 0; index < local.length; index += 3) {
+    groups.push(local.slice(index, index + 3));
+  }
   return `${item.dial}${groups.length ? " " : ""}${groups.join(" ")}`.trim();
+}
+
+function caretForDigitCount(formatted: string, digitCount: number): number {
+  if (digitCount <= 0) return formatted.startsWith("+") ? 1 : 0;
+  let seen = 0;
+  for (let index = 0; index < formatted.length; index += 1) {
+    if (/\d/.test(formatted[index])) seen += 1;
+    if (seen >= digitCount) return index + 1;
+  }
+  return formatted.length;
 }
 
 export function PhoneInput({
@@ -99,18 +115,19 @@ export function PhoneInput({
   required?: boolean;
   autoComplete?: string;
 }) {
-  const [country, setCountry] = useState<CountryCode>(() => countryFromCanonical(value) ?? "ME");
-  const [draft, setDraft] = useState(value);
-  const [focused, setFocused] = useState(false);
+  const [country, setCountry] = useState<CountryCode>("ME");
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const fromValue = countryFromCanonical(value);
-    if (fromValue) setCountry(fromValue);
-    else if (!value && typeof navigator !== "undefined") setCountry(initialPhoneCountry(navigator.language));
-    if (!focused) setDraft(value);
-  }, [focused, value]);
+    if (fromValue) {
+      setCountry(fromValue);
+    } else if (!value && typeof navigator !== "undefined") {
+      setCountry(initialPhoneCountry(navigator.language));
+    }
+  }, [value]);
 
-  const displayed = focused ? draft : formatCanonicalPhone(value);
+  const displayed = formatCanonicalPhone(value);
 
   return (
     <label className="phone-input-field">
@@ -123,9 +140,14 @@ export function PhoneInput({
           onChange={(event) => {
             const nextCountry = event.target.value as CountryCode;
             setCountry(nextCountry);
-            const canonical = canonicalizePhone(draft || value, nextCountry);
+            const canonical = canonicalizePhone(value, nextCountry);
             onChange(canonical);
-            setDraft(canonical);
+            window.requestAnimationFrame(() => {
+              const input = inputRef.current;
+              if (!input) return;
+              const end = formatCanonicalPhone(canonical).length;
+              input.setSelectionRange(end, end);
+            });
           }}
         >
           {COUNTRIES.map((item) => (
@@ -133,6 +155,7 @@ export function PhoneInput({
           ))}
         </select>
         <input
+          ref={inputRef}
           type="tel"
           inputMode="tel"
           autoComplete={autoComplete}
@@ -141,15 +164,19 @@ export function PhoneInput({
           disabled={disabled}
           required={required}
           placeholder={countryByCode(country).dial}
-          onFocus={() => {
-            setDraft(value);
-            setFocused(true);
-          }}
-          onBlur={() => setFocused(false)}
           onChange={(event) => {
-            const raw = event.target.value;
-            setDraft(raw);
-            onChange(canonicalizePhone(raw, country));
+            const raw = event.currentTarget.value;
+            const caret = event.currentTarget.selectionStart ?? raw.length;
+            const digitsBeforeCaret = raw.slice(0, caret).replace(/\D/g, "").length;
+            const canonical = canonicalizePhone(raw, country);
+            onChange(canonical);
+            window.requestAnimationFrame(() => {
+              const input = inputRef.current;
+              if (!input) return;
+              const next = formatCanonicalPhone(canonical);
+              const position = caretForDigitCount(next, digitsBeforeCaret);
+              input.setSelectionRange(position, position);
+            });
           }}
         />
         {name ? <input type="hidden" name={name} value={value} /> : null}
