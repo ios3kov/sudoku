@@ -334,8 +334,10 @@ Add a dedicated native startup view:
 
 Privacy cover remains fail-closed and synchronous on resign-active/background, but becomes intentional:
 
-- branded/dark Sudoku visual language;
-- no pale placeholder;
+- the app switcher shows the **last real Sudoku state** (current board/menu/last Sudoku screen), never Messenger;
+- a generic/loading-style Sudoku placeholder is fallback-only when no real Sudoku frame has ever been captured;
+- entering the Messenger snapshots Sudoku before private content replaces it;
+- resigning while Sudoku is visible refreshes the cached Sudoku frame synchronously before the cover appears;
 - Control Center / Notification Center / app switcher transitions do not expose chat;
 - return to foreground does not visibly flash the cover longer than necessary;
 - private content remains hidden in snapshots.
@@ -356,9 +358,12 @@ Motion:
 - vertical drag tracks finger continuously;
 - ignore diagonal noise;
 - no start jump;
-- no release snap;
-- threshold/velocity commit -> short iOS-like spring to Messenger;
-- early release -> spring back to Sudoku;
+- no automatic finish while the finger is still down;
+- on pointer release, combine current drag distance with recent vertical velocity/projected travel;
+- a fast upward flick may commit before the normal distance threshold;
+- a slow/short release below the commit threshold springs back to Sudoku;
+- committed release -> short iOS-like settle to Messenger with duration influenced by remaining distance/velocity;
+- no abrupt release jump;
 - normal tap on 5 still inputs/selects 5.
 
 Physical-device frame pacing is the acceptance authority.
