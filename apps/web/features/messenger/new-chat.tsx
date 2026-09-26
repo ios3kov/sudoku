@@ -61,17 +61,12 @@ export function NewChat({
   async function createDirect(user: DirectoryUser) {
     setError(null);
     setCreating(true);
-    let pending: Conversation | null = null;
     try {
       if (!adapter) throw new Error("Secure messaging is not ready");
-      pending = await messengerApi.createDirect(user.id, true);
-      onCreated(await adapter.bootstrapConversation(pending));
+      const conversation = await messengerApi.createDirect(user.id, true);
+      onCreated(conversation);
     } catch (error) {
-      if (pending) {
-        onCreated(pending);
-      } else {
-        setError(error instanceof Error ? error.message : "Unable to create secure chat");
-      }
+      setError(error instanceof Error ? error.message : "Unable to create secure chat");
     } finally {
       setCreating(false);
     }
