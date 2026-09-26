@@ -37,7 +37,7 @@ async function passwordLogin(page: Page, phone: string) {
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByLabel("Remember phone on this device").check();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Set PIN", exact: true })).toBeVisible();
   await expect(page.getByText("Messages", { exact: true })).toHaveCount(0);
 }
 
@@ -53,12 +53,14 @@ for (const role of ["member", "admin"]) {
     expect(await page.evaluate(() => localStorage.getItem("sudoku.startup.v1"))).toBeNull();
     await page.getByRole("button", { name: "Set PIN", exact: true }).click();
     await page.getByLabel("Four-digit PIN", { exact: true }).fill("0123");
+    await expect(page.getByLabel("Confirm PIN", { exact: true })).toBeVisible();
     await page.getByLabel("Confirm PIN", { exact: true }).fill("0123");
-    await page.getByRole("button", { name: "Save PIN", exact: true }).click();
 
     await expect(page.getByText("Messages", { exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => localStorage.getItem("sudoku.startup.v1"))).toBe("quick-play");
-    await expect(page.getByRole("button", { name: "Invite", exact: true })).toHaveCount(role === "admin" ? 1 : 0);
+    await expect(page.getByRole("button", { name: "Chats", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Contacts", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
 
     const storage = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } }));
     expect(JSON.stringify(storage)).not.toContain(PASSWORD);
@@ -99,7 +101,7 @@ for (const role of ["member", "admin"]) {
     }
 
     if (role === "member") {
-      await page.getByRole("button", { name: "Unlock", exact: true }).click();
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
     }
     await expect(page.getByText("Messages", { exact: true })).toBeVisible();
     await expect(page.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
@@ -112,12 +114,17 @@ for (const role of ["member", "admin"]) {
           value: async () => "denied",
         });
       });
-      await page.getByRole("button", { name: "Enable notifications", exact: true }).click();
-      await expect(page.getByRole("button", { name: "Retry notifications", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      const settings = page.getByRole("dialog", { name: "Devices and sessions", exact: true });
+      await settings.getByRole("button", { name: /Notifications/ }).click();
+      await expect(settings.getByText("Tap to retry", { exact: true })).toBeVisible();
+      await settings.getByRole("button", { name: "Close", exact: true }).click();
     }
 
     if (role === "admin") {
-      await page.getByRole("button", { name: "Invite", exact: true }).click();
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      const settings = page.getByRole("dialog", { name: "Devices and sessions", exact: true });
+      await settings.getByRole("button", { name: /Invite member/ }).click();
       const invite = page.getByRole("dialog", { name: "Create invite", exact: true });
       await expect(invite).toBeVisible();
       await invite.getByRole("button", { name: "Close", exact: true }).click();
@@ -125,23 +132,27 @@ for (const role of ["member", "admin"]) {
     }
 
     // Settings remain a secondary management surface after onboarding.
-    await page.getByRole("button", { name: "Devices", exact: true }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     const panel = page.getByRole("region", { name: "Login and device PIN" });
-    await expect(panel.getByText("Device PIN is enabled.")).toBeVisible();
+    await expect(panel.getByText("PIN is enabled on this device.")).toBeVisible();
     const devices = page.getByRole("dialog", { name: "Devices and sessions", exact: true });
     await devices.getByRole("button", { name: "Close", exact: true }).click();
     await expect(devices).toHaveCount(0);
 
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     const signedOut = page.waitForResponse(response =>
       response.url().endsWith("/v1/auth/logout") && response.request().method() === "POST"
     );
-    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await page.getByRole("dialog", { name: "Devices and sessions", exact: true })
+      .getByRole("button", { name: /Sign out/ }).last().click();
     expect((await signedOut).ok()).toBe(true);
     // Logout also clears local encrypted state before concealing the surface.
     // Navigating immediately after click can abort the request and retain PIN.
     await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
     await reveal(page);
-    await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue(phone);
+    const rememberedPhone = page.getByLabel("Phone number", { exact: true });
+    await rememberedPhone.focus();
+    await expect(rememberedPhone).toHaveValue(phone);
     await page.getByLabel("Remember phone on this device").uncheck();
     await reveal(page);
     await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("");
@@ -154,8 +165,8 @@ test("correct PIN auto-submits once and unlocks on the first attempt after repea
   await passwordLogin(page, testPhone(5));
   await page.getByRole("button", { name: "Set PIN", exact: true }).click();
   await page.getByLabel("Four-digit PIN", { exact: true }).fill("2468");
+  await expect(page.getByLabel("Confirm PIN", { exact: true })).toBeVisible();
   await page.getByLabel("Confirm PIN", { exact: true }).fill("2468");
-  await page.getByRole("button", { name: "Save PIN", exact: true }).click();
   await expect(page.getByText("Messages", { exact: true })).toBeVisible();
 
   let unlockRequests = 0;
@@ -208,7 +219,7 @@ test("Not now enters the app without enabling a device PIN", async ({ page }) =>
   await revealCurrentPage(page);
   await expect(page.getByText("Messages", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Device PIN", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Use PIN for quick sign-in on this device?", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Set PIN", exact: true })).toHaveCount(0);
 });
 
 test("login navigation, invite submit and hide controls work", async ({ page }) => {
