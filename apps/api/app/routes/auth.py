@@ -12,7 +12,7 @@ from ..deps import AuthContext, get_auth_context
 from ..models import AuditEvent, Invite, LoginAttempt, MlsDevice, MlsKeyPackage, Session, User, UserContact
 from ..rate_limit import enforce_ip_rate_limit, enforce_login_rate_limit, enforce_user_rate_limit
 from ..mls_lifecycle import schedule_mls_device_change
-from ..schemas import InviteAcceptRequest, InviteCreateRequest, InviteCreateResponse, LoginRequest, SessionResponse, UpdatePhoneRequest, UserResponse
+from ..schemas import InviteAcceptRequest, InviteCreateRequest, InviteCreateResponse, LoginRequest, SessionResponse, UpdateDisplayNameRequest, UpdatePhoneRequest, UserResponse
 from ..security import (
     generate_invite_secret,
     generate_session_secret,
@@ -204,6 +204,30 @@ async def logout(response: Response, auth: AuthContext = Depends(get_auth_contex
 
 @router.get("/me", response_model=UserResponse)
 async def me(auth: AuthContext = Depends(get_auth_context)):
+    return _user_response(auth.user)
+
+
+@router.put("/me/display-name", response_model=UserResponse)
+async def update_display_name(
+    payload: UpdateDisplayNameRequest,
+    auth: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_user_rate_limit(auth.user.id, "display-name-update", 20, 3600)
+    display_name = payload.display_name.strip()
+    if not display_name:
+        raise HTTPException(status_code=422, detail="Display name is required")
+    auth.user.display_name = display_name
+    db.add(
+        AuditEvent(
+            actor_user_id=auth.user.id,
+            event_type="auth.display_name_updated",
+            target_type="user",
+            target_id=auth.user.id,
+        )
+    )
+    await db.commit()
+    await db.refresh(auth.user)
     return _user_response(auth.user)
 
 
