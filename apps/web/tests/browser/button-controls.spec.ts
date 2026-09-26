@@ -68,7 +68,7 @@ test("conversation settings pin, mute and done buttons update state", async ({ p
 test("devices controls revoke sessions, manage PIN and close", async ({ page }) => {
   await mount(page, "sessions");
   await expect(page.getByRole("dialog", { name: "Devices and sessions" })).toBeVisible();
-  await expect(page.getByText("Device PIN is enabled.", { exact: true })).toBeVisible();
+  await expect(page.getByText("PIN is enabled on this device.", { exact: true })).toBeVisible();
 
   const access = page.getByRole("region", { name: "Login and device PIN" });
   await access.getByLabel("Phone number", { exact: true }).fill("+70000000009");
@@ -195,11 +195,11 @@ test("contacts add, remove and close buttons update the contact allowlist", asyn
   await expect(panel.getByText("+70000000003", { exact: true })).toBeVisible();
 
   await panel.getByLabel("Add contact by phone", { exact: true }).fill("+70000000004");
-  await panel.getByRole("button", { name: "Add contact", exact: true }).click();
+  await panel.getByRole("button", { name: "Add", exact: true }).click();
   await expect(panel.getByRole("status")).toContainText("1 registered contact");
   expect(await page.evaluate(() => window.__buttonAudit.calls.syncedPhones.at(-1))).toEqual(["+70000000004"]);
 
-  await panel.getByRole("button", { name: "Remove", exact: true }).click();
+  await panel.getByRole("button", { name: /Remove Candidate User/ }).click();
   expect(await page.evaluate(() => window.__buttonAudit.calls.removedContacts.at(-1))).toBe("candidate");
 
   await panel.getByRole("button", { name: "Close", exact: true }).click();
