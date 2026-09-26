@@ -97,3 +97,21 @@ The E2EE recovery suite now covers:
 - confirm expected historical-message limitations on a truly fresh device.
 
 Production is unchanged.
+
+## Same-user sibling-device delivery fix
+
+The fresh-device Browser E2E exposed an additional protocol provenance bug after device-add itself succeeded.
+
+Message transport events previously exposed only `sender_user_id`. The browser adapter therefore treated every message from the same account as a local echo, even when it was authored by another device of that same user. On a newly added device, a post-rekey message from the user's established device could therefore fail with the local-journal guard instead of decrypting normally.
+
+The fix adds migration `0019_transport_sender_device` and records the authenticated session/device id on new message transport events. The transport API now exposes `sender_device_id`.
+
+Browser behavior is now:
+
+- same user + same device -> must already exist in the local durable journal; a missing entry remains fail-closed;
+- same user + different device -> normal incoming MLS application message and decrypt normally;
+- historical transport rows without device provenance remain conservative/fail-closed for same-user events.
+
+API regression verifies message transport exposes the sender device. The fresh-device Browser E2E verifies that a sibling device of the same account can send after rekey and the newly added device can decrypt the message.
+
+The E2E fixture also uses dedicated users `6/7` so it cannot create MLS membership changes that contaminate later PIN/Contacts browser scenarios.
