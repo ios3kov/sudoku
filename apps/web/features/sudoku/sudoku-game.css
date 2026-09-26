@@ -174,272 +174,409 @@
 @media(max-height:650px) { .sudoku-game.is-menu .sudoku-shell { gap:12px; } .sudoku-game .sudoku-home-header .sudoku-logo { display:block; width:40px; height:40px; } .sudoku-game .sudoku-home-header .sudoku-brand { gap:6px; } }
 
 
-/* === 2026-09 Sudoku.com-inspired gameplay layout baseline ==================
-   Structural reference only: brand styling remains original SUDOKU.MOSCOW.
-   Keep this section isolated while we redraw the game element-by-element.
+/* === 2026-09 exact reference geometry baseline ============================
+   Layout follows the approved screenshot geometry. Decorative art is still
+   placeholder CSS and will be replaced element-by-element after approval.
 ============================================================================ */
 .sudoku-game:not(.is-menu) {
-  --bg:#07111f;
-  --surface:#0d1a2c;
-  --surface-2:#12223a;
-  --text:#f8f2e5;
-  --muted:#8fa0b9;
-  --line:#263a55;
-  --accent:#e8c56e;
-  --accent-strong:#f6d987;
-  --accent-soft:#2a261b;
-  --danger:#ff6b6b;
-  --game-width:min(430px,100%,calc(100dvh - 214px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+  --bg:#050d18;
+  --surface:#0a1728;
+  --surface-2:#0f2138;
+  --text:#f7f3ea;
+  --muted:#95a2b5;
+  --line:#18304b;
+  --accent:#d9b154;
+  --accent-strong:#f6d47b;
+  --accent-soft:#282318;
+  --danger:#ff6464;
+  --game-width:min(
+    430px,
+    100%,
+    calc(100dvh - 340px - env(safe-area-inset-top) - env(safe-area-inset-bottom))
+  );
   background:
-    radial-gradient(circle at 50% -10%,#17345f 0%,transparent 38%),
-    linear-gradient(180deg,#081528 0%,#06101d 100%);
+    radial-gradient(circle at 50% -18%,#17365d 0%,transparent 36%),
+    linear-gradient(180deg,#071426 0%,#030a13 100%);
+}
+
+.sudoku-game:not(.is-menu).page {
+  padding:
+    max(8px,env(safe-area-inset-top))
+    max(8px,env(safe-area-inset-right))
+    max(8px,env(safe-area-inset-bottom))
+    max(8px,env(safe-area-inset-left));
 }
 
 .sudoku-game:not(.is-menu) .sudoku-shell {
+  position:relative;
   width:var(--game-width);
   max-width:430px;
+  min-width:0;
+  height:auto;
+  padding:4px 5px 7px;
+  gap:0;
   justify-content:flex-start;
-  gap:8px;
+  overflow:hidden;
+  border:2px solid #9f7b32;
+  border-radius:16px;
+  background:
+    linear-gradient(180deg,rgba(8,22,39,.97),rgba(3,10,19,.98));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,225,145,.16),
+    0 10px 34px rgba(0,0,0,.28);
+}
+
+.sudoku-game:not(.is-menu) .sudoku-shell::before {
+  content:"";
+  position:absolute;
+  inset:2px;
+  pointer-events:none;
+  border:1px solid rgba(246,212,123,.22);
+  border-radius:12px;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-topbar {
-  min-height:48px;
+  position:relative;
+  z-index:1;
+  min-height:56px;
+  height:56px;
+  margin:0;
+  padding:0;
+  border:0;
+  align-items:center;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-header-actions {
-  grid-template-columns:48px 1fr 48px;
-  min-height:48px;
-  padding:0;
-  border-bottom:1px solid rgba(232,197,110,.22);
+  position:relative;
+  width:100%;
+  height:56px;
+  display:grid;
+  grid-template-columns:52px 1fr 52px;
+  align-items:center;
+  margin:0;
+  padding:0 2px 7px;
+  border:0;
+  border-bottom:1px solid rgba(215,174,78,.3);
+}
+
+.sudoku-game:not(.is-menu) .sudoku-header-actions::after {
+  content:"★";
+  position:absolute;
+  left:50%;
+  bottom:-8px;
+  width:58px;
+  height:17px;
+  transform:translateX(-50%);
+  display:grid;
+  place-items:center;
+  color:#d8a83d;
+  font-size:11px;
+  line-height:1;
+  letter-spacing:0;
+  background:
+    linear-gradient(90deg,transparent,#9f7626 28%,#f0c55c 50%,#9f7626 72%,transparent)
+    center 50%/100% 1px no-repeat;
+  text-shadow:0 0 8px rgba(223,164,44,.38);
+  pointer-events:none;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-header-actions strong {
   align-self:center;
-  color:#f3d47f;
-  font-size:13px;
-  letter-spacing:.18em;
+  text-align:center;
+  color:#f2efe7;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.17em;
+  white-space:nowrap;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-header-actions button {
   width:48px;
+  min-width:48px;
   height:48px;
+  min-height:48px;
   padding:0;
-  color:#c9d2df;
-  border-radius:12px;
+  display:grid;
+  place-items:center;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#d8aa3d;
 }
 
-.sudoku-game:not(.is-menu) .sudoku-header-actions button:first-child {
-  color:#f3d47f;
+.sudoku-game:not(.is-menu) .sudoku-header-actions button:last-child {
+  color:#f0ede4;
 }
 
 .sudoku-game:not(.is-menu) .game-content {
+  position:relative;
+  z-index:1;
   width:100%;
-  gap:9px;
+  min-height:0;
+  flex:0 1 auto;
+  display:flex;
+  flex-direction:column;
+  gap:0;
   overflow:hidden;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-stats {
+  width:100%;
+  min-height:72px;
+  height:72px;
+  padding:7px 7px 8px;
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:0;
-  min-height:44px;
-  padding:0 4px;
+  gap:5px;
   border:0;
+  background:transparent;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-stats>div {
-  height:44px;
-  padding:5px 8px;
-  border:0;
-  border-radius:0;
-  background:transparent;
+  min-width:0;
+  height:57px;
+  padding:7px 4px 6px;
   display:flex;
   flex-direction:column;
-  justify-content:center;
   align-items:center;
-  gap:3px;
+  justify-content:center;
+  gap:5px;
+  border:1px solid #31435a;
+  border-radius:9px;
+  background:
+    linear-gradient(180deg,#10243a 0%,#091729 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.025),
+    0 2px 6px rgba(0,0,0,.22);
 }
 
 .sudoku-game:not(.is-menu) .sudoku-stats>div+div {
-  border-left:1px solid rgba(232,197,110,.18);
+  border-left:1px solid #31435a;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-stats span {
-  color:#8293aa;
+  color:#d5d9df;
   font-size:8px;
-  letter-spacing:.16em;
+  font-weight:700;
+  line-height:1;
+  letter-spacing:.08em;
+  white-space:nowrap;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-stats strong {
   margin:0;
-  color:#f5d77d;
-  font-size:12px;
+  color:#e5ba58;
+  font-family:"Chakra Petch",sans-serif;
+  font-size:14px;
   line-height:1;
+  letter-spacing:.03em;
 }
 
 .sudoku-game:not(.is-menu) .sudoku-stats>div:nth-child(2) {
-  background:transparent;
+  background:linear-gradient(180deg,#10243a 0%,#091729 100%);
 }
 
 .sudoku-game:not(.is-menu) .sudoku-stats>div:nth-child(2) strong {
-  color:#fff4cf;
-  font-size:15px;
-  text-shadow:0 0 14px rgba(232,197,110,.26);
+  color:#f1cf74;
+  font-family:"Share Tech Mono",monospace;
+  font-size:16px;
+  text-shadow:0 0 10px rgba(232,180,69,.28);
 }
 
 .sudoku-game:not(.is-menu) .life-gauge {
-  margin-top:1px;
+  display:flex;
+  justify-content:center;
   gap:3px;
+  margin:0;
 }
 
 .sudoku-game:not(.is-menu) .life-gauge i {
   width:14px;
   height:5px;
-  background:#e8c56e;
-  box-shadow:0 0 7px rgba(232,197,110,.42);
+  border-radius:2px;
+  background:#d6aa43;
+  box-shadow:0 0 5px rgba(224,171,52,.36);
+}
+
+.sudoku-game:not(.is-menu) .life-gauge .lost {
+  background:#7a2930;
+  border-color:#b5424b;
+  box-shadow:none;
 }
 
 .sudoku-game:not(.is-menu) .board {
+  position:relative;
   width:100%;
   min-width:0;
-  border:2px solid #b99b50;
-  border-radius:4px;
+  margin:0;
+  border:3px solid #b58b34;
+  border-radius:11px;
   overflow:hidden;
-  background:#12223a;
+  background:#07182b;
   box-shadow:
-    0 10px 28px rgba(0,0,0,.22),
-    0 0 0 1px rgba(255,228,153,.12);
+    0 0 0 1px rgba(247,210,112,.16),
+    inset 0 0 18px rgba(0,0,0,.16),
+    0 4px 12px rgba(0,0,0,.22);
 }
 
 .sudoku-game:not(.is-menu) .board .cell {
   min-width:0;
   aspect-ratio:1;
   padding:0;
-  border-color:#2a405e;
-  background:#0c1a2d;
-  color:#f0c964;
-  font-size:clamp(18px,5vw,24px);
+  border-color:#17324f;
+  background:#07192b;
+  color:#e8b952;
+  font-size:clamp(16px,4.7vw,23px);
   font-weight:700;
+  font-variant-numeric:tabular-nums;
 }
 
 .sudoku-game:not(.is-menu) .board .cell.given {
-  color:#f8f4e9;
+  color:#f0eee8;
   font-weight:600;
 }
 
 .sudoku-game:not(.is-menu) .board .cell.related {
-  background:#122541;
+  background:#0b2036;
 }
 
 .sudoku-game:not(.is-menu) .board .cell.same {
-  background:#26304a;
-  color:#ffe49b;
+  background:#192e45;
+  color:#f5ca67;
 }
 
 .sudoku-game:not(.is-menu) .board .cell.box-right {
-  border-right:2px solid #a98f50;
+  border-right:2px solid #b58b34;
 }
 
 .sudoku-game:not(.is-menu) .board .cell.box-bottom {
-  border-bottom:2px solid #a98f50;
+  border-bottom:2px solid #b58b34;
 }
 
 .sudoku-game:not(.is-menu) .board .cell.selected {
-  background:#d5b45d;
-  color:#09121f;
-  box-shadow:inset 0 0 0 2px #ffe8a9;
+  background:#c41d21;
+  color:#fff3dc;
+  box-shadow:
+    inset 0 0 0 2px #f14b3f,
+    inset 0 1px 0 rgba(255,255,255,.28);
 }
 
 .sudoku-game:not(.is-menu) .board .cell.given.selected {
-  color:#09121f;
+  color:#fff3dc;
 }
 
 .sudoku-game:not(.is-menu) .board .cell.invalid {
-  background:#50202a;
-  color:#ffd5d5;
+  background:#b81820;
+  color:#fff;
 }
 
 .sudoku-game:not(.is-menu) .controls {
   width:100%;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
+  display:grid;
+  grid-template-columns:23% repeat(3,minmax(0,1fr));
+  grid-template-rows:repeat(3,minmax(44px,1fr));
+  gap:6px;
+  padding:8px 1px 1px;
 }
 
+.sudoku-game:not(.is-menu) .digits,
 .sudoku-game:not(.is-menu) .actions {
-  order:1;
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:8px;
+  display:contents;
 }
 
-.sudoku-game:not(.is-menu) .digits {
-  order:2;
-  width:100%;
-  display:grid;
-  gap:4px;
+.sudoku-game:not(.is-menu) .actions .action:nth-child(1) { grid-area:1 / 1; }
+.sudoku-game:not(.is-menu) .actions .action:nth-child(2) { grid-area:2 / 1; }
+.sudoku-game:not(.is-menu) .actions .action:nth-child(3) { grid-area:3 / 1; }
+
+.sudoku-game:not(.is-menu) .digit,
+.sudoku-game:not(.is-menu) .action {
+  min-width:0;
+  height:clamp(44px,6.25vh,52px);
+  min-height:44px;
+  padding:0;
+  border:2px solid #a77d2d;
+  border-radius:8px;
+  background:
+    linear-gradient(180deg,#0d4277 0%,#082c54 48%,#061a32 100%);
+  color:#f6f1e7;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.16),
+    inset 0 -3px 7px rgba(0,0,0,.22),
+    0 2px 4px rgba(0,0,0,.22);
 }
 
-.sudoku-game:not(.is-menu) .action,
 .sudoku-game:not(.is-menu) .digit {
-  border:1px solid rgba(232,197,110,.16);
-  background:linear-gradient(180deg,#13243b 0%,#0c1829 100%);
-  color:#eef3fb;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+  font-family:"Chakra Petch",sans-serif;
+  font-size:clamp(18px,5vw,23px);
+  font-weight:700;
+  line-height:1;
 }
 
 .sudoku-game:not(.is-menu) .action {
-  min-height:48px;
-  height:48px;
-  border-radius:12px;
-  font-size:9px;
-  color:#b9c5d6;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  color:#f3efe6;
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:.02em;
+  text-transform:uppercase;
 }
 
 .sudoku-game:not(.is-menu) .action svg {
-  width:18px;
-  height:18px;
-  color:#f1d174;
+  width:17px;
+  height:17px;
+  color:#f1d175;
 }
 
 .sudoku-game:not(.is-menu) .action.active {
-  border-color:#d8b85f;
-  background:linear-gradient(180deg,#3b3421,#211f18);
-  color:#ffe7a5;
+  border-color:#d3a23b;
+  background:
+    linear-gradient(180deg,#1598ec 0%,#0874c4 50%,#04538e 100%);
+  color:#fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    0 0 10px rgba(26,133,224,.28);
 }
 
-.sudoku-game:not(.is-menu) .digit {
-  min-width:0;
-  height:clamp(46px,6.2vh,54px);
-  min-height:46px;
-  border-radius:10px;
-  padding:0;
-  color:#f5d77d;
-  font-size:clamp(18px,5vw,24px);
+.sudoku-game:not(.is-menu) .digit:disabled,
+.sudoku-game:not(.is-menu) .action:disabled {
+  opacity:.45;
 }
 
 @media (hover:hover) and (pointer:fine) {
   .sudoku-game:not(.is-menu) .digit:hover,
   .sudoku-game:not(.is-menu) .action:hover {
-    border-color:rgba(232,197,110,.48);
-    background:#172b47;
+    filter:brightness(1.12);
   }
 }
 
 @media(max-width:359px) {
-  .sudoku-game:not(.is-menu) .digits { gap:2px; }
-  .sudoku-game:not(.is-menu) .digit { border-radius:8px; font-size:17px; }
-  .sudoku-game:not(.is-menu) .action { border-radius:9px; }
+  .sudoku-game:not(.is-menu) .sudoku-shell { padding-left:4px; padding-right:4px; }
+  .sudoku-game:not(.is-menu) .sudoku-header-actions { grid-template-columns:46px 1fr 46px; }
+  .sudoku-game:not(.is-menu) .sudoku-header-actions strong { font-size:11px; letter-spacing:.13em; }
+  .sudoku-game:not(.is-menu) .sudoku-stats { padding-left:5px; padding-right:5px; gap:3px; }
+  .sudoku-game:not(.is-menu) .sudoku-stats span { font-size:7px; }
+  .sudoku-game:not(.is-menu) .controls { gap:4px; }
+  .sudoku-game:not(.is-menu) .digit,
+  .sudoku-game:not(.is-menu) .action { border-radius:7px; }
 }
 
 @media(max-height:700px) {
   .sudoku-game:not(.is-menu) {
-    --game-width:min(356px,100%,calc(100dvh - 188px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+    --game-width:min(
+      356px,
+      100%,
+      calc(100dvh - 300px - env(safe-area-inset-top) - env(safe-area-inset-bottom))
+    );
   }
-  .sudoku-game:not(.is-menu) .sudoku-shell { gap:5px; }
-  .sudoku-game:not(.is-menu) .game-content { gap:5px; }
-  .sudoku-game:not(.is-menu) .sudoku-stats,
-  .sudoku-game:not(.is-menu) .sudoku-stats>div { min-height:38px; height:38px; }
+  .sudoku-game:not(.is-menu) .sudoku-topbar,
+  .sudoku-game:not(.is-menu) .sudoku-header-actions { height:50px; min-height:50px; }
+  .sudoku-game:not(.is-menu) .sudoku-stats { height:62px; min-height:62px; padding-top:5px; padding-bottom:6px; }
+  .sudoku-game:not(.is-menu) .sudoku-stats>div { height:51px; }
+  .sudoku-game:not(.is-menu) .controls { gap:4px; padding-top:6px; }
+  .sudoku-game:not(.is-menu) .digit,
   .sudoku-game:not(.is-menu) .action { height:44px; min-height:44px; }
-  .sudoku-game:not(.is-menu) .digit { height:44px; min-height:44px; }
 }
