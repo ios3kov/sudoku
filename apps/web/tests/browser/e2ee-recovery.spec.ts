@@ -8,6 +8,8 @@ const OWNER_PHONE = testPhone(1);
 const PEER_PHONE = testPhone(2);
 const PASSWORD = "browser acceptance password";
 
+type ObservedWindow = Window & { __sudokuE2eRealtimeSocket?: WebSocket };
+
 async function unlockPrivate(page: Page) {
   await page.goto("/");
   await ensureSudokuGame(page);
