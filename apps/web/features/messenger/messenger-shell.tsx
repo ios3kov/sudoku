@@ -182,11 +182,11 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     };
     window.addEventListener("pagehide", retireAdapter);
 
-    setE2eeState("initializing");
-    setE2eeError(null);
-    setPendingDeviceConversationIds([]);
-
     void (async () => {
+      setE2eeState("initializing");
+      setE2eeError(null);
+      setPendingDeviceConversationIds([]);
+
       try {
         const sessions = await messengerApi.sessions();
         if (cancelled) return;
