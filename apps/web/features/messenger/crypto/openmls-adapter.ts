@@ -1009,6 +1009,25 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return [...this.localState!.historyUnavailableConversations].sort();
   }
 
+  async markHistoryUnavailable(conversationId: string): Promise<void> {
+    if (!conversationId) throw new Error("Conversation id is required");
+    await this.enqueue(async () => {
+      this.assertReady();
+      if (this.localState!.historyUnavailableConversations.includes(conversationId)) return;
+      const previous = [...this.localState!.historyUnavailableConversations];
+      this.localState!.historyUnavailableConversations = uniqueIds([
+        ...previous,
+        conversationId,
+      ]);
+      try {
+        await this.persistCurrentState();
+      } catch (error) {
+        this.localState!.historyUnavailableConversations = previous;
+        throw error;
+      }
+    });
+  }
+
   projectConversation(conversationId: string): EncryptedProjectionResult {
     this.assertReady();
     return projectEncryptedEvents(this.localState!.eventJournal[conversationId] ?? []);
