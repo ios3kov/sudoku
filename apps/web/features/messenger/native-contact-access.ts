@@ -7,9 +7,18 @@ export type NativePickerContact = {
   tel?: string[];
 };
 
+export type NativeContactsAuthorization =
+  | "not_determined"
+  | "restricted"
+  | "denied"
+  | "authorized"
+  | "limited"
+  | "unknown";
+
 type NativeContactsBridge = {
   select: () => Promise<NativePickerContact[]>;
   all?: () => Promise<NativePickerContact[]>;
+  status?: () => Promise<NativeContactsAuthorization>;
 };
 
 declare global {
@@ -23,7 +32,9 @@ export function nativeContactsAvailable(): boolean {
 }
 
 export function nativeFullContactsAvailable(): boolean {
-  return typeof window !== "undefined" && typeof window.SudokuNativeContacts?.all === "function";
+  return typeof window !== "undefined"
+    && typeof window.SudokuNativeContacts?.all === "function"
+    && typeof window.SudokuNativeContacts?.status === "function";
 }
 
 export async function selectNativeContacts(): Promise<NativePickerContact[]> {
@@ -38,4 +49,9 @@ export async function readAllNativeContacts(): Promise<NativePickerContact[]> {
     throw new Error("Full contacts access is unavailable");
   }
   return window.SudokuNativeContacts!.all!();
+}
+
+export async function nativeContactsAuthorization(): Promise<NativeContactsAuthorization> {
+  if (!nativeFullContactsAvailable()) return "unknown";
+  return window.SudokuNativeContacts!.status!();
 }
