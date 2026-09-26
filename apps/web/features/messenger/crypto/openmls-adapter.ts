@@ -1175,7 +1175,13 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
       return;
     }
 
-    if (item.sender_user_id === this.options.userId) {
+    if (
+      item.sender_user_id === this.options.userId
+      && (
+        item.sender_device_id === null
+        || item.sender_device_id === this.options.deviceId
+      )
+    ) {
       throw new Error(
         "Own MLS message is missing its durable local journal entry",
       );
