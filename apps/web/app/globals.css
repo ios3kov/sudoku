@@ -44,6 +44,10 @@ code{overflow-wrap:anywhere}
 .private-reveal-layer{position:fixed;inset:0;z-index:0;overflow:auto;background:var(--surface);pointer-events:none;transform:translate3d(0,22px,0) scale(.965);transform-origin:center bottom;opacity:.84;backface-visibility:hidden;will-change:transform,opacity}
 .private-reveal-layer.is-active{position:absolute;z-index:2;pointer-events:auto;transform:none;opacity:1;will-change:auto}
 .sudoku-reveal-screen{position:relative;z-index:3;min-height:100dvh;background:var(--bg);transform:translate3d(0,0,0);backface-visibility:hidden}
+.home-reveal-stage.is-private .sudoku-reveal-screen{z-index:1}
+.home-reveal-stage.is-privacy-shielded .private-reveal-layer{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+.home-reveal-stage.is-privacy-shielded .sudoku-reveal-screen{z-index:4!important;transform:none!important;transition:none!important}
+.privacy-fallback{position:fixed;inset:0;z-index:10;background:var(--bg)}
 .sudoku-reveal-screen::after{content:none}
 .sudoku-reveal-screen.is-dragging,.sudoku-reveal-screen.is-returning,.sudoku-reveal-screen.is-unlocking{will-change:transform}
 .primary-button,.secondary-button,.text-button,.new-chat-button,.create-group-button,.action,.digit,.back-button,.attach-button,.voice-button,.hide-chat-button{
