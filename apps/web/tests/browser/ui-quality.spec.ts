@@ -30,7 +30,7 @@ async function dragFive(page: Page, progress: number, pointerId: number) {
   });
   await page.waitForTimeout(110);
   await five.dispatchEvent("pointermove", {
-    clientX: startX + 1,
+    clientX: startX + 16,
     clientY: targetY,
     pointerId,
     pointerType: "touch",
@@ -44,7 +44,7 @@ async function dragFive(page: Page, progress: number, pointerId: number) {
 async function unlockPrivate(page: Page) {
   const drag = await dragFive(page, 0.55, 7);
   await drag.five.dispatchEvent("pointerup", {
-    clientX: drag.startX + 1,
+    clientX: drag.startX + 16,
     clientY: drag.targetY,
     pointerId: 7,
     pointerType: "touch",
@@ -52,6 +52,50 @@ async function unlockPrivate(page: Page) {
     buttons: 0,
   });
 }
+
+test("only a touch that starts on digit 5 can arm the reveal", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await ensureSudokuGame(page);
+
+  const four = page.getByRole("button", { name: "4", exact: true });
+  const box = await four.boundingBox();
+  expect(box).not.toBeNull();
+  const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+  const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+
+  await four.dispatchEvent("pointerdown", {
+    clientX: x,
+    clientY: y,
+    pointerId: 41,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
+  await page.waitForTimeout(120);
+  await four.dispatchEvent("pointermove", {
+    clientX: x + 8,
+    clientY: Math.max(0, y * 0.35),
+    pointerId: 41,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 1,
+  });
+  await four.dispatchEvent("pointerup", {
+    clientX: x + 8,
+    clientY: Math.max(0, y * 0.35),
+    pointerId: 41,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+  });
+
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+  await expect.poll(
+    () => page.locator(".sudoku-reveal-screen").evaluate((element) =>
+      Math.round(element.getBoundingClientRect().top)),
+  ).toBe(0);
+});
 
 test("mobile Sudoku stays compact and unlock slides the whole screen over chat", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -176,7 +220,7 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
   await page.waitForTimeout(160);
   await belowThreshold.five.dispatchEvent("pointerup", {
-    clientX: belowThreshold.startX + 1,
+    clientX: belowThreshold.startX + 16,
     clientY: belowThreshold.targetY,
     pointerId: 6,
     pointerType: "touch",
