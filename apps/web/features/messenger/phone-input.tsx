@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 export type CountryCode = "ME" | "RU" | "BA" | "RS" | "HR" | "US";
 
@@ -127,17 +127,11 @@ export function PhoneInput({
   required?: boolean;
   autoComplete?: string;
 }) {
-  const [country, setCountry] = useState<CountryCode>("ME");
+  const [country, setCountry] = useState<CountryCode>(() =>
+    countryFromCanonical(value)
+      ?? (typeof navigator !== "undefined" ? initialPhoneCountry(navigator.language) : "ME")
+  );
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    const fromValue = countryFromCanonical(value);
-    if (fromValue) {
-      setCountry(fromValue);
-    } else if (!value && typeof navigator !== "undefined") {
-      setCountry(initialPhoneCountry(navigator.language));
-    }
-  }, [value]);
 
   const displayed = formatCanonicalPhone(value);
 
@@ -181,6 +175,8 @@ export function PhoneInput({
             const caret = event.currentTarget.selectionStart ?? raw.length;
             const digitsBeforeCaret = raw.slice(0, caret).replace(/\D/g, "").length;
             const canonical = canonicalizePhone(raw, country);
+            const detectedCountry = countryFromCanonical(canonical);
+            if (detectedCountry && detectedCountry !== country) setCountry(detectedCountry);
             onChange(canonical);
             window.requestAnimationFrame(() => {
               const input = inputRef.current;
