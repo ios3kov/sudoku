@@ -61,22 +61,46 @@ for (const role of ["member", "admin"]) {
     await page.reload();
     await revealCurrentPage(page);
     await expect(page.getByLabel("Device PIN", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Device PIN", { exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Unlock", exact: true })).toHaveCount(0);
     await expect(page.getByText("Messages", { exact: true })).toHaveCount(0);
     await expect(page.locator(".messenger-reveal-preview")).toHaveCount(0);
     expect((await context.request.get("/v1/conversations")).status()).toBe(423);
 
+    let pinUnlockRequests = 0;
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST"
+        && request.url().endsWith("/v1/auth/device-access/unlock")
+      ) {
+        pinUnlockRequests += 1;
+      }
+    });
+
+    const firstWrong = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/v1/auth/device-access/unlock")
+        && response.request().method() === "POST",
+    );
     await page.getByLabel("Device PIN", { exact: true }).fill("9876");
-    await page.getByRole("button", { name: "Unlock", exact: true }).click();
+    await firstWrong;
     await expect(page.getByRole("main", { name: "Private area locked", exact: true }).getByRole("alert"))
       .toContainText("Incorrect PIN");
+    await expect(page.getByLabel("Device PIN", { exact: true })).toHaveValue("");
+    expect(pinUnlockRequests).toBe(1);
 
     if (role === "member") {
       for (let i = 0; i < 4; i++) {
+        const reply = page.waitForResponse((r) =>
+          r.url().endsWith("/device-access/unlock")
+          && r.request().method() === "POST"
+        );
         await page.getByLabel("Device PIN", { exact: true }).fill("9876");
-        const reply = page.waitForResponse((r) => r.url().endsWith("/device-access/unlock"));
-        await page.getByRole("button", { name: "Unlock", exact: true }).click();
         await reply;
-        await expect(page.getByRole("button", { name: "Unlock", exact: true })).toBeEnabled();
+        if (i < 3) {
+          await expect(page.getByLabel("Device PIN", { exact: true })).toBeEnabled();
+          await expect(page.getByLabel("Device PIN", { exact: true })).toHaveValue("");
+        }
       }
       await expect(page.getByLabel("Account password", { exact: true })).toBeVisible();
       await reveal(page);
@@ -87,10 +111,19 @@ for (const role of ["member", "admin"]) {
       await expect(page.getByLabel("Account password", { exact: true })).toBeVisible();
       await page.reload();
       await revealCurrentPage(page);
+      const beforeCorrectPin = pinUnlockRequests;
+      const correctPinResponse = page.waitForResponse((response) =>
+        response.url().endsWith("/v1/auth/device-access/unlock")
+        && response.request().method() === "POST"
+      );
       await page.getByLabel("Device PIN", { exact: true }).fill("0123");
+      expect((await correctPinResponse).ok()).toBe(true);
+      expect(pinUnlockRequests - beforeCorrectPin).toBe(1);
     }
 
-    await page.getByRole("button", { name: "Unlock", exact: true }).click();
+    if (role === "member") {
+      await page.getByRole("button", { name: "Unlock", exact: true }).click();
+    }
     await expect(page.getByText("Messages", { exact: true })).toBeVisible();
     await expect(page.getByText("Secure messaging needs a restart.", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New secure chat", exact: true })).toBeEnabled({ timeout: 120_000 });
