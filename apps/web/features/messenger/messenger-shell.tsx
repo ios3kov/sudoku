@@ -816,6 +816,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           onClose={() => setShowDevices(false)}
           onCurrentRevoked={revokeLocalSession}
           onPhoneUpdated={(phone) => onUserUpdated({ ...user, phone_e164: phone })}
+          onDisplayNameUpdated={(displayName) => onUserUpdated({ ...user, display_name: displayName })}
           isAdmin={user.is_admin}
           onOpenInvite={() => {
             setShowDevices(false);
