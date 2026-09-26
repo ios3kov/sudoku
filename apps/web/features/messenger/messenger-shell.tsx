@@ -460,6 +460,12 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     user.id,
   ]);
 
+  function retrySecureMessaging() {
+    setE2eeState("initializing");
+    setE2eeError(null);
+    setE2eeAttempt((value) => value + 1);
+  }
+
   async function enablePush() {
     setPushState("enabling");
     try {
@@ -547,6 +553,9 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       .includes(conversationQuery.trim().toLocaleLowerCase()),
   );
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
+  const secureDeviceNeedsNewSession =
+    e2eeError === "MLS device identity key change requires a new device id"
+    || e2eeError === "MLS device is revoked";
 
   if (selected?.encryption_required) {
     const selectedTracked =
@@ -641,8 +650,8 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
             {deviceRekeyError
               ?? (
                 selected.e2ee_ready && !selectedTracked
-                  ? "This device is waiting to be added to the secure conversation."
-                  : "This encrypted conversation is unavailable until the local MLS state is ready."
+                  ? "Preparing secure messaging on this device. This chat will open automatically when the secure device update completes."
+                  : "This encrypted conversation is unavailable until secure messaging is ready."
               )}
           </p>
         </section>
@@ -718,8 +727,25 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
             ) : null}
             {e2eeState === "error" ? (
               <div className="messenger-inline-status is-warning" role="status">
-                <span>Secure messaging needs a restart.</span>
-                <button type="button" onClick={() => window.location.reload()}>Reload</button>
+                <span>
+                  {secureDeviceNeedsNewSession
+                    ? "This device lost its secure local state. Sign in again to register it as a new secure device."
+                    : "Secure messaging could not start on this device. Retry the secure setup."}
+                </span>
+                {secureDeviceNeedsNewSession ? (
+                  <button type="button" disabled={loggingOut} onClick={() => void logout()}>
+                    {loggingOut ? "Signing out…" : "Sign in again"}
+                  </button>
+                ) : (
+                  <button type="button" onClick={retrySecureMessaging}>Retry</button>
+                )}
+              </div>
+            ) : null}
+            {e2eeState === "ready" && pendingDeviceConversationIds.length > 0 ? (
+              <div className="messenger-inline-status is-warning" role="status">
+                <span>
+                  Preparing secure messaging on this device. Existing secure chats will become available automatically.
+                </span>
               </div>
             ) : null}
             <div className="conversation-list minimal-chat-list" aria-busy={loading}>
@@ -729,7 +755,13 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               disabled={e2eeState !== "ready" || !user.phone_e164}
               onClick={openNewChat}
             >
-              {e2eeState === "initializing" ? "Preparing secure messaging…" : !user.phone_e164 ? "Set phone to start a chat" : "New secure chat"}
+              {e2eeState === "initializing"
+                ? "Preparing secure messaging…"
+                : e2eeState === "error"
+                  ? "Secure messaging unavailable"
+                  : !user.phone_e164
+                    ? "Set phone to start a chat"
+                    : "New secure chat"}
             </button>
             {loading ? (
               Array.from({ length: 5 }, (_, index) => (
