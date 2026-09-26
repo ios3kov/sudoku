@@ -43,10 +43,14 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   const [secureSetupError, setSecureSetupError] = useState<string | null>(null);
   const [deviceRekeyError, setDeviceRekeyError] = useState<string | null>(null);
   const [e2eeState, setE2eeState] = useState<"initializing" | "ready" | "error">("initializing");
+  const [e2eeError, setE2eeError] = useState<string | null>(null);
+  const [e2eeAttempt, setE2eeAttempt] = useState(0);
+  const [pendingDeviceConversationIds, setPendingDeviceConversationIds] = useState<string[]>([]);
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const [e2eeAdapter, setE2eeAdapter] = useState<OpenMlsProtocolAdapter | null>(null);
   const realtimeRef = useRef<RealtimeClient | null>(null);
   const e2eeRef = useRef<OpenMlsProtocolAdapter | null>(null);
+  const currentDeviceIdRef = useRef<string | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
   const concealCallbacks = useRef({onHide, onLoggedOut});
   useEffect(() => { concealCallbacks.current = {onHide, onLoggedOut}; }, [onHide, onLoggedOut]);
@@ -113,6 +117,53 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     }
   }, [loadConversations]);
 
+  const refreshPendingDeviceConversations = useCallback((
+    adapter: OpenMlsProtocolAdapter,
+    items = conversationsRef.current,
+  ) => {
+    const tracked = new Set(adapter.trackedConversationIds());
+    const pending = items
+      .filter((conversation) =>
+        conversation.encryption_required
+        && conversation.e2ee_ready
+        && !tracked.has(conversation.id)
+      )
+      .map((conversation) => conversation.id);
+    setPendingDeviceConversationIds(pending);
+    return pending;
+  }, []);
+
+  const syncEncryptedConversation = useCallback(async (
+    adapter: OpenMlsProtocolAdapter,
+    conversation: Conversation,
+  ) => {
+    const wasTracked = adapter.trackedConversationIds().includes(conversation.id);
+
+    try {
+      await adapter.syncTransport(conversation.id);
+    } catch (error) {
+      if (!wasTracked) {
+        const currentDeviceId = currentDeviceIdRef.current;
+        const pending = currentDeviceId
+          ? await messengerApi.pendingMlsMembershipChange(conversation.id).catch(() => null)
+          : null;
+        if (
+          pending?.change?.kind === "device_add"
+          && pending.change.target_device_id === currentDeviceId
+        ) {
+          return false;
+        }
+      }
+      throw error;
+    }
+
+    if (!adapter.trackedConversationIds().includes(conversation.id)) return false;
+
+    await reconcileDeviceChange(adapter, conversation.id);
+    await adapter.syncTransport(conversation.id);
+    return true;
+  }, [reconcileDeviceChange]);
+
   useEffect(() => {
     let cancelled = false;
     let adapter: OpenMlsProtocolAdapter | null = null;
@@ -127,12 +178,17 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     window.addEventListener("pagehide", retireAdapter);
     document.addEventListener("visibilitychange", retireWhenHidden);
 
+    setE2eeState("initializing");
+    setE2eeError(null);
+    setPendingDeviceConversationIds([]);
+
     void (async () => {
       try {
         const sessions = await messengerApi.sessions();
         if (cancelled) return;
         const current = sessions.find((session) => session.current);
         if (!current) throw new Error("Current device session is unavailable");
+        currentDeviceIdRef.current = current.id;
 
         const currentAdapter = new OpenMlsProtocolAdapter({
           userId: user.id,
@@ -144,7 +200,6 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         if (cancelled) { currentAdapter.retire(); return; }
         e2eeRef.current = currentAdapter;
         setE2eeAdapter(currentAdapter);
-        setE2eeState("ready");
 
         const latestConversations = sortConversations(
           await messengerApi.conversations(),
@@ -158,20 +213,22 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         );
         for (const conversation of encryptedConversations) {
           if (cancelled) return;
-          // Unified transport is authoritative for recovery. It includes both
-          // MLS control events and application messages in one durable order,
-          // so a Welcome must never be consumed first through the legacy
-          // control-only feed and then replayed from transport sequence 0.
-          await currentAdapter.syncTransport(conversation.id);
-          if (currentAdapter.trackedConversationIds().includes(conversation.id)) {
-            await reconcileDeviceChange(currentAdapter, conversation.id);
-            await currentAdapter.syncTransport(conversation.id);
-          }
+          // Unified transport is authoritative for recovery. A newly registered
+          // device may legitimately have no local group state until an existing
+          // authorized device delivers its Welcome.
+          await syncEncryptedConversation(currentAdapter, conversation);
         }
-      } catch {
+
+        if (cancelled) return;
+        refreshPendingDeviceConversations(currentAdapter, latestConversations);
+        setE2eeState("ready");
+      } catch (error) {
         if (!cancelled) {
           e2eeRef.current = null;
           setE2eeAdapter(null);
+          setE2eeError(
+            error instanceof Error ? error.message : "Secure messaging initialization failed",
+          );
           setE2eeState("error");
         }
       }
@@ -182,9 +239,15 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
       adapter?.retire();
       window.removeEventListener("pagehide", retireAdapter);
       document.removeEventListener("visibilitychange", retireWhenHidden);
-      e2eeRef.current = null;
+      if (e2eeRef.current === adapter) e2eeRef.current = null;
+      if (currentDeviceIdRef.current && adapter) currentDeviceIdRef.current = null;
     };
-  }, [reconcileDeviceChange, user.id]);
+  }, [
+    e2eeAttempt,
+    refreshPendingDeviceConversations,
+    syncEncryptedConversation,
+    user.id,
+  ]);
 
   const acknowledgeRead = useCallback((conversationId: string, sequence: number, readerId = user.id) => {
     setConversations((current) => {
