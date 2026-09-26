@@ -554,7 +554,9 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
   const secureDeviceNeedsNewSession =
     e2eeError === "MLS device identity key change requires a new device id"
-    || e2eeError === "MLS device is revoked";
+    || e2eeError === "MLS device is revoked"
+    || e2eeError === "Protocol wrapping key is missing or invalid"
+    || e2eeError === "Invalid local MLS state";
 
   if (selected?.encryption_required) {
     const selectedTracked =
