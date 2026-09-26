@@ -18,6 +18,7 @@ async function dragFive(page: Page, progress: number, pointerId: number) {
     isPrimary: true,
     buttons: 1,
   });
+  await page.waitForTimeout(110);
   await five.dispatchEvent("pointermove", {
     clientX: startX + 1,
     clientY: targetY,
@@ -31,9 +32,15 @@ async function dragFive(page: Page, progress: number, pointerId: number) {
 }
 
 async function unlockPrivate(page: Page) {
-  // Crossing 50% of the available upward path must hand off to the finishing
-  // animation immediately; no extra release gesture is required.
-  await dragFive(page, 0.55, 7);
+  const drag = await dragFive(page, 0.55, 7);
+  await drag.five.dispatchEvent("pointerup", {
+    clientX: drag.startX + 1,
+    clientY: drag.targetY,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+  });
 }
 
 test("mobile Sudoku stays compact and unlock slides the whole screen over chat", async ({ page }) => {
@@ -143,8 +150,8 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await page.getByRole("button", { name: "1", exact: true }).click();
   await expect(givenCell).toHaveText(givenValue!);
 
-  // 49% is deliberately below the unlock threshold. The entire Sudoku screen
-  // must still follow the finger, then return instead of opening the messenger.
+  // 49% is deliberately below the unlock threshold. After the hold arms,
+  // the screen follows the finger and a settled release returns to Sudoku.
   const belowThreshold = await dragFive(page, 0.49, 6);
   await expect(page.locator(".private-reveal-layer")).toBeVisible();
   // Pointer moves publish their transform on requestAnimationFrame. The
@@ -157,6 +164,7 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
     { timeout: 2_000 },
   ).toBeLessThan(-100);
   await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+  await page.waitForTimeout(160);
   await belowThreshold.five.dispatchEvent("pointerup", {
     clientX: belowThreshold.startX + 1,
     clientY: belowThreshold.targetY,
