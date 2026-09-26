@@ -217,24 +217,9 @@ final class SudokuViewController: UIViewController {
     }
 
     private func contactAuthorizationState() -> String {
-        let status = CNContactStore.authorizationStatus(for: .contacts)
-
-        if #available(iOS 18.0, *), status == .limited {
-            return "limited"
-        }
-
-        switch status {
-        case .authorized:
-            return "granted"
-        case .denied:
-            return "denied"
-        case .restricted:
-            return "restricted"
-        case .notDetermined:
-            return "not_determined"
-        @unknown default:
-            return "restricted"
-        }
+        ContactAuthorizationPolicy
+            .state(for: CNContactStore.authorizationStatus(for: .contacts))
+            .rawValue
     }
 
     private func resolveContactValue(requestID: String, value: Any) {
