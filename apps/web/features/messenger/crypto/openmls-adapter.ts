@@ -146,6 +146,7 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
         pendingKeyPackagesB64: [],
         transportCursors: {},
         trackedConversations: [],
+        historyUnavailableConversations: [],
       };
       this.assertActive();
       await this.stateStore.put(this.stateKey, serializeLocalState(state));
@@ -998,6 +999,11 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return [...ids].sort();
   }
 
+  historyUnavailableConversationIds(): string[] {
+    this.assertReady();
+    return [...this.localState!.historyUnavailableConversations].sort();
+  }
+
   projectConversation(conversationId: string): EncryptedProjectionResult {
     this.assertReady();
     return projectEncryptedEvents(this.localState!.eventJournal[conversationId] ?? []);
@@ -1158,6 +1164,28 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     item: Extract<MlsTransportEvent, { kind: "message" }>,
   ): Promise<void> {
     const cursorBefore = this.localState!.transportCursors[conversationId] ?? 0;
+
+    // A newly registered device is a legitimate conversation member at the
+    // application layer before it has received its MLS Welcome. Old-epoch
+    // ciphertext is intentionally not decryptable on that device. Advance the
+    // durable transport cursor until the Welcome arrives instead of turning
+    // this expected state into a generic E2EE failure/reload loop.
+    if (!this.localState!.trackedConversations.includes(conversationId)) {
+      const snapshot = this.snapshotRuntime();
+      try {
+        this.localState!.historyUnavailableConversations = uniqueIds([
+          ...this.localState!.historyUnavailableConversations,
+          conversationId,
+        ]);
+        this.localState!.transportCursors[conversationId] = item.transport_sequence;
+        await this.persistCurrentState();
+      } catch (error) {
+        this.restoreRuntime(snapshot);
+        throw error;
+      }
+      return;
+    }
+
     const existing = this.localState!.eventJournal[conversationId]?.find(
       (record) => record.eventId === item.message_id,
     );
