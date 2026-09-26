@@ -91,9 +91,17 @@ export function PhoneInput({
   }
 
   function changeCountry(nextCountry: string) {
+    const currentCountry = PHONE_COUNTRIES.find((country) => country.code === countryCode);
+    let source = display;
+    const digits = display.replace(/\D/g, "");
+
+    if (display.trim().startsWith("+") && currentCountry && digits.startsWith(currentCountry.dial)) {
+      source = digits.slice(currentCountry.dial.length);
+    }
+
     setCountryCode(nextCountry);
-    const canonical = toE164(display, nextCountry);
-    const formatted = display ? formatPhone(display, nextCountry) : "";
+    const canonical = source ? toE164(source, nextCountry) : null;
+    const formatted = source ? formatPhone(source, nextCountry) : "";
     setDisplay(formatted);
     lastExternalValue.current = formatted;
     onValueChange(canonical, formatted);
