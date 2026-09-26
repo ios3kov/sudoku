@@ -1,14 +1,23 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ensureSudokuGame } from "./support/sudoku-start";
-import { shouldCancelBeforeArm, shouldCommitReveal } from "../../features/secret-unlock/secret-unlock-motion";
+import { projectedRevealOffset, revealCompletionDurationMs, shouldCancelBeforeArm, shouldCommitReveal } from "../../features/secret-unlock/secret-unlock-motion";
 
-test("pure reveal gesture policy distinguishes tap, cancel, threshold and velocity commit", () => {
+test("pure reveal gesture policy projects release position from velocity", () => {
   expect(shouldCancelBeforeArm(8, 8)).toBe(false);
   expect(shouldCancelBeforeArm(20, 0)).toBe(true);
+
+  expect(projectedRevealOffset(99, 0)).toBe(99);
   expect(shouldCommitReveal(99, 100, 0)).toBe(false);
   expect(shouldCommitReveal(100, 100, 0)).toBe(true);
-  expect(shouldCommitReveal(80, 140, 0.8)).toBe(true);
-  expect(shouldCommitReveal(60, 140, 1.2)).toBe(false);
+
+  // A short, fast upward release is projected beyond the midpoint.
+  expect(shouldCommitReveal(60, 140, 0.5)).toBe(true);
+  // The same position with a settled finger returns.
+  expect(shouldCommitReveal(60, 140, 0)).toBe(false);
+
+  expect(revealCompletionDurationMs(60, 1.2)).toBeLessThan(
+    revealCompletionDurationMs(240, 0.2),
+  );
 });
 
 async function dragFive(page: Page, progress: number, pointerId: number) {
@@ -52,6 +61,38 @@ async function unlockPrivate(page: Page) {
     buttons: 0,
   });
 }
+
+test("crossing the reveal midpoint never auto-commits before pointer release", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await ensureSudokuGame(page);
+
+  const drag = await dragFive(page, 0.72, 77);
+  await expect.poll(
+    () => page.locator(".sudoku-reveal-screen").evaluate(
+      (element) => element.getBoundingClientRect().top,
+    ),
+    { timeout: 2_000 },
+  ).toBeLessThan(-150);
+
+  // Hold above the midpoint. The transition must remain interactive/inert
+  // until pointer-up decides using projected release position.
+  await page.waitForTimeout(260);
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+
+  await drag.five.dispatchEvent("pointerup", {
+    clientX: drag.startX + 16,
+    clientY: drag.targetY,
+    pointerId: 77,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+  });
+
+  await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "", {
+    timeout: 5_000,
+  });
+});
 
 test("only a touch that starts on digit 5 can arm the reveal", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
