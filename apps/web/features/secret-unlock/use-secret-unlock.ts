@@ -33,10 +33,11 @@ function notifyNativeSnapshotRequest() {
 }
 
 interface SecretUnlockOptions {
+  enabled?: boolean;
   onUnlock: () => void;
 }
 
-export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
+export function useSecretUnlock({ enabled = true, onUnlock }: SecretUnlockOptions) {
   const screenRef = useRef<HTMLElement | null>(null);
   const underlayRef = useRef<HTMLElement | null>(null);
   const pointerActive = useRef(false);
@@ -151,7 +152,7 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
   }, [applyOffset, clearFrame, clearPhaseTimer, resetInlineMotion]);
 
   const animateUnlock = useCallback(() => {
-    if (unlocking.current) return;
+    if (!enabled || unlocking.current) return;
 
     clearFrame();
 
@@ -199,7 +200,24 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
       underlayRef.current?.style.removeProperty("opacity");
       onUnlock();
     }, duration + 18);
-  }, [applyOffset, clearFrame, clearPhaseTimer, onUnlock]);
+  }, [applyOffset, clearFrame, clearPhaseTimer, enabled, onUnlock]);
+
+  useEffect(() => {
+    if (enabled) return;
+
+    pointerActive.current = false;
+    unlocking.current = false;
+    startY.current = null;
+    currentOffset.current = 0;
+    pendingOffset.current = 0;
+    upwardVelocity.current = 0;
+    suppressNextFiveClick.current = false;
+
+    clearFrame();
+    clearPhaseTimer();
+    screenRef.current?.classList.remove("is-dragging", "is-returning", "is-unlocking");
+    resetInlineMotion();
+  }, [clearFrame, clearPhaseTimer, enabled, resetInlineMotion]);
 
   useEffect(() => {
     return () => {
@@ -210,7 +228,7 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
   }, [clearFrame, clearPhaseTimer, resetInlineMotion]);
 
   const onFivePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
-    if (unlocking.current) return;
+    if (!enabled || unlocking.current) return;
 
     clearFrame();
     clearPhaseTimer();
@@ -228,7 +246,7 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
     pointerActive.current = true;
     startY.current = pointerY;
     // "Full swipe" is the available path from the digit to the top edge.
-    // At 50% we take over and smoothly finish the remaining half.
+    // The distance threshold is evaluated on release together with velocity.
     unlockThreshold.current = Math.max(96, pointerY * UNLOCK_PROGRESS);
     viewportHeight.current = Math.max(360, window.innerHeight);
     currentOffset.current = 0;
@@ -246,10 +264,10 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
     } catch {
       // Synthetic browser-test events may not own an active pointer.
     }
-  }, [applyOffset, clearFrame, clearPhaseTimer]);
+  }, [applyOffset, clearFrame, clearPhaseTimer, enabled]);
 
   const onFivePointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!pointerActive.current || startY.current === null || unlocking.current) return;
+    if (!enabled || !pointerActive.current || startY.current === null || unlocking.current) return;
 
     const upwardDistance = Math.max(0, startY.current - event.clientY);
     const nextOffset = Math.min(
@@ -269,10 +287,10 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
 
     queueOffset(nextOffset);
     if (nextOffset > CLICK_SUPPRESS_PX) event.preventDefault();
-  }, [queueOffset]);
+  }, [enabled, queueOffset]);
 
   const onFivePointerUp = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!pointerActive.current || unlocking.current) return;
+    if (!enabled || !pointerActive.current || unlocking.current) return;
 
     pointerActive.current = false;
     startY.current = null;
@@ -301,7 +319,7 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
       screenRef.current?.classList.remove("is-dragging");
       resetInlineMotion();
     }
-  }, [animateReturn, animateUnlock, resetInlineMotion]);
+  }, [animateReturn, animateUnlock, enabled, resetInlineMotion]);
 
   const consumeFiveClick = useCallback(() => {
     if (!suppressNextFiveClick.current) return false;

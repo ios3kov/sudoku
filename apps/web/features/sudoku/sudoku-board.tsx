@@ -46,8 +46,12 @@ function formatElapsed(seconds: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 export function SudokuBoard({
+  active = true,
+  onReady,
   onSecretUnlock
 }: {
+  active?: boolean;
+  onReady?: () => void;
   onSecretUnlock: () => void;
 }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -68,6 +72,7 @@ export function SudokuBoard({
     consumeFiveClick,
     cancel
   } = useSecretUnlock({
+    enabled: active,
     onUnlock: onSecretUnlock
   });
   useEffect(() => {
@@ -86,7 +91,8 @@ export function SudokuBoard({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSession(initial);
     setSaved(stored);
-  }, []);
+    onReady?.();
+  }, [onReady]);
   function update(next: Session) {
     retainSession(next);
     setSession(next);
@@ -106,7 +112,7 @@ export function SudokuBoard({
   const game = session?.game;
   const solved = game ? isSudokuGameComplete(game) : false;
   const lost = game ? isSudokuGameLost(game) : false;
-  const clockRunning = Boolean(game && !game.paused && !solved && !lost && session?.screen === "game");
+  const clockRunning = Boolean(active && game && !game.paused && !solved && !lost && session?.screen === "game");
   useEffect(() => {
     if (!clockRunning) return;
     // Count only visible playing time; background, menu and privacy surfaces do not run the clock.
@@ -171,7 +177,12 @@ export function SudokuBoard({
   }
   const selectedValue = selected === null ? 0 : game?.values[selected] ?? 0;
   const [boxHeight, boxWidth] = sudokuBoxDimensions(game?.puzzle.size ?? 9);
-  return <main ref={setScreenElement} className={`page sudoku-reveal-screen sudoku-game${session?.screen === "menu" ? " is-menu" : ""}`}>
+  return <main
+    ref={setScreenElement}
+    className={`page sudoku-reveal-screen sudoku-game${session?.screen === "menu" ? " is-menu" : ""}`}
+    aria-hidden={active ? undefined : true}
+    inert={active ? undefined : true}
+  >
     <section className="sudoku-shell" aria-label="Sudoku">
       <header className={`topbar sudoku-topbar${session?.screen !== "game" ? " sudoku-home-header" : ""}`}>
         {session?.screen !== "game" && <div
