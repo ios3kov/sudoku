@@ -176,7 +176,7 @@ final class SudokuViewController: UIViewController {
 
     private func renderLifecycle(animatedStartup: Bool) {
         let showStartup = lifecycleState.startupVisible
-        let showPrivacy = lifecycleState.privacyVisible
+        let showPrivacy = lifecycleState.privacyVisible && currentSurface == .messenger
 
         webView.accessibilityElementsHidden = showStartup || showPrivacy
 
@@ -240,10 +240,6 @@ final class SudokuViewController: UIViewController {
         guard surface != currentSurface else {
             if surface == .sudoku { scheduleSudokuSnapshot() }
             return
-        }
-
-        if currentSurface == .sudoku && surface == .messenger {
-            captureSudokuSnapshot()
         }
 
         currentSurface = surface
@@ -559,8 +555,14 @@ extension SudokuViewController: WKScriptMessageHandler {
         }
 
         if message.name == Self.themeHandlerName {
-            guard let body = message.body as? [String: Any],
-                  let rawSurface = body["surface"] as? String,
+            guard let body = message.body as? [String: Any] else { return }
+
+            if (body["action"] as? String) == "captureSudokuSnapshot" {
+                captureSudokuSnapshot()
+                return
+            }
+
+            guard let rawSurface = body["surface"] as? String,
                   let surface = NativeSurface(rawValue: rawSurface) else {
                 return
             }
