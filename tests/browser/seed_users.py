@@ -12,6 +12,8 @@ USERS = (
     ("browser-pin-member@example.com", "PIN Member"),
     ("browser-pin-admin@example.com", "PIN Admin"),
     ("browser-pin-skip@example.com", "PIN Skip"),
+    ("browser-wave1-contact-owner@example.com", "Wave1 Contact Owner"),
+    ("browser-wave1-contact-peer@example.com", "Wave1 Contact Peer"),
 )
 PASSWORD = "browser acceptance password"
 
