@@ -1,86 +1,53 @@
 import UIKit
 
 final class PrivacyCoverView: UIView {
+    private let mark = SudokuBrandMarkView()
     private let titleLabel = UILabel()
-    private let gridView = SudokuGridView()
+    private let subtitleLabel = UILabel()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
 
-        backgroundColor = UIColor(red: 0.969, green: 0.961, blue: 0.937, alpha: 1)
+        backgroundColor = SudokuNativePalette.gameBackground
 
+        mark.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "Sudoku"
-        titleLabel.font = .preferredFont(forTextStyle: .largeTitle)
+        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        titleLabel.text = "SUDOKU.MOSCOW"
+        titleLabel.font = .systemFont(ofSize: 19, weight: .bold)
         titleLabel.adjustsFontForContentSizeCategory = true
-        titleLabel.numberOfLines = 0
-        titleLabel.textColor = .label
+        titleLabel.textColor = SudokuNativePalette.accent
         titleLabel.textAlignment = .center
 
-        gridView.translatesAutoresizingMaskIntoConstraints = false
+        subtitleLabel.text = "SUDOKU"
+        subtitleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        subtitleLabel.adjustsFontForContentSizeCategory = true
+        subtitleLabel.textColor = SudokuNativePalette.muted
+        subtitleLabel.textAlignment = .center
 
-        let stack = UIStackView(arrangedSubviews: [titleLabel, gridView])
+        let stack = UIStackView(arrangedSubviews: [mark, titleLabel, subtitleLabel])
         stack.axis = .vertical
         stack.alignment = .center
-        stack.spacing = 20
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
-        let preferredGridWidth = gridView.widthAnchor.constraint(equalToConstant: 270)
-        preferredGridWidth.priority = .defaultHigh
-        titleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         NSLayoutConstraint.activate([
+            mark.widthAnchor.constraint(equalToConstant: 68),
+            mark.heightAnchor.constraint(equalTo: mark.widthAnchor),
             stack.centerXAnchor.constraint(equalTo: centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: safeAreaLayoutGuide.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: safeAreaLayoutGuide.trailingAnchor, constant: -20),
-            stack.topAnchor.constraint(greaterThanOrEqualTo: safeAreaLayoutGuide.topAnchor, constant: 20),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: safeAreaLayoutGuide.bottomAnchor, constant: -20),
-            preferredGridWidth,
-            gridView.heightAnchor.constraint(equalTo: gridView.widthAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: safeAreaLayoutGuide.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: safeAreaLayoutGuide.trailingAnchor, constant: -24),
         ])
 
         isAccessibilityElement = true
         accessibilityViewIsModal = true
-        accessibilityLabel = "Sudoku"
+        accessibilityLabel = "Sudoku privacy cover"
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-}
-
-private final class SudokuGridView: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .clear
-        isUserInteractionEnabled = false
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func draw(_ rect: CGRect) {
-        guard let context = UIGraphicsGetCurrentContext() else { return }
-
-        let size = min(rect.width, rect.height)
-        let cell = size / 9
-
-        for index in 0...9 {
-            let major = index % 3 == 0
-            context.setLineWidth(major ? 2 : 0.5)
-            context.setStrokeColor(UIColor.label.withAlphaComponent(major ? 0.5 : 0.18).cgColor)
-
-            let offset = CGFloat(index) * cell
-
-            context.move(to: CGPoint(x: offset, y: 0))
-            context.addLine(to: CGPoint(x: offset, y: size))
-            context.strokePath()
-
-            context.move(to: CGPoint(x: 0, y: offset))
-            context.addLine(to: CGPoint(x: size, y: offset))
-            context.strokePath()
-        }
     }
 }
