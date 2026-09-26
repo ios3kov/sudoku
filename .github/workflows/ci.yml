@@ -442,6 +442,17 @@ jobs:
             -e MINIO_ROOT_PASSWORD=audit-local-secret \
             sudoku-minio-ci server /data
           trap 'docker rm -f sudoku-minio-upload-audit >/dev/null' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:19000/minio/health/ready >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs sudoku-minio-upload-audit
+              echo "pinned MinIO did not become ready" >&2
+              exit 1
+            fi
+            sleep 1
+          done
           python tests/ops/minio_conditional_upload.py
           python tests/ops/isolated_restore_audit.py
       - name: Retain restore audit measurements
