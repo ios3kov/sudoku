@@ -175,6 +175,7 @@ def main() -> None:
             """
         )
         sender_device_column = cursor.fetchone()
+        # 0019 is intentionally nullable so pre-existing transport rows remain readable.
         assert sender_device_column == ("YES", "uuid"), sender_device_column
 
         cursor.execute(
