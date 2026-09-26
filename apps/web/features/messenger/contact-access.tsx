@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
 import { NATIVE_CONTACTS_READY_EVENT, nativeContactsAvailable, selectNativeContacts } from "./native-contact-access";
+import { PhoneInput } from "./phone-input";
 
 type PickerContact = { name?: string[]; tel?: string[] };
 type ContactsManagerLike = {
@@ -107,21 +108,17 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
       <div className="contact-access-actions">
         {nativePickerAvailable || pickerAvailable ? (
           <button type="button" disabled={busy} onClick={() => void chooseContacts()}>
-            {busy ? "Syncing…" : "Choose phone contacts"}
+            {busy ? "Syncing…" : "Choose contacts"}
           </button>
         ) : null}
-        <form onSubmit={submitManual}>
-          <input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="+382..."
-            aria-label="Add contact by phone"
+        <form onSubmit={submitManual} className="contact-manual-form">
+          <PhoneInput
             value={manual}
-            onChange={(event) => setManual(event.target.value)}
+            onChange={setManual}
+            label="Add contact by phone"
             disabled={busy}
           />
-          <button type="submit" disabled={busy || !manual.trim()}>Add contact</button>
+          <button type="submit" disabled={busy || !manual.trim()}>Add</button>
         </form>
       </div>
       <p className="muted contact-access-help">
