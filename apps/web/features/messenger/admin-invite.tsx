@@ -2,11 +2,13 @@
 
 import { FormEvent, useState } from "react";
 import { messengerApi } from "./api";
+import { PhoneInput } from "./phone-input";
 
 export function AdminInvite({ onClose }: { onClose: () => void }) {
   const [token, setToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [phone, setPhone] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,7 +18,6 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
     setError(null);
     setToken(null);
     const data = new FormData(event.currentTarget);
-    const phone = String(data.get("phone") ?? "").trim();
     if (!phone) {
       setSubmitting(false);
       setError("Phone number is required");
@@ -53,7 +54,7 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
       </div>
       {!token ? (
         <form className="auth-form" onSubmit={submit}>
-          <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required /></label>
+          <PhoneInput value={phone} onChange={setPhone} required />
           <p className="muted">One use · expires in 7 days.</p>
           <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create invite"}</button>
         </form>
