@@ -8,6 +8,7 @@ import {
   selectNativeContacts,
 } from "./native-contact-access";
 import { canonicalizePhone, initialPhoneCountry, PhoneInput } from "./phone-input";
+import { loadAuthorizedAddressBook, searchLocalAddressBook, type LocalAddressBookContact } from "./local-contact-directory";
 
 export function AdminInvite({ onClose }: { onClose: () => void }) {
   const [token, setToken] = useState<string | null>(null);
@@ -16,14 +17,29 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
   const [phone, setPhone] = useState("");
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [nativeContacts, setNativeContacts] = useState(false);
+  const [localContacts, setLocalContacts] = useState<LocalAddressBookContact[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const refresh = () => setNativeContacts(nativeContactsAvailable());
+    let cancelled = false;
+    const refresh = () => {
+      setNativeContacts(nativeContactsAvailable());
+      void loadAuthorizedAddressBook()
+        .then(({ contacts }) => {
+          if (!cancelled) setLocalContacts(contacts);
+        })
+        .catch(() => {
+          if (!cancelled) setLocalContacts([]);
+        });
+    };
     refresh();
     window.addEventListener(NATIVE_CONTACTS_READY_EVENT, refresh);
-    return () => window.removeEventListener(NATIVE_CONTACTS_READY_EVENT, refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NATIVE_CONTACTS_READY_EVENT, refresh);
+    };
   }, []);
 
   async function chooseContact() {
@@ -83,6 +99,40 @@ export function AdminInvite({ onClose }: { onClose: () => void }) {
 
       {!token ? (
         <form className="auth-form invite-contact-form" onSubmit={submit}>
+          {localContacts.length > 0 ? (
+            <div className="invite-contact-search">
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search contact name or number"
+                aria-label="Search contact name or number"
+              />
+              {searchTerm.trim() ? (
+                <div className="invite-contact-suggestions">
+                  {searchLocalAddressBook(localContacts, searchTerm).slice(0, 6).map((contact) => (
+                    <button
+                      type="button"
+                      key={`${contact.name}|${contact.phones.join(",")}`}
+                      onClick={() => {
+                        setSelectedName(contact.name || null);
+                        setPhone(contact.phones[0]);
+                        setSearchTerm(contact.name || contact.phones[0]);
+                      }}
+                    >
+                      <span className="avatar minimal-avatar" aria-hidden="true">
+                        {(contact.name || "?").trim().slice(0, 1).toUpperCase()}
+                      </span>
+                      <span>
+                        <strong>{contact.name || "Contact"}</strong>
+                        <small>{contact.phones[0]}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {nativeContacts ? (
             <button type="button" className="contact-picker-card" onClick={() => void chooseContact()}>
               <span className="avatar minimal-avatar" aria-hidden="true">＋</span>
