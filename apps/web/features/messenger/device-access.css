@@ -58,3 +58,20 @@
   .pin-code-cells { gap: 8px; }
   .pin-code-cell { min-height: 52px; border-radius: 14px; }
 }
+
+
+.profile-onboarding-card { gap: 16px; }
+.profile-name-field { display: grid; gap: 8px; font-weight: 600; color: #334155; }
+.profile-name-field input { font-size: 18px; min-height: 52px; }
+.profile-name-preview {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+.profile-name-preview small { display: block; color: #64748b; margin-bottom: 2px; }
+.profile-name-preview strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
