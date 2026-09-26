@@ -186,6 +186,8 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
     { timeout: 2_000 },
   ).toBe(0);
 
+  const retainedBoardState = await page.locator(".board").innerText();
+
   await unlockPrivate(page);
   const phone = page.getByLabel("Phone number", { exact: true });
   await expect(phone).toBeVisible({ timeout: 30_000 });
@@ -210,8 +212,33 @@ test("mobile Sudoku stays compact and unlock slides the whole screen over chat",
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeFocused();
 
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
-  await expect(page.getByRole("heading", { name: "Sudoku" })).toBeVisible();
-  await expect(page.locator(".privacy-grid")).toBeVisible();
+  await expect(page.locator(".private-reveal-layer")).toHaveCSS("visibility", "hidden");
+  await expect(page.locator(".sudoku-reveal-screen")).toBeVisible();
+  await expect(page.locator(".privacy-grid")).toHaveCount(0);
+  expect(await page.locator(".board").innerText()).toBe(retainedBoardState);
+});
+
+test("fast upward flick commits below the normal distance threshold only on release", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await ensureSudokuGame(page);
+
+  const flick = await dragFive(page, 0.3, 8);
+  await expect(page.locator(".private-reveal-layer")).toHaveAttribute("inert", "");
+
+  await flick.five.dispatchEvent("pointerup", {
+    clientX: flick.startX + 1,
+    clientY: flick.targetY,
+    pointerId: 8,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+  });
+
+  await expect(page.locator(".private-reveal-layer")).not.toHaveAttribute("inert", "", {
+    timeout: 5_000,
+  });
+  await expect(page.locator(".sudoku-reveal-screen")).toHaveAttribute("aria-hidden", "true");
 });
 
 
