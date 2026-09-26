@@ -385,6 +385,9 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     // Old ciphertext must be treated as unavailable history until the existing
     // member device commits this device and delivers its Welcome.
     await sendText(owner, "history before fresh device");
+    await expect(acceptedMessage(owner, "history before fresh device")).toBeVisible({
+      timeout: 60_000,
+    });
     await peer.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect(acceptedMessage(peer, "history before fresh device")).toBeVisible({
       timeout: 60_000,
