@@ -76,7 +76,7 @@ export function PhoneInput({
     const formatted = formatPhone(raw, nextCountry);
     const canonical = toE164(raw, nextCountry);
     setDisplay(formatted);
-    lastExternalValue.current = canonical ?? raw;
+    lastExternalValue.current = formatted;
     onValueChange(canonical, formatted);
 
     window.requestAnimationFrame(() => {
@@ -92,7 +92,7 @@ export function PhoneInput({
     const canonical = toE164(display, nextCountry);
     const formatted = display ? formatPhone(display, nextCountry) : "";
     setDisplay(formatted);
-    lastExternalValue.current = canonical ?? display;
+    lastExternalValue.current = formatted;
     onValueChange(canonical, formatted);
     window.requestAnimationFrame(() => inputRef.current?.focus());
   }
