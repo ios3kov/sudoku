@@ -1,6 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
+import { PinCellsInput } from "./pin-cells-input";
+import { SudokuEscapeButton } from "./sudoku-escape-button";
+
+type Stage = "offer" | "create" | "confirm";
 
 export function DevicePinOnboarding({
   onSetPin,
@@ -11,97 +15,112 @@ export function DevicePinOnboarding({
   onSkip: () => void;
   onHide: () => void;
 }) {
-  const [stage, setStage] = useState<"offer" | "pin">("offer");
+  const [stage, setStage] = useState<Stage>("offer");
   const [pin, setPin] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
-    setError(null);
-    if (!/^[0-9]{4}$/.test(pin) || pin !== confirm) {
-      setError("Enter and confirm the same four-digit PIN.");
+  async function savePin(nextConfirm: string) {
+    if (busy || !/^[0-9]{4}$/.test(pin) || !/^[0-9]{4}$/.test(nextConfirm)) return;
+    if (pin !== nextConfirm) {
+      setConfirm("");
+      setError("PINs do not match. Try again.");
       return;
     }
 
     setBusy(true);
+    setError(null);
     try {
       await onSetPin(pin);
       setPin("");
       setConfirm("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save PIN. Try again.");
+      setConfirm("");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <main className="page" aria-label="Quick PIN setup">
-      <section className="messenger-lock auth-card device-pin-onboarding">
-        <div className="private-header">
-          <div>
-            <h2>{stage === "offer" ? "Quick sign-in" : "Set device PIN"}</h2>
-            <p>This device only</p>
-          </div>
-          <button className="text-button" type="button" disabled={busy} onClick={onHide}>Hide</button>
-        </div>
-
+    <main className="page pin-screen" aria-label="Quick PIN setup">
+      <section className="messenger-lock auth-card pin-card device-pin-onboarding">
         {stage === "offer" ? (
           <>
-            <p className="device-access-prompt">Use PIN for quick sign-in on this device?</p>
-            <p className="device-access-help">Your account password remains available for recovery.</p>
+            <div className="pin-card-heading">
+              <span className="pin-card-kicker">SUDOKU.MOSCOW</span>
+              <h2>Quick unlock</h2>
+              <p>Set a four-digit PIN for this device. Your account password remains the recovery method.</p>
+            </div>
             <div className="device-access-actions">
-              <button className="primary-button" type="button" onClick={() => setStage("pin")}>Set PIN</button>
-              <button className="secondary-button" type="button" onClick={onSkip}>Not now</button>
+              <button className="primary-button" type="button" onClick={() => setStage("create")}>
+                Set PIN
+              </button>
+              <button className="secondary-button" type="button" onClick={onSkip}>
+                Not now
+              </button>
             </div>
           </>
         ) : (
-          <form className="auth-form" onSubmit={submit}>
-            <label>Four-digit PIN
-              <input
-                name="new-device-pin"
-                type="password"
-                inputMode="numeric"
-                autoComplete="off"
-                pattern="[0-9]{4}"
-                minLength={4}
-                maxLength={4}
-                required
-                className="device-pin-input"
-                value={pin}
-                onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 4))}
+          <>
+            <div className="pin-card-heading">
+              <span className="pin-card-kicker">{stage === "create" ? "STEP 1 OF 2" : "STEP 2 OF 2"}</span>
+              <h2>{stage === "create" ? "Create PIN" : "Confirm PIN"}</h2>
+              <p>{stage === "create" ? "Choose four digits." : "Enter the same four digits again."}</p>
+            </div>
+
+            <div className="pin-entry-stack">
+              <PinCellsInput
+                value={stage === "create" ? pin : confirm}
+                onChange={(next) => {
+                  setError(null);
+                  if (stage === "create") {
+                    setPin(next);
+                    if (next.length === 4) {
+                      window.setTimeout(() => {
+                        setConfirm("");
+                        setStage("confirm");
+                      }, 120);
+                    }
+                    return;
+                  }
+                  setConfirm(next);
+                  if (next.length === 4) void savePin(next);
+                }}
                 disabled={busy}
                 autoFocus
+                label={stage === "create" ? "Four-digit PIN" : "Confirm PIN"}
+                hasError={Boolean(error)}
               />
-            </label>
-            <label>Confirm PIN
-              <input
-                name="confirm-device-pin"
-                type="password"
-                inputMode="numeric"
-                autoComplete="off"
-                pattern="[0-9]{4}"
-                minLength={4}
-                maxLength={4}
-                required
-                className="device-pin-input"
-                value={confirm}
-                onChange={(event) => setConfirm(event.target.value.replace(/\D/g, "").slice(0, 4))}
-                disabled={busy}
-              />
-            </label>
-            <p className="device-access-help">Five incorrect PIN attempts require your account password.</p>
-            {error ? <p className="form-error" role="alert">{error}</p> : null}
-            <button className="primary-button" type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Save PIN"}
+              <p className="pin-entry-hint">
+                {busy ? "Saving…" : stage === "create" ? "Continues automatically" : "Saves automatically after digit 4"}
+              </p>
+            </div>
+
+            {error ? <p className="form-error pin-error" role="alert">{error}</p> : null}
+
+            <button
+              className="text-button pin-back-button"
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                if (stage === "confirm") {
+                  setConfirm("");
+                  setStage("create");
+                } else {
+                  setPin("");
+                  setStage("offer");
+                }
+              }}
+            >
+              Back
             </button>
-            <button className="secondary-button" type="button" disabled={busy} onClick={onSkip}>Not now</button>
-          </form>
+          </>
         )}
       </section>
+      <SudokuEscapeButton onHide={onHide} />
     </main>
   );
 }
