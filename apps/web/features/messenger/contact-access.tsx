@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { messengerApi } from "./api";
 import { NATIVE_CONTACTS_READY_EVENT, nativeContactsAvailable, selectNativeContacts } from "./native-contact-access";
+import { PhoneInput } from "./phone-input";
+import { countryFromLocale, toE164 } from "./phone-number";
 
 type PickerContact = { name?: string[]; tel?: string[] };
 type ContactsManagerLike = {
@@ -10,11 +12,8 @@ type ContactsManagerLike = {
   select: (properties: string[], options?: { multiple?: boolean }) => Promise<PickerContact[]>;
 };
 
-function normalizePhone(value: string): string {
-  return value.replace(/[\s().-]+/g, "");
-}
-
 export function ContactAccess({ onSynced }: { onSynced: () => void }) {
+  const [manualDisplay, setManualDisplay] = useState("");
   const [manual, setManual] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -52,8 +51,18 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
   }, []);
 
   async function syncPhones(phones: string[]) {
-    const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
-    if (normalized.length === 0) return;
+    const defaultCountry = countryFromLocale(
+      typeof navigator !== "undefined" ? navigator.language : undefined,
+    );
+    const normalized = [...new Set(
+      phones
+        .map((phone) => toE164(phone, defaultCountry))
+        .filter((phone): phone is string => Boolean(phone)),
+    )];
+    if (normalized.length === 0) {
+      setError("No valid phone numbers were selected.");
+      return;
+    }
     setBusy(true); setError(null); setNotice(null);
     try {
       const matched = await messengerApi.syncContacts(normalized);
@@ -79,9 +88,16 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
         ? await selectNativeContacts()
         : await contacts!.select(["tel"], { multiple: true });
       const phones = selected.flatMap((item) => item.tel ?? []);
-      const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
+      const defaultCountry = countryFromLocale(
+        typeof navigator !== "undefined" ? navigator.language : undefined,
+      );
+      const normalized = [...new Set(
+        phones
+          .map((phone) => toE164(phone, defaultCountry))
+          .filter((phone): phone is string => Boolean(phone)),
+      )];
       if (normalized.length === 0) {
-        setNotice("No phone numbers selected.");
+        setNotice("No valid phone numbers selected.");
         return;
       }
       const matched = await messengerApi.syncContacts(normalized);
@@ -97,9 +113,11 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
 
   function submitManual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const value = manual.trim();
-    if (!value) return;
-    void syncPhones([value]).then(() => setManual(""));
+    if (!manual) return;
+    void syncPhones([manual]).then(() => {
+      setManual("");
+      setManualDisplay("");
+    });
   }
 
   return (
@@ -111,17 +129,16 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
           </button>
         ) : null}
         <form onSubmit={submitManual}>
-          <input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="+382..."
-            aria-label="Add contact by phone"
-            value={manual}
-            onChange={(event) => setManual(event.target.value)}
+          <PhoneInput
+            label="Add contact by phone"
+            value={manualDisplay}
             disabled={busy}
+            onValueChange={(canonical, display) => {
+              setManualDisplay(display);
+              setManual(canonical ?? "");
+            }}
           />
-          <button type="submit" disabled={busy || !manual.trim()}>Add contact</button>
+          <button type="submit" disabled={busy || !manual}>Add contact</button>
         </form>
       </div>
       <p className="muted contact-access-help">

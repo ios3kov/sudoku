@@ -10,6 +10,7 @@ import { DisplayNameOnboarding } from "./display-name-onboarding";
 import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import type { CurrentUser } from "./types";
 import { rememberMessengerEntry } from "../sudoku/startup-preference";
+import { PhoneInput } from "./phone-input";
 import "./device-access.css";
 
 type AuthView = "login" | "invite";
@@ -157,6 +158,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
 
 function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, password: string) => void; onError: (message: string | null) => void }) {
   const [submitting, setSubmitting] = useState(false);
+  const [phoneDisplay, setPhoneDisplay] = useState(savedPhone);
   const [phone, setPhone] = useState(savedPhone);
   const [remember, setRemember] = useState(() => Boolean(savedPhone()));
   const alive = useRef(false);
@@ -167,7 +169,7 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, pass
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting) return;
+    if (submitting || !phone) return;
     setSubmitting(true); onError(null);
     const data = new FormData(event.currentTarget);
     const password = String(data.get("password") ?? "");
@@ -188,24 +190,34 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, pass
   }
 
   return <form className="auth-form" onSubmit={submit}>
-    <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+    <PhoneInput
+      label="Phone number"
+      value={phoneDisplay}
+      required
+      onValueChange={(canonical, display) => {
+        setPhoneDisplay(display);
+        setPhone(canonical ?? "");
+      }}
+    />
     <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
     <label className="device-access-choice"><input type="checkbox" checked={remember} onChange={(e) => {
       const checked = e.target.checked; setRemember(checked);
       if (!checked && !rememberPhone("", false)) onError("Unable to forget saved phone. Clear this site's storage in your browser settings.");
     }} />Remember phone on this device</label>
-    <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
+    <button className="primary-button" type="submit" disabled={submitting || !phone}>{submitting ? "Signing in…" : "Sign in"}</button>
   </form>;
 }
 
 function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => void; onError: (message: string | null) => void }) {
   const [submitting, setSubmitting] = useState(false);
+  const [phoneDisplay, setPhoneDisplay] = useState("");
+  const [phone, setPhone] = useState("");
   const alive = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting) return;
+    if (submitting || !phone) return;
     setSubmitting(true); onError(null);
     const data = new FormData(event.currentTarget);
     const token = String(data.get("invite") ?? "").trim();
@@ -213,13 +225,13 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
     try {
       const response = await fetch("/v1/invites/accept", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, phone: data.get("phone"), password: data.get("password"), device_name: "Sudoku web app" }),
+        body: JSON.stringify({ token, phone, password: data.get("password"), device_name: "Sudoku web app" }),
       });
       if (!alive.current || started !== accessEpoch()) return;
       if (!response.ok) {
         if (response.status === 403) onError("This invite is for a different phone number");
         else if (response.status === 409) onError("Account already exists");
-        else if (response.status === 422) onError("Check the invite code, phone number, name, and password");
+        else if (response.status === 422) onError("Check the invite code, phone number, and password");
         else if (response.status === 429) onError("Too many attempts. Try later.");
         else onError("Invite is invalid or expired");
         return;
@@ -232,8 +244,16 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
 
   return <form className="auth-form" onSubmit={submit}>
     <label>Invite code<input name="invite" autoCapitalize="none" autoCorrect="off" required /></label>
-    <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required /></label>
+    <PhoneInput
+      label="Phone number"
+      value={phoneDisplay}
+      required
+      onValueChange={(canonical, display) => {
+        setPhoneDisplay(display);
+        setPhone(canonical ?? "");
+      }}
+    />
     <label>Password<input name="password" type="password" autoComplete="new-password" minLength={12} required /></label>
-    <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Joining…" : "Join"}</button>
+    <button className="primary-button" type="submit" disabled={submitting || !phone}>{submitting ? "Joining…" : "Join"}</button>
   </form>;
 }
