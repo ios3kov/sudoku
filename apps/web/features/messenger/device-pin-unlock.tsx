@@ -86,6 +86,14 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
     };
   }, [onUnlocked, onSignedOut]);
 
+  useEffect(() => {
+    if (mode !== "pin" || busy) return;
+    const frame = window.requestAnimationFrame(() => {
+      pinInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [biometricAvailable, biometricEnabled, busy, mode]);
+
   async function submitCredential(
     credentialMode: "pin" | "password",
     credential: string,
