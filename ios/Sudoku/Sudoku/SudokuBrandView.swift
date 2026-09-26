@@ -2,7 +2,7 @@ import UIKit
 
 enum SudokuNativePalette {
     static let gameBackground = UIColor(red: 26 / 255, green: 26 / 255, blue: 26 / 255, alpha: 1)
-    static let messengerBackground = UIColor(red: 248 / 255, green: 250 / 255, blue: 252 / 255, alpha: 1)
+    static let messengerBackground = UIColor(red: 238 / 255, green: 242 / 255, blue: 247 / 255, alpha: 1)
     static let accent = UIColor(red: 1, green: 138 / 255, blue: 0, alpha: 1)
     static let foreground = UIColor.white
     static let muted = UIColor(red: 161 / 255, green: 161 / 255, blue: 170 / 255, alpha: 1)
