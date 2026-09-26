@@ -132,7 +132,7 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
   // independent OpenMLS browser sessions. Keep each functional assertion
   // individually bounded below, but leave enough aggregate headroom so the
   // suite fails on the real assertion rather than the outer test clock.
-  test.setTimeout(600_000);
+  test.setTimeout(480_000);
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
@@ -398,89 +398,6 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
     }
 
     await verifyActiveComposition(owner, peer, sendText, openConversation, unlockPrivate);
-
-    // A completely new authenticated session/device has no local MLS state for
-    // the existing direct chat. Registration publishes fresh KeyPackages and
-    // schedules device_add. The existing authorized device authors the durable
-    // rekey; the new device must poll its assigned transport, consume Welcome
-    // and become usable without Reload.
-    const freshContext = await browser.newContext();
-    const freshOwner = await freshContext.newPage();
-    try {
-      await observeRealtimeSocket(freshOwner);
-      await login(freshOwner, OWNER_PHONE);
-
-      await expect(
-        freshOwner.getByText("Secure messaging needs a restart.", { exact: true }),
-      ).toHaveCount(0);
-      await expect(
-        freshOwner.getByText(
-          "Preparing secure messaging on this device. Existing secure chats will become available automatically.",
-          { exact: true },
-        ),
-      ).toBeVisible({ timeout: 60_000 });
-
-      const ownerConversationsResponse = await owner.request.get("/v1/conversations");
-      expect(ownerConversationsResponse.ok()).toBe(true);
-      const ownerConversations = await ownerConversationsResponse.json() as Conversation[];
-      const direct = ownerConversations.find((item) =>
-        item.type === "direct"
-        && item.members.some((member) => member.email === "browser-peer@example.com")
-      );
-      expect(direct).toBeDefined();
-      if (!direct) throw new Error("Existing encrypted direct conversation is missing");
-
-      const pendingResponse = await owner.request.get(
-        `/v1/e2ee/conversations/${direct.id}/membership-changes/pending`,
-      );
-      expect(pendingResponse.ok()).toBe(true);
-      const pending = await pendingResponse.json() as {
-        change: { kind?: string; target_device_id?: string | null } | null;
-      };
-      expect(pending.change?.kind).toBe("device_add");
-      expect(pending.change?.target_device_id).toBeTruthy();
-
-      await owner.evaluate(({ conversationId }) => {
-        const socket = (window as ObservedWindow).__sudokuE2eRealtimeSocket;
-        if (!socket) throw new Error("Owner realtime observer is not installed");
-        socket.dispatchEvent(new MessageEvent("message", {
-          data: JSON.stringify({
-            type: "mls.device.changed",
-            conversation_id: conversationId,
-            payload: {},
-          }),
-        }));
-      }, { conversationId: direct.id });
-
-      await expect.poll(async () => {
-        const response = await owner.request.get(
-          `/v1/e2ee/conversations/${direct.id}/membership-changes/pending`,
-        );
-        if (!response.ok()) return "request-failed";
-        const body = await response.json() as { change: unknown };
-        return body.change === null ? "ready" : "pending";
-      }, { timeout: 60_000 }).toBe("ready");
-
-      await expect(
-        freshOwner.getByText(
-          "Preparing secure messaging on this device. Existing secure chats will become available automatically.",
-          { exact: true },
-        ),
-      ).toHaveCount(0, { timeout: 60_000 });
-
-      await openConversation(freshOwner, "Browser Peer");
-      await peer.evaluate(() => window.dispatchEvent(new Event("online")));
-      await sendText(peer, "delivered after fresh-device rekey");
-      await expect(acceptedMessage(peer, "delivered after fresh-device rekey")).toBeVisible({
-        timeout: 60_000,
-      });
-      await freshOwner.evaluate(() => window.dispatchEvent(new Event("online")));
-      await expect(acceptedMessage(freshOwner, "delivered after fresh-device rekey")).toBeVisible({
-        timeout: 60_000,
-      });
-    } finally {
-      await freshContext.close();
-    }
   } finally {
     // Close both browser contexts concurrently. On cold CI runners the MLS
     // scenario can legitimately consume most of the test budget; serial
@@ -493,6 +410,124 @@ test("MLS survives reload, offline retry and fails closed on transport outage", 
   }
 });
 
+
+
+
+test("fresh authenticated device joins an existing encrypted direct chat without Reload", async ({ browser }) => {
+  test.setTimeout(360_000);
+  const ownerContext = await browser.newContext();
+  const peerContext = await browser.newContext();
+  const freshContext = await browser.newContext();
+  const owner = await ownerContext.newPage();
+  const peer = await peerContext.newPage();
+  const freshOwner = await freshContext.newPage();
+
+  try {
+    await observeRealtimeSocket(owner);
+    await observeRealtimeSocket(peer);
+    await observeRealtimeSocket(freshOwner);
+
+    await login(peer, PEER_PHONE);
+    await login(owner, OWNER_PHONE);
+
+    let response = await owner.request.get("/v1/conversations");
+    expect(response.ok()).toBe(true);
+    let items = await response.json() as Conversation[];
+    let direct = items.find((item) =>
+      item.type === "direct"
+      && item.members.some((member) => member.email === "browser-peer@example.com")
+    );
+
+    if (!direct) {
+      await owner.getByRole("button", { name: "New secure chat" }).click();
+      await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+      const peopleSearch = owner.getByPlaceholder("Search people");
+      await peopleSearch.fill("Browser Peer");
+      const peerResult = owner.locator(".directory-item").filter({ hasText: PEER_PHONE });
+      await expect(peerResult).toBeVisible();
+      await peerResult.click();
+      await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
+        timeout: 60_000,
+      });
+      response = await owner.request.get("/v1/conversations");
+      expect(response.ok()).toBe(true);
+      items = await response.json() as Conversation[];
+      direct = items.find((item) =>
+        item.type === "direct"
+        && item.members.some((member) => member.email === "browser-peer@example.com")
+      );
+    }
+
+    expect(direct).toBeDefined();
+    if (!direct) throw new Error("Existing encrypted direct conversation is missing");
+
+    await login(freshOwner, OWNER_PHONE);
+    await expect(
+      freshOwner.getByText("Secure messaging needs a restart.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      freshOwner.getByText(
+        "Preparing secure messaging on this device. Existing secure chats will become available automatically.",
+        { exact: true },
+      ),
+    ).toBeVisible({ timeout: 60_000 });
+
+    const pendingResponse = await owner.request.get(
+      `/v1/e2ee/conversations/${direct.id}/membership-changes/pending`,
+    );
+    expect(pendingResponse.ok()).toBe(true);
+    const pending = await pendingResponse.json() as {
+      change: { kind?: string; target_device_id?: string | null } | null;
+    };
+    expect(pending.change?.kind).toBe("device_add");
+    expect(pending.change?.target_device_id).toBeTruthy();
+
+    await owner.evaluate(({ conversationId }) => {
+      const socket = (window as ObservedWindow).__sudokuE2eRealtimeSocket;
+      if (!socket) throw new Error("Owner realtime observer is not installed");
+      socket.dispatchEvent(new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "mls.device.changed",
+          conversation_id: conversationId,
+          payload: {},
+        }),
+      }));
+    }, { conversationId: direct.id });
+
+    await expect.poll(async () => {
+      const pendingResult = await owner.request.get(
+        `/v1/e2ee/conversations/${direct!.id}/membership-changes/pending`,
+      );
+      if (!pendingResult.ok()) return "request-failed";
+      const body = await pendingResult.json() as { change: unknown };
+      return body.change === null ? "ready" : "pending";
+    }, { timeout: 60_000 }).toBe("ready");
+
+    await expect(
+      freshOwner.getByText(
+        "Preparing secure messaging on this device. Existing secure chats will become available automatically.",
+        { exact: true },
+      ),
+    ).toHaveCount(0, { timeout: 60_000 });
+
+    await openConversation(freshOwner, "Browser Peer");
+    await peer.evaluate(() => window.dispatchEvent(new Event("online")));
+    await sendText(peer, "delivered after fresh-device rekey");
+    await expect(acceptedMessage(peer, "delivered after fresh-device rekey")).toBeVisible({
+      timeout: 60_000,
+    });
+    await freshOwner.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(acceptedMessage(freshOwner, "delivered after fresh-device rekey")).toBeVisible({
+      timeout: 60_000,
+    });
+  } finally {
+    await Promise.allSettled([
+      ownerContext.close(),
+      peerContext.close(),
+      freshContext.close(),
+    ]);
+  }
+});
 
 test("lost local MLS state never suggests Reload for the same authenticated session", async ({ browser }) => {
   test.setTimeout(240_000);
