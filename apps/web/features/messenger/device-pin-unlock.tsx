@@ -87,6 +87,7 @@ export function DevicePinUnlock({ onUnlocked, onSignedOut, onHide }: {
           setValue("");
           setError("PIN attempts exhausted. Use your account password.");
         } else {
+          if (mode === "pin") navigator.vibrate?.(20);
           setError(
             response.status === 429
               ? "Too many attempts. Try later."
