@@ -62,7 +62,13 @@ export function HomeClient() {
   }, [hidePrivateSurface, mode]);
 
   if (privacyCover) {
-    return <main className="shell"><section className="card"><h1>Sudoku</h1><div className="privacy-grid" aria-hidden="true" /></section></main>;
+    return <main className="shell privacy-shell">
+      <section className="card privacy-card">
+        <div className="privacy-brand-mark" aria-hidden="true" />
+        <h1 aria-label="Sudoku">SUDOKU.MOSCOW</h1>
+        <div className="privacy-grid" aria-hidden="true" />
+      </section>
+    </main>;
   }
 
   const privateActive = mode === "messenger-lock";
