@@ -103,7 +103,7 @@ test("manual contact accepts local RU trunk prefix and syncs canonical contact",
   await page.getByRole("button", { name: "Add contact", exact: true }).click();
 
   await expect(page.getByRole("status")).toContainText("registered contact");
-  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.locator(".contact-chat-row").filter({ hasText: testPhone(2) })).toBeVisible();
 });
 
 test("admin invite searches local Contacts by name and RU phone variants", async ({ page }) => {
@@ -192,9 +192,9 @@ test("system contact picker sync exposes only selected registered contacts", asy
 
   await login(page, testPhone(5));
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Phone contacts" })).toBeVisible();
 
-  const directory = page.locator(".directory-item");
+  const directory = page.locator(".contact-chat-row");
   await expect(directory).toHaveCount(0);
 
   await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
@@ -219,11 +219,11 @@ test("native iOS contact bridge syncs only explicitly selected phones", async ({
   }, { selectedPhone: testPhone(2) });
 
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Phone contacts" })).toBeVisible();
 
   await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("registered contact");
-  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.locator(".contact-chat-row").filter({ hasText: testPhone(2) })).toBeVisible();
 });
 
 test("native full Contacts permission syncs only registered matches", async ({ page }) => {
@@ -254,7 +254,7 @@ test("native full Contacts permission syncs only registered matches", async ({ p
   await page.getByRole("button", { name: "Allow all contacts", exact: true }).click();
 
   await expect(page.getByRole("status")).toContainText("1 registered contact matched from Contacts.");
-  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.locator(".contact-chat-row").filter({ hasText: testPhone(2) })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sync all contacts", exact: true })).toBeVisible();
 });
 
@@ -291,7 +291,7 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
   await page.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(2));
   await page.getByRole("button", { name: "Add contact", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("registered contact");
-  await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
+  await expect(page.locator(".contact-chat-row").filter({ hasText: testPhone(2) })).toBeVisible();
 });
 
 
