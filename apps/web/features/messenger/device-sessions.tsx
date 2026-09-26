@@ -11,6 +11,7 @@ export function DeviceSessions({
   onClose,
   onCurrentRevoked,
   onPhoneUpdated,
+  onDisplayNameUpdated,
   isAdmin = false,
   onOpenInvite,
   onEnablePush,
@@ -21,6 +22,7 @@ export function DeviceSessions({
   onClose: () => void;
   onCurrentRevoked: () => void;
   onPhoneUpdated?: (phone: string) => void;
+  onDisplayNameUpdated?: (displayName: string) => void;
   isAdmin?: boolean;
   onOpenInvite?: () => void;
   onEnablePush?: () => void;
@@ -72,7 +74,10 @@ export function DeviceSessions({
         <button type="button" onClick={onClose}>Close</button>
       </div>
 
-      <DeviceAccessSettings onPhoneUpdated={onPhoneUpdated} />
+      <DeviceAccessSettings
+        onPhoneUpdated={onPhoneUpdated}
+        onDisplayNameUpdated={onDisplayNameUpdated}
+      />
 
       <section className="settings-section-card" aria-label="Signed-in devices">
         <div className="settings-section-heading">
