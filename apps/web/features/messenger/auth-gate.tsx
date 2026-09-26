@@ -6,6 +6,7 @@ import { MessengerRevealPreview } from "./messenger-reveal-preview";
 import { ConversationDraftProvider } from "./conversation-drafts";
 import { DevicePinUnlock } from "./device-pin-unlock";
 import { DevicePinOnboarding } from "./device-pin-onboarding";
+import { PhoneInput } from "./phone-input";
 import { DEVICE_LOCK_EVENT, acceptUnlock, accessEpoch, forgetUnlock, lockDevice, privateFetch, rememberPhone, savedPhone } from "./device-access";
 import type { CurrentUser } from "./types";
 import { rememberMessengerEntry } from "../sudoku/startup-preference";
@@ -176,7 +177,7 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, pass
   }
 
   return <form className="auth-form" onSubmit={submit}>
-    <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+    <PhoneInput value={phone} onChange={setPhone} required />
     <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
     <label className="device-access-choice"><input type="checkbox" checked={remember} onChange={(e) => {
       const checked = e.target.checked; setRemember(checked);
@@ -188,6 +189,7 @@ function LoginForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser, pass
 
 function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => void; onError: (message: string | null) => void }) {
   const [submitting, setSubmitting] = useState(false);
+  const [phone, setPhone] = useState("");
   const alive = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
@@ -201,7 +203,7 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
     try {
       const response = await fetch("/v1/invites/accept", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, phone: data.get("phone"), display_name: data.get("display_name"), password: data.get("password"), device_name: "Sudoku web app" }),
+        body: JSON.stringify({ token, phone, display_name: data.get("display_name"), password: data.get("password"), device_name: "Sudoku web app" }),
       });
       if (!alive.current || started !== accessEpoch()) return;
       if (!response.ok) {
@@ -221,7 +223,7 @@ function InviteForm({ onSuccess, onError }: { onSuccess: (user: CurrentUser) => 
   return <form className="auth-form" onSubmit={submit}>
     <label>Invite code<input name="invite" autoCapitalize="none" autoCorrect="off" required /></label>
     <label>Name<input name="display_name" autoComplete="name" required maxLength={120} /></label>
-    <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+382..." required /></label>
+    <PhoneInput value={phone} onChange={setPhone} required />
     <label>Password<input name="password" type="password" autoComplete="new-password" minLength={12} required /></label>
     <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Joining…" : "Join"}</button>
   </form>;
