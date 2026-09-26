@@ -1,3 +1,4 @@
+import unicodedata
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -217,6 +218,10 @@ async def update_display_name(
     display_name = payload.display_name.strip()
     if not display_name:
         raise HTTPException(status_code=422, detail="Display name is required")
+    if all(unicodedata.category(char).startswith("C") for char in display_name):
+        raise HTTPException(status_code=422, detail="Display name must contain visible characters")
+    if any(unicodedata.category(char) in {"Cc", "Cs"} for char in display_name):
+        raise HTTPException(status_code=422, detail="Display name contains unsupported control characters")
     auth.user.display_name = display_name
     db.add(
         AuditEvent(
