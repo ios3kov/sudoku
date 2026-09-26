@@ -1,5 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ensureSudokuGame } from "./support/sudoku-start";
+import { shouldCancelBeforeArm, shouldCommitReveal } from "../../features/secret-unlock/secret-unlock-motion";
+
+test("pure reveal gesture policy distinguishes tap, cancel, threshold and velocity commit", () => {
+  expect(shouldCancelBeforeArm(8, 8)).toBe(false);
+  expect(shouldCancelBeforeArm(20, 0)).toBe(true);
+  expect(shouldCommitReveal(99, 100, 0)).toBe(false);
+  expect(shouldCommitReveal(100, 100, 0)).toBe(true);
+  expect(shouldCommitReveal(80, 140, 0.8)).toBe(true);
+  expect(shouldCommitReveal(60, 140, 1.2)).toBe(false);
+});
 
 async function dragFive(page: Page, progress: number, pointerId: number) {
   const five = page.getByRole("button", { name: "5", exact: true });
