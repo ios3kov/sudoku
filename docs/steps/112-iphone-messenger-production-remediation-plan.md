@@ -380,6 +380,27 @@ Add unit coverage beyond video-only tests where practical:
 
 ---
 
+
+## 2026-09-26 Wave 3 UX checkpoint
+
+PR #121 implemented the two physical-iPhone follow-ups for app-switcher privacy and reveal physics and merged as `5b946990aa5b9270ac1f4425589b5bc6f229f2bf`.
+
+Verified in repository CI:
+
+- `ci` 36245249448 — passed;
+- `ios-native` 36245249507 — passed;
+- `device-access` 36245249438 — passed;
+- `beat-runtime` 36245249449 — passed;
+- `api-shutdown` 36245249417 — passed.
+
+Still requires physical-iPhone acceptance:
+
+- App Switcher card shows the last real Sudoku state, never Messenger and not the generic fallback after a usable Sudoku frame exists;
+- dragging stays attached to the finger until release;
+- fast upward flick commits naturally from velocity/projected travel;
+- slow/short release below threshold returns smoothly;
+- no visible mid-drag auto-finish, jump or frame-pacing regression.
+
 # Integration candidate
 
 After Waves 1–3 are merged into one release branch:
