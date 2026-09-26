@@ -142,7 +142,12 @@ test("registered contact opens or reuses one direct chat from Contacts in one ta
   await expect(panel).toHaveCount(0);
   await expect.poll(directCount, { timeout: 60_000 }).toBe(1);
 
-  await page.getByRole("button", { name: "Back", exact: true }).click();
+  const backToList = page.getByRole("button", { name: "Back to conversations", exact: true });
+  if (await backToList.count()) {
+    await backToList.click();
+  } else {
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+  }
   await page.getByRole("button", { name: "Contacts", exact: true }).click();
   panel = page.getByRole("dialog", { name: "Phone contacts", exact: true });
   const reusedRow = panel.locator(".contact-chat-row").filter({ hasText: testPhone(5) });
