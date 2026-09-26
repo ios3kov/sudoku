@@ -530,3 +530,40 @@ This remediation program is complete when a new user can:
 11. tap the persistent Sudoku icon from any private Messenger surface and conceal Messenger instantly.
 
 No TestFlight/App Store production claim is made until the exact candidate passes the automated and physical gates above.
+
+
+---
+
+## Wave 1 implementation log — 2026-09-26
+
+Branch: `fix/wave1-p0-iphone-remediation`  
+Baseline: `bd262e22f026f0e4789e37c50adf61526d120313`  
+Production deployment: **not performed**
+
+Implemented in the remediation branch:
+
+- **#108 fresh-device MLS recovery**
+  - E2EE startup now distinguishes `initializing`, `ready`, `new_device_pending`, `rekey_pending`, `history_unavailable_on_this_device`, `recoverable_error`, and `fatal_error`;
+  - old-epoch application ciphertext received before this device's MLS Welcome is advanced past durably and explicitly classified as unavailable history instead of being decrypted;
+  - actual MLS group membership is tracked separately from a transport cursor;
+  - the generic `Secure messaging needs a restart / Reload` recovery path is removed;
+  - initialized MLS state is retained across recoverable transport/rekey failures.
+- **#116 contact -> direct chat**
+  - a registered Contacts row now opens an existing direct conversation immediately or creates the unique E2EE direct conversation;
+  - the existing server `direct_key` advisory lock/idempotency remains authoritative;
+  - client-side contact opening is single-flight so repeated taps do not run parallel bootstrap work.
+- **#111 PIN first-attempt reliability**
+  - a completed four-digit PIN auto-submits immediately;
+  - a synchronous single-flight guard prevents duplicate verification requests;
+  - stale device-access status responses cannot overwrite an in-progress unlock;
+  - a wrong PIN clears automatically and refocuses for retry;
+  - the explicit Unlock button remains only for account-password fallback.
+
+Regression coverage added/updated:
+
+- browser fresh-device / missing local OpenMLS state with an existing encrypted direct conversation;
+- old encrypted history unavailable on the fresh device, future messages recover after Welcome without reload;
+- Contacts tap creates one direct E2EE chat and subsequent tap reuses it;
+- PIN auto-submit sends exactly one request and succeeds on repeated first attempts after relaunch.
+
+Verification status at this checkpoint: implementation complete; PR CI / targeted browser verification pending. Physical-iPhone acceptance remains required after automated Wave 1 gates are green.
