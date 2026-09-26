@@ -92,6 +92,7 @@ const adapter = {
   }),
   pendingApplicationCount: () => 0,
   pendingApplicationMessages: () => [],
+  historyUnavailableConversationIds: () => [],
   sendMessageDurably: async (payload: unknown) => {
     protocol.sends += 1;
     protocol.lastSend = payload;
