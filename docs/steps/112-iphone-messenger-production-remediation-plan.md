@@ -124,6 +124,10 @@ Do **not** invent a key-recovery mechanism. If the only copy of historical MLS s
 - no plaintext fallback;
 - Reload no longer presented as generic recovery.
 
+### #108 implementation checkpoint — 2026-09-26
+
+The repository implementation for fresh-device recovery is recorded in [Step 114](114-fresh-device-mls-recovery.md). It replaces the generic Reload failure with explicit new-device pending/retry/re-login states, keeps MLS alive across ordinary background/BFCache lifecycle, polls durable transport for Welcome, and adds browser regressions for new-session device-add plus same-session local-state loss. Physical-device acceptance remains open.
+
 ## 1.2 Contact -> direct chat — #116
 
 Make the normal path deterministic and familiar:
