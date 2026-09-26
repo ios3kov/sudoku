@@ -520,6 +520,36 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   );
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
 
+  useEffect(() => {
+    if (
+      !selected
+      || selected.type !== "direct"
+      || !selected.encryption_required
+      || selected.e2ee_ready
+      || selected.created_by !== user.id
+      || !e2eeReadyForActions
+      || !e2eeAdapter
+      || directBootstrapRef.current.has(selected.id)
+    ) {
+      return;
+    }
+
+    setSecureSetupBusy(true);
+    setSecureSetupError(null);
+    const operation = e2eeAdapter.bootstrapConversation(selected)
+      .then((ready) => updateConversation(ready))
+      .catch((error: unknown) => {
+        setSecureSetupError(
+          error instanceof Error ? error.message : "Unable to prepare secure chat",
+        );
+      })
+      .finally(() => {
+        directBootstrapRef.current.delete(selected.id);
+        setSecureSetupBusy(false);
+      });
+    directBootstrapRef.current.set(selected.id, operation);
+  }, [e2eeAdapter, e2eeReadyForActions, selected, user.id]);
+
   if (selected?.encryption_required) {
     const selectedTracked =
       e2eeAdapter?.joinedConversationIds().includes(selected.id) ?? false;
