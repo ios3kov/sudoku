@@ -20,6 +20,7 @@ final class SudokuBrandMarkView: UIView {
         layer.borderColor = UIColor.white.withAlphaComponent(0.08).cgColor
 
         grid.axis = .vertical
+        grid.distribution = .fillEqually
         grid.spacing = 3
         grid.translatesAutoresizingMaskIntoConstraints = false
         addSubview(grid)
