@@ -200,10 +200,13 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         );
         for (const conversation of encryptedConversations) {
           if (cancelled) return;
-          // Unified transport remains authoritative. On a fresh device the
-          // adapter deliberately advances over old-epoch application events
-          // until its assigned Welcome arrives, instead of trying to decrypt
-          // history for which this device never possessed keys.
+          const joined = currentAdapter.joinedConversationIds().includes(conversation.id);
+          if (!joined && conversation.latest_sequence > 0) {
+            await currentAdapter.markHistoryUnavailable(conversation.id);
+          }
+          // Unified transport remains authoritative. The server does not expose
+          // pre-Welcome application ciphertext to a fresh device; the assigned
+          // Welcome is therefore the first decryptable epoch boundary.
           await currentAdapter.syncTransport(conversation.id);
           if (currentAdapter.joinedConversationIds().includes(conversation.id)) {
             await reconcileDeviceChange(currentAdapter, conversation.id);
