@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { messengerApi } from "./api";
+import { conversationInitials } from "./chat-utils";
 import { ContactAccess } from "./contact-access";
 import type { ContactDirectoryItem } from "./types";
 
@@ -15,15 +16,17 @@ export function ContactsPanel({
   chatEnabled: boolean;
 }) {
   const [contacts, setContacts] = useState<ContactDirectoryItem[]>([]);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
+  const load = useCallback(async (term = "") => {
+    setLoading(true);
+    setError(null);
     try {
-      setContacts(await messengerApi.contacts());
+      setContacts(await messengerApi.contacts(term));
     } catch {
       setError("Unable to load contacts.");
     } finally {
@@ -31,13 +34,15 @@ export function ContactsPanel({
     }
   }, []);
 
-  // Load remote contacts on mount; this also shares the explicit refresh loading state.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(query.trim()); }, query ? 180 : 0);
+    return () => window.clearTimeout(timer);
+  }, [load, query]);
 
   async function open(contact: ContactDirectoryItem) {
     if (!chatEnabled || openingId) return;
-    setOpeningId(contact.id); setError(null);
+    setOpeningId(contact.id);
+    setError(null);
     try {
       await onOpenContact(contact);
     } catch (reason) {
@@ -48,7 +53,8 @@ export function ContactsPanel({
   }
 
   async function remove(userId: string) {
-    setBusyId(userId); setError(null);
+    setBusyId(userId);
+    setError(null);
     try {
       await messengerApi.removeContact(userId);
       setContacts((current) => current.filter((item) => item.id !== userId));
@@ -60,27 +66,66 @@ export function ContactsPanel({
   }
 
   return (
-    <section className="settings-panel" role="dialog" aria-label="Phone contacts">
+    <section className="settings-panel contacts-panel" role="dialog" aria-label="Phone contacts">
       <div className="settings-header">
-        <div><strong>Contacts</strong><span>Only synced phone contacts can start new chats.</span></div>
+        <div><strong>Contacts</strong><span>People you can message securely</span></div>
         <button type="button" onClick={onClose}>Close</button>
       </div>
-      <ContactAccess onSynced={() => void load()} />
+
+      <div className="contacts-search">
+        <span aria-hidden="true">⌕</span>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search contacts"
+          aria-label="Search contacts"
+        />
+      </div>
+
+      <ContactAccess onSynced={() => void load(query.trim())} />
+
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      {loading ? <p className="muted">Loading contacts…</p> : (
-        <div className="settings-list">
-          {contacts.length === 0 ? <p className="muted">No registered contacts yet.</p> : contacts.map((contact) => (
-            <div className="settings-row" key={contact.id}>
+
+      {loading ? (
+        <div className="contact-list is-loading" aria-busy="true">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div className="contact-row is-skeleton" key={index} aria-hidden="true">
+              <span className="avatar minimal-avatar" />
+              <span />
+            </div>
+          ))}
+        </div>
+      ) : contacts.length === 0 ? (
+        <div className="empty-conversations compact">
+          <p>{query ? "No matching registered contacts." : "No registered contacts yet."}</p>
+        </div>
+      ) : (
+        <div className="contact-list">
+          {contacts.map((contact) => (
+            <div className="contact-row" key={contact.id}>
               <button
                 type="button"
+                className="contact-primary"
                 disabled={!chatEnabled || openingId === contact.id}
                 onClick={() => void open(contact)}
                 aria-label={`Open chat with ${contact.display_name}`}
               >
-                <span><strong>{contact.display_name}</strong><small>{contact.phone_e164}</small></span>
+                <span className="avatar minimal-avatar">{conversationInitials(contact.display_name)}</span>
+                <span className="contact-copy">
+                  <strong>{contact.display_name}</strong>
+                  <small>{contact.phone_e164}</small>
+                </span>
+                <span className="minimal-row-chevron" aria-hidden="true">›</span>
               </button>
-              <button type="button" disabled={busyId === contact.id || openingId === contact.id} onClick={() => void remove(contact.id)}>
-                {busyId === contact.id ? "Removing…" : openingId === contact.id ? "Opening…" : "Remove"}
+              <button
+                type="button"
+                className="contact-remove"
+                aria-label={`Remove ${contact.display_name}`}
+                disabled={busyId === contact.id || openingId === contact.id}
+                onClick={() => void remove(contact.id)}
+              >
+                {busyId === contact.id ? "…" : "×"}
               </button>
             </div>
           ))}
