@@ -106,6 +106,76 @@ test("manual contact accepts local RU trunk prefix and syncs canonical contact",
   await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
 });
 
+test("admin invite searches local Contacts by name and RU phone variants", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(4));
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["Иван Петров"], tel: ["+7 (926) 237-36-09"] }],
+        status: async () => "granted",
+        requestAll: async () => [
+          { name: ["Иван Петров"], tel: ["+7 (926) 237-36-09"] },
+        ],
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  });
+
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  const invite = page.getByRole("dialog", { name: "Create invite", exact: true });
+  await expect(invite).toBeVisible();
+
+  const search = invite.getByLabel("Search contact or phone", { exact: true });
+  await search.fill("Иван");
+  await expect(invite.getByRole("option").filter({ hasText: "Иван Петров" })).toBeVisible();
+
+  await search.fill("8926");
+  const suggestion = invite.getByRole("option").filter({ hasText: "Иван Петров" });
+  await expect(suggestion).toBeVisible();
+  await suggestion.click();
+
+  const selected = invite.getByLabel("Selected invite contact");
+  await expect(selected).toContainText("Иван Петров");
+  await expect(selected).toContainText("+7 (926) 237-36-09");
+
+  const createRequest = page.waitForRequest((request) =>
+    request.method() === "POST" && request.url().endsWith("/v1/invites")
+  );
+  await invite.getByRole("button", { name: "Create invite", exact: true }).click();
+  const request = await createRequest;
+  expect(request.postDataJSON().phone).toBe("+79262373609");
+  await expect(invite.locator("code")).toBeVisible();
+});
+
+test("admin invite keeps picker fallback when full Contacts access is denied", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, testPhone(4));
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [{ name: ["Picker Person"], tel: ["+79262373609"] }],
+        status: async () => "denied",
+        requestAll: async () => {
+          throw new Error("denied");
+        },
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  });
+
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  const invite = page.getByRole("dialog", { name: "Create invite", exact: true });
+  await expect(invite.getByText("Full Contacts access is off. Picker and manual number entry still work.", { exact: true })).toBeVisible();
+  await invite.getByRole("button", { name: "Choose contact", exact: true }).click();
+  await expect(invite.getByLabel("Selected invite contact")).toContainText("Picker Person");
+  await expect(invite.getByRole("button", { name: "Create invite", exact: true })).toBeEnabled();
+});
+
 test("system contact picker sync exposes only selected registered contacts", async ({ page }) => {
   test.setTimeout(180_000);
   await page.addInitScript(({ selectedPhone }) => {
