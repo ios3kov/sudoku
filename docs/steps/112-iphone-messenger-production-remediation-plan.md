@@ -152,6 +152,21 @@ Tests:
 - contact ACL enforced;
 - non-contact cannot bypass authorization.
 
+### #116 implementation checkpoint — 2026-09-26
+
+Registered contact rows now open or reuse a direct secure chat in one tap.
+
+- existing direct -> open immediately;
+- missing direct -> create exactly one encrypted direct and enter chat/secure-setup state;
+- repeated taps reuse the direct instead of creating duplicates;
+- remove-contact remains a separate secondary action;
+- contact rows are visually actionable messenger targets;
+- Browser E2E verifies one-tap open/create and duplicate prevention.
+
+This final integration sits on top of the fresh-device MLS recovery and PIN reliability changes, so pending-device encrypted chats open into the secure preparation state rather than becoming a no-op.
+
+Pending: final branch CI and physical-device discoverability acceptance.
+
 ## 1.3 PIN first-attempt reliability — #111
 
 Fix reliability before redesigning visuals.
