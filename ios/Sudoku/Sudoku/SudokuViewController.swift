@@ -18,7 +18,6 @@ final class SudokuViewController: UIViewController {
 
         let controller = WKUserContentController()
         controller.add(self, name: Self.contactHandlerName)
-        biometricBridge.install(into: controller)
         mediaBridge.install(into: controller)
         videoPlayback.install(into: controller)
         videoPlayback.presenter = self
@@ -49,7 +48,6 @@ final class SudokuViewController: UIViewController {
         configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
-        biometricBridge.webView = webView
         mediaBridge.webView = webView
         mediaBridge.presenter = self
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -79,7 +77,6 @@ final class SudokuViewController: UIViewController {
     }()
 
     private let privacyCover = PrivacyCoverView()
-    private let biometricBridge = BiometricBridge()
     private let mediaBridge = NativeMediaBridge()
     private let videoPlayback = NativeVideoPlayback()
 
@@ -143,9 +140,6 @@ final class SudokuViewController: UIViewController {
             forName: Self.contactHandlerName
         )
         videoPlayback.uninstall(from: webView.configuration.userContentController)
-        biometricBridge.uninstall(
-            from: webView.configuration.userContentController
-        )
         mediaBridge.uninstall(
             from: webView.configuration.userContentController
         )
