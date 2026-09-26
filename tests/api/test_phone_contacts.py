@@ -442,7 +442,7 @@ async def test_display_name_can_be_updated_with_unicode_and_duplicates() -> None
     duplicate = await create_user(seed + 1, "Илья 🎬")
     assert duplicate.display_name == "Илья 🎬"
 
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=app, client=("10.94.0.1", 9400))
     async with httpx.AsyncClient(
         transport=transport,
         base_url=ORIGIN,
