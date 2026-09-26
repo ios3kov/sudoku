@@ -301,6 +301,20 @@ After registration / first successful account setup:
 - phone number remains login/contact-matching identity;
 - raw phone number is not the primary public chat label.
 
+### #109 implementation checkpoint — 2026-09-26
+
+Display-name onboarding is implemented as a separate post-registration profile step.
+
+- migration `0020_profile_setup` marks existing users complete and new invite-created users pending;
+- invite acceptance no longer requires a public name before account creation;
+- new/pending users see `How should people see you?` before Messenger entry;
+- live preview shows the chosen name;
+- Unicode names and common punctuation are supported; surrounding whitespace is trimmed;
+- phone remains the login/contact identity and is not used as the primary chat label;
+- `Profile` in Messenger allows later display-name edits;
+- duplicate display names remain allowed;
+- API/Browser/migration regressions cover onboarding and later edits.
+
 ## 2.5 Smart phone input — #106
 
 Create one reusable phone-input component for login, manual contacts and admin invite.
