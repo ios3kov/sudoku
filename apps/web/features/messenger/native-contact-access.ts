@@ -9,6 +9,7 @@ export type NativePickerContact = {
 
 type NativeContactsBridge = {
   select: () => Promise<NativePickerContact[]>;
+  all?: () => Promise<NativePickerContact[]>;
 };
 
 declare global {
@@ -21,9 +22,20 @@ export function nativeContactsAvailable(): boolean {
   return typeof window !== "undefined" && typeof window.SudokuNativeContacts?.select === "function";
 }
 
+export function nativeFullContactsAvailable(): boolean {
+  return typeof window !== "undefined" && typeof window.SudokuNativeContacts?.all === "function";
+}
+
 export async function selectNativeContacts(): Promise<NativePickerContact[]> {
   if (!nativeContactsAvailable()) {
     throw new Error("Native contacts bridge is unavailable");
   }
   return window.SudokuNativeContacts!.select();
+}
+
+export async function readAllNativeContacts(): Promise<NativePickerContact[]> {
+  if (!nativeFullContactsAvailable()) {
+    throw new Error("Full contacts access is unavailable");
+  }
+  return window.SudokuNativeContacts!.all!();
 }
