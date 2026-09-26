@@ -111,6 +111,47 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
 });
 
 
+
+
+test("registered contact opens or reuses one direct chat from Contacts in one tap", async ({ page }) => {
+  test.setTimeout(240_000);
+  await login(page, testPhone(3));
+
+  async function directCount() {
+    const response = await page.request.get("/v1/conversations");
+    expect(response.ok()).toBe(true);
+    const conversations = await response.json() as Array<{
+      type: string;
+      members: Array<{ phone_e164: string | null }>;
+    }>;
+    return conversations.filter((conversation) =>
+      conversation.type === "direct"
+      && conversation.members.some((member) => member.phone_e164 === testPhone(5))
+    ).length;
+  }
+
+  await page.getByRole("button", { name: "Contacts", exact: true }).click();
+  let panel = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  await panel.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(5));
+  await panel.getByRole("button", { name: "Add contact", exact: true }).click();
+
+  const row = panel.locator(".contact-chat-row").filter({ hasText: testPhone(5) });
+  await expect(row).toBeVisible();
+  await row.locator(".contact-chat-action").click();
+
+  await expect(panel).toHaveCount(0);
+  await expect.poll(directCount, { timeout: 60_000 }).toBe(1);
+
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: "Contacts", exact: true }).click();
+  panel = page.getByRole("dialog", { name: "Phone contacts", exact: true });
+  const reusedRow = panel.locator(".contact-chat-row").filter({ hasText: testPhone(5) });
+  await reusedRow.locator(".contact-chat-action").click();
+
+  await expect(panel).toHaveCount(0);
+  await expect.poll(directCount, { timeout: 60_000 }).toBe(1);
+});
+
 test("Contacts panel lists and removes an allowed contact", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, testPhone(3));
