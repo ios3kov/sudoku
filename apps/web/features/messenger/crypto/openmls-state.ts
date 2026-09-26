@@ -45,6 +45,7 @@ export interface LocalMlsStateV1 {
   pendingKeyPackagesB64: string[];
   transportCursors: Record<string, number>;
   trackedConversations: string[];
+  historyUnavailableConversations: string[];
 }
 
 export interface RuntimeSnapshot {
@@ -198,6 +199,10 @@ export function parseLocalState(bytes: Uint8Array): LocalMlsStateV1 {
     trackedConversations:
       Array.isArray(raw.trackedConversations)
         ? raw.trackedConversations.filter((item) => typeof item === "string")
+        : [],
+    historyUnavailableConversations:
+      Array.isArray(raw.historyUnavailableConversations)
+        ? raw.historyUnavailableConversations.filter((item) => typeof item === "string")
         : [],
   };
 }
