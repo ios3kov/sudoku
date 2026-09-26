@@ -435,6 +435,11 @@ test("BFCache lifecycle preserves the active MLS adapter", async ({ page }) => {
 
 test("fresh authenticated device joins an existing encrypted direct chat without Reload", async ({ browser }) => {
   test.setTimeout(360_000);
+  const primaryPhone = testPhone(3);
+  const peerPhone = testPhone(5);
+  const primaryName = "PIN Member";
+  const peerName = "PIN Skip";
+
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
   const freshContext = await browser.newContext();
@@ -447,41 +452,40 @@ test("fresh authenticated device joins an existing encrypted direct chat without
     await observeRealtimeSocket(peer);
     await observeRealtimeSocket(freshOwner);
 
-    await login(peer, PEER_PHONE);
-    await login(owner, OWNER_PHONE);
+    await login(peer, peerPhone);
+    await login(owner, primaryPhone);
 
-    let response = await owner.request.get("/v1/conversations");
+    const ownerSync = await owner.request.post("/v1/contacts/sync", {
+      data: { phones: [peerPhone], replace: false },
+    });
+    expect(ownerSync.ok()).toBe(true);
+    const peerSync = await peer.request.post("/v1/contacts/sync", {
+      data: { phones: [primaryPhone], replace: false },
+    });
+    expect(peerSync.ok()).toBe(true);
+
+    await owner.getByRole("button", { name: "New secure chat" }).click();
+    await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
+    const peopleSearch = owner.getByPlaceholder("Search people");
+    await peopleSearch.fill(peerName);
+    const peerResult = owner.locator(".directory-item").filter({ hasText: peerPhone });
+    await expect(peerResult).toBeVisible();
+    await peerResult.click();
+    await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
+      timeout: 60_000,
+    });
+
+    const response = await owner.request.get("/v1/conversations");
     expect(response.ok()).toBe(true);
-    let items = await response.json() as Conversation[];
-    let direct = items.find((item) =>
+    const items = await response.json() as Conversation[];
+    const direct = items.find((item) =>
       item.type === "direct"
-      && item.members.some((member) => member.email === "browser-peer@example.com")
+      && item.members.some((member) => member.phone_e164 === peerPhone)
     );
-
-    if (!direct) {
-      await owner.getByRole("button", { name: "New secure chat" }).click();
-      await expect(owner.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
-      const peopleSearch = owner.getByPlaceholder("Search people");
-      await peopleSearch.fill("Browser Peer");
-      const peerResult = owner.locator(".directory-item").filter({ hasText: PEER_PHONE });
-      await expect(peerResult).toBeVisible();
-      await peerResult.click();
-      await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
-        timeout: 60_000,
-      });
-      response = await owner.request.get("/v1/conversations");
-      expect(response.ok()).toBe(true);
-      items = await response.json() as Conversation[];
-      direct = items.find((item) =>
-        item.type === "direct"
-        && item.members.some((member) => member.email === "browser-peer@example.com")
-      );
-    }
-
     expect(direct).toBeDefined();
-    if (!direct) throw new Error("Existing encrypted direct conversation is missing");
+    if (!direct) throw new Error("Encrypted direct conversation was not created");
 
-    await login(freshOwner, OWNER_PHONE, { requireSecureReady: false });
+    await login(freshOwner, primaryPhone, { requireSecureReady: false });
     await expect(
       freshOwner.getByText("Secure messaging needs a restart.", { exact: true }),
     ).toHaveCount(0);
@@ -516,7 +520,7 @@ test("fresh authenticated device joins an existing encrypted direct chat without
 
     await expect.poll(async () => {
       const pendingResult = await owner.request.get(
-        `/v1/e2ee/conversations/${direct!.id}/membership-changes/pending`,
+        `/v1/e2ee/conversations/${direct.id}/membership-changes/pending`,
       );
       if (!pendingResult.ok()) return "request-failed";
       const body = await pendingResult.json() as { change: unknown };
@@ -530,8 +534,8 @@ test("fresh authenticated device joins an existing encrypted direct chat without
       ),
     ).toHaveCount(0, { timeout: 60_000 });
 
-    await openConversation(freshOwner, "Browser Peer");
-    await openConversation(peer, "Browser Owner");
+    await openConversation(freshOwner, peerName);
+    await openConversation(peer, primaryName);
     await peer.evaluate(() => window.dispatchEvent(new Event("online")));
     await sendText(peer, "delivered after fresh-device rekey");
     await expect(acceptedMessage(peer, "delivered after fresh-device rekey")).toBeVisible({
