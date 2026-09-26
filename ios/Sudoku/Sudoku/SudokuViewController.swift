@@ -225,6 +225,12 @@ final class SudokuViewController: UIViewController {
         renderLifecycle(animatedStartup: false)
     }
 
+    func didEnterBackground() {
+        videoPlayback.cancel()
+        lifecycleState.apply(.didEnterBackground)
+        renderLifecycle(animatedStartup: false)
+    }
+
     private func applySurface(_ surface: NativeSurface) {
         guard surface != currentSurface else { return }
         currentSurface = surface
