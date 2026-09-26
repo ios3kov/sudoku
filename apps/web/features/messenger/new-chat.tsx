@@ -18,12 +18,16 @@ export function NewChat({
   onCreated,
   onCancel,
   adapter,
+  initialMode = "direct",
+  directEnabled = true,
 }: {
   onCreated: (conversation: Conversation) => void;
   onCancel: () => void;
   adapter: OpenMlsProtocolAdapter | null;
+  initialMode?: Mode;
+  directEnabled?: boolean;
 }) {
-  const [mode, setMode] = useState<Mode>("direct");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -118,14 +122,16 @@ export function NewChat({
     <section className="new-chat-panel" role="dialog" aria-label="Create secure chat">
       <div className="new-chat-header"><strong>New chat</strong><button type="button" onClick={onCancel}>Close</button></div>
       <div className="chat-mode-tabs">
-        <button
-          className={mode === "direct" ? "active" : ""}
-          type="button"
-          aria-pressed={mode === "direct"}
-          onClick={() => switchMode("direct")}
-        >
-          Direct
-        </button>
+        {directEnabled ? (
+          <button
+            className={mode === "direct" ? "active" : ""}
+            type="button"
+            aria-pressed={mode === "direct"}
+            onClick={() => switchMode("direct")}
+          >
+            Direct
+          </button>
+        ) : null}
         <button
           className={mode === "group" ? "active" : ""}
           type="button"
