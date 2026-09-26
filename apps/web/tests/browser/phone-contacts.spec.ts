@@ -61,7 +61,7 @@ test("system contact picker sync exposes only selected registered contacts", asy
   const directory = page.locator(".directory-item");
   await expect(directory).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
+  await page.getByRole("button", { name: "Choose contacts", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("1 registered contact");
   await expect(directory.filter({ hasText: testPhone(3) })).toBeVisible();
 });
@@ -85,7 +85,7 @@ test("native iOS contact bridge syncs only explicitly selected phones", async ({
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Create secure chat" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Choose phone contacts", exact: true }).click();
+  await page.getByRole("button", { name: "Choose contacts", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("registered contact");
   await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
 });
@@ -95,9 +95,9 @@ test("manual phone fallback syncs a contact when picker is unavailable", async (
   await login(page, testPhone(4));
   await page.getByRole("button", { name: "New secure chat", exact: true }).click();
 
-  await expect(page.getByRole("button", { name: "Choose phone contacts", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Choose contacts", exact: true })).toHaveCount(0);
   await page.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(2));
-  await page.getByRole("button", { name: "Add contact", exact: true }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("registered contact");
   await expect(page.locator(".directory-item").filter({ hasText: testPhone(2) })).toBeVisible();
 });
@@ -125,7 +125,7 @@ test("registered contact tap creates and then reuses one E2EE direct chat", asyn
     await owner.getByRole("button", { name: "Contacts", exact: true }).click();
     let panel = owner.getByRole("dialog", { name: "Phone contacts", exact: true });
     await panel.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(7));
-    await panel.getByRole("button", { name: "Add contact", exact: true }).click();
+    await panel.getByRole("button", { name: "Add", exact: true }).click();
     await expect(panel.getByText(testPhone(7), { exact: true })).toBeVisible();
 
     const openPeer = panel.getByRole("button", { name: "Open chat with Wave1 Contact Peer", exact: true });
@@ -164,10 +164,10 @@ test("Contacts panel lists and removes an allowed contact", async ({ page }) => 
   await expect(panel).toBeVisible();
 
   await panel.getByLabel("Add contact by phone", { exact: true }).fill(testPhone(5));
-  await panel.getByRole("button", { name: "Add contact", exact: true }).click();
+  await panel.getByRole("button", { name: "Add", exact: true }).click();
   await expect(panel.getByText(testPhone(5), { exact: true })).toBeVisible();
 
-  await panel.getByRole("button", { name: "Remove", exact: true }).click();
+  await panel.getByRole("button", { name: /Remove PIN Member/ }).click();
   await expect(panel.getByText(testPhone(5), { exact: true })).toHaveCount(0);
 
   await panel.getByRole("button", { name: "Close", exact: true }).click();
