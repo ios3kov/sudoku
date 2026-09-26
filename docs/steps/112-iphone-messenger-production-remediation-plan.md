@@ -19,6 +19,16 @@ This plan deliberately separates protocol correctness, product UX and native pol
 
 ---
 
+## Cross-platform parity rule
+
+All user-visible behavior introduced during iPhone remediation is a product requirement for every supported client unless the operating system makes the exact mechanism impossible.
+
+- iOS native, Android/PWA and desktop/browser must share the same interaction semantics, states and privacy guarantees.
+- Platform-specific code may differ, but the user-facing result must be equivalent.
+- Gesture physics, Messenger navigation, PIN, contacts/chat behavior, conceal/reveal rules and privacy behavior are cross-platform requirements.
+- For OS app-switcher/task-switcher snapshots, each platform must hide Messenger and show the last available real Sudoku state where the platform permits control of the snapshot. Where direct snapshot APIs are unavailable, the web/PWA lifecycle must switch the visible tree to the retained Sudoku surface before background capture.
+- A platform-specific limitation must be documented explicitly; it must not silently become a weaker privacy or UX contract.
+
 ## Non-negotiable product rules
 
 1. **No plaintext fallback.** E2EE failures must never downgrade a conversation to plaintext.
