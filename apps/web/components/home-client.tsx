@@ -91,13 +91,17 @@ export function HomeClient() {
       requestAnimationFrame(revealCurrentSurface);
     }
 
+    function handlePageShow() {
+      handleVisibility();
+    }
+
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("pagehide", concealNow);
-    window.addEventListener("pageshow", revealCurrentSurface);
+    window.addEventListener("pageshow", handlePageShow);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("pagehide", concealNow);
-      window.removeEventListener("pageshow", revealCurrentSurface);
+      window.removeEventListener("pageshow", handlePageShow);
     };
   }, [hidePrivateSurface, mode]);
 
