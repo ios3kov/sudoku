@@ -495,7 +495,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     if (
       !selected.e2ee_ready
       && selected.created_by === user.id
-      && e2eeState === "ready"
+      && e2eeReadyForActions
       && e2eeAdapter
     ) {
       return (
@@ -539,7 +539,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
 
     if (
       selected.e2ee_ready
-      && e2eeState === "ready"
+      && e2eeReadyForActions
       && e2eeAdapter
       && selectedTracked
     ) {
@@ -574,7 +574,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           <header className="messenger-topbar minimal-chat-topbar">
             <div>
               <strong>{conversationTitle(selected, user.id)}</strong>
-              <span>{e2eeState === "error" ? "Secure chat unavailable" : "Initializing secure chat…"}</span>
+              <span>{e2eeState === "fatal_error" || e2eeState === "recoverable_error" ? "Secure chat unavailable" : "Preparing secure messaging on this device…"}</span>
             </div>
             <button type="button" onClick={() => setSelectedId(null)}>Back</button>
           </header>
@@ -624,14 +624,14 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
             <strong>Messages</strong>
             <span>{user.display_name} · {connectionState === "online" ? "online" : "reconnecting"}</span>
           </div>
-          <button className="minimal-header-action" type="button" disabled={e2eeState !== "ready"} onClick={openNewChat} aria-label={e2eeState !== "ready" ? "Preparing secure messaging" : user.phone_e164 ? "New secure chat" : "Set phone number to start chats"}>＋</button>
+          <button className="minimal-header-action" type="button" disabled={!e2eeReadyForActions} onClick={openNewChat} aria-label={!e2eeReadyForActions ? "Preparing secure messaging" : user.phone_e164 ? "New secure chat" : "Set phone number to start chats"}>＋</button>
         </header>
 
         {creating ? (
           <NewChat
             onCreated={addConversation}
             onCancel={() => setCreating(false)}
-            adapter={e2eeState === "ready" ? e2eeAdapter : null}
+            adapter={e2eeReadyForActions ? e2eeAdapter : null}
           />
         ) : (
           <>
@@ -657,17 +657,37 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
                 <button type="button" onClick={() => void loadConversations(true)}>Retry</button>
               </div>
             ) : null}
-            {e2eeState === "error" ? (
+            {e2eeState === "new_device_pending" ? (
               <div className="messenger-inline-status is-warning" role="status">
-                <span>Secure messaging needs a restart.</span>
-                <button type="button" onClick={() => window.location.reload()}>Reload</button>
+                <span>Preparing secure messaging on this device.</span>
+              </div>
+            ) : null}
+            {e2eeState === "rekey_pending" ? (
+              <div className="messenger-inline-status is-warning" role="status">
+                <span>Updating secure device membership…</span>
+              </div>
+            ) : null}
+            {e2eeState === "history_unavailable_on_this_device" ? (
+              <div className="messenger-inline-status" role="status">
+                <span>Secure messaging is ready. Earlier encrypted history may be unavailable on this device.</span>
+              </div>
+            ) : null}
+            {e2eeState === "recoverable_error" ? (
+              <div className="messenger-inline-status is-warning" role="status">
+                <span>{e2eeError ?? "Secure messaging recovery is temporarily blocked."}</span>
+                <button type="button" onClick={() => setE2eeRetryTick((value) => value + 1)}>Retry secure setup</button>
+              </div>
+            ) : null}
+            {e2eeState === "fatal_error" ? (
+              <div className="messenger-inline-status is-error" role="alert">
+                <span>{e2eeError ?? "Secure messaging is unavailable on this device."}</span>
               </div>
             ) : null}
             <div className="conversation-list minimal-chat-list" aria-busy={loading}>
             <button
               className="new-chat-button minimal-new-chat-button"
               type="button"
-              disabled={e2eeState !== "ready" || !user.phone_e164}
+              disabled={!e2eeReadyForActions || !user.phone_e164}
               onClick={openNewChat}
             >
               {e2eeState === "initializing" ? "Preparing secure messaging…" : !user.phone_e164 ? "Set phone to start a chat" : "New secure chat"}
@@ -718,7 +738,11 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
           onCurrentRevoked={revokeLocalSession}
           onPhoneUpdated={(phone) => onUserUpdated({ ...user, phone_e164: phone })}
         /> : null}
-        {showContacts ? <ContactsPanel onClose={() => setShowContacts(false)} /> : null}
+        {showContacts ? <ContactsPanel
+          onClose={() => setShowContacts(false)}
+          onOpenContact={openContactDirect}
+          chatEnabled={e2eeReadyForActions}
+        /> : null}
 
         <footer className="messenger-footer minimal-messenger-footer">
           {user.is_admin ? <button type="button" onClick={toggleInvite}>Invite</button> : null}
