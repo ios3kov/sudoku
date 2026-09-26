@@ -511,6 +511,7 @@ test("fresh authenticated device joins an existing encrypted direct chat without
     ).toHaveCount(0, { timeout: 60_000 });
 
     await openConversation(freshOwner, "Browser Peer");
+    await openConversation(peer, "Browser Owner");
     await peer.evaluate(() => window.dispatchEvent(new Event("online")));
     await sendText(peer, "delivered after fresh-device rekey");
     await expect(acceptedMessage(peer, "delivered after fresh-device rekey")).toBeVisible({
