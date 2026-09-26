@@ -166,6 +166,20 @@ test("correct PIN auto-submits once and unlocks on the first attempt after repea
     ) unlockRequests += 1;
   });
 
+  await page.reload();
+  await revealCurrentPage(page);
+  await expect(page.getByLabel("Device PIN", { exact: true })).toBeVisible();
+
+  const wrong = await enterPin(page, "1357");
+  expect((await wrong).status()).toBe(403);
+  await expect(page.getByLabel("Device PIN", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("alert")).toContainText("Incorrect PIN");
+
+  const retry = await enterPin(page, "2468");
+  expect((await retry).status()).toBe(200);
+  await expect(page.getByText("Messages", { exact: true })).toBeVisible();
+  expect(unlockRequests).toBe(2);
+
   for (let attempt = 1; attempt <= 6; attempt += 1) {
     await page.reload();
     await revealCurrentPage(page);
@@ -173,7 +187,7 @@ test("correct PIN auto-submits once and unlocks on the first attempt after repea
     const reply = await enterPin(page, "2468");
     expect((await reply).status()).toBe(200);
     await expect(page.getByText("Messages", { exact: true })).toBeVisible();
-    expect(unlockRequests).toBe(attempt);
+    expect(unlockRequests).toBe(attempt + 2);
   }
 });
 
