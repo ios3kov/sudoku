@@ -429,6 +429,18 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
   }
 
   function addConversation(conversation: Conversation) {
+    const autoBootstrapDirect =
+      conversation.type === "direct"
+      && conversation.encryption_required
+      && !conversation.e2ee_ready
+      && conversation.created_by === user.id
+      && Boolean(e2eeRef.current);
+
+    if (autoBootstrapDirect) {
+      setSecureSetupBusy(true);
+      setSecureSetupError(null);
+    }
+
     setConversations((current) => {
       const without = current.filter((item) => item.id !== conversation.id);
       const next = sortConversations([conversation, ...without]);
@@ -437,6 +449,19 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
     });
     setSelectedId(conversation.id);
     setCreating(false);
+    setShowContacts(false);
+
+    if (autoBootstrapDirect) {
+      const adapter = e2eeRef.current!;
+      void adapter.bootstrapConversation(conversation)
+        .then((ready) => updateConversation(ready))
+        .catch((error: unknown) => {
+          setSecureSetupError(
+            error instanceof Error ? error.message : "Unable to prepare secure chat",
+          );
+        })
+        .finally(() => setSecureSetupBusy(false));
+    }
   }
 
   function updateConversation(next: Conversation) {
@@ -471,15 +496,7 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
         throw new Error("Secure messaging is still preparing on this device");
       }
 
-      let conversation = await messengerApi.createDirect(contact.id, true);
-      if (!conversation.e2ee_ready && conversation.created_by === user.id) {
-        try {
-          conversation = await adapter.bootstrapConversation(conversation);
-        } catch {
-          // The direct conversation is already durably unique on the server.
-          // Open its pending secure state instead of making the contact tap a no-op.
-        }
-      }
+      const conversation = await messengerApi.createDirect(contact.id, true);
       setShowContacts(false);
       addConversation(conversation);
     })().finally(() => {
@@ -518,28 +535,34 @@ export function MessengerShell({ user, onHide, onLoggedOut, onUserUpdated }: { u
               <button type="button" onClick={() => setSelectedId(null)}>Back</button>
             </header>
             <div className="empty-conversations">
-              <h2>Finish secure setup</h2>
-              <p>{secureSetupError ?? "All participant devices must join the MLS group before activation."}</p>
-              <button
-                type="button"
-                disabled={secureSetupBusy}
-                onClick={() => {
-                  const adapter = e2eeAdapter;
-                  if (!adapter) return;
-                  setSecureSetupBusy(true);
-                  setSecureSetupError(null);
-                  void adapter.bootstrapConversation(selected)
-                    .then((ready) => updateConversation(ready))
-                    .catch((error: unknown) => {
-                      setSecureSetupError(
-                        error instanceof Error ? error.message : "Unable to finish secure setup",
-                      );
-                    })
-                    .finally(() => setSecureSetupBusy(false));
-                }}
-              >
-                {secureSetupBusy ? "Finishing…" : "Resume secure setup"}
-              </button>
+              <h2>{selected.type === "direct" && !secureSetupError ? "Preparing secure chat…" : "Finish secure setup"}</h2>
+              <p>{secureSetupError ?? (
+                selected.type === "direct"
+                  ? "Secure device setup is continuing automatically."
+                  : "All participant devices must join the MLS group before activation."
+              )}</p>
+              {selected.type !== "direct" || secureSetupError ? (
+                <button
+                  type="button"
+                  disabled={secureSetupBusy}
+                  onClick={() => {
+                    const adapter = e2eeAdapter;
+                    if (!adapter) return;
+                    setSecureSetupBusy(true);
+                    setSecureSetupError(null);
+                    void adapter.bootstrapConversation(selected)
+                      .then((ready) => updateConversation(ready))
+                      .catch((error: unknown) => {
+                        setSecureSetupError(
+                          error instanceof Error ? error.message : "Unable to finish secure setup",
+                        );
+                      })
+                      .finally(() => setSecureSetupBusy(false));
+                  }}
+                >
+                  {secureSetupBusy ? "Finishing…" : "Resume secure setup"}
+                </button>
+              ) : null}
             </div>
           </section>
         </main>
