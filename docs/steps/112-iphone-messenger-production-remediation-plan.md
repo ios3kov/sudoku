@@ -566,3 +566,7 @@ This remediation program is complete when a new user can:
 11. tap the persistent Sudoku icon from any private Messenger surface and conceal Messenger instantly.
 
 No TestFlight/App Store production claim is made until the exact candidate passes the automated and physical gates above.
+
+## Active release sequence
+
+The product-wide continuation of this remediation is defined in [Step 113](113-cross-platform-release-plan.md). Step 113 is authoritative for cross-platform parity, physical iPhone + Android/PWA QA, remaining Step 112 work, full pre-release verification, Release Candidate freeze and TestFlight/production sequencing. This Step 112 remains the detailed remediation backlog.
