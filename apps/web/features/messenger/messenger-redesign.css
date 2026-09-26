@@ -1637,3 +1637,86 @@
   color:#94a3b8;
   font-size:.75rem;
 }
+
+
+.profile-onboarding-screen{
+  position:relative;
+  display:grid;
+  place-items:center;
+  min-height:100dvh;
+  padding:
+    max(24px,env(safe-area-inset-top))
+    max(20px,env(safe-area-inset-right))
+    max(96px,calc(env(safe-area-inset-bottom) + 84px))
+    max(20px,env(safe-area-inset-left));
+  background:#f7f8fa;
+}
+
+.profile-onboarding-card{
+  width:min(100%,390px);
+  margin:0;
+  padding:28px 24px;
+  border:0;
+  border-radius:30px;
+  box-shadow:0 24px 70px rgba(15,23,42,.10);
+}
+
+.profile-preview{
+  min-height:74px;
+  display:grid;
+  grid-template-columns:52px minmax(0,1fr);
+  align-items:center;
+  gap:12px;
+  padding:11px 13px;
+  border:1px solid #e8edf3;
+  border-radius:18px;
+  background:#f8fafc;
+}
+
+.profile-preview>span:last-child{
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+
+.profile-preview strong{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#1e293b;
+}
+
+.profile-preview small{
+  color:#94a3b8;
+  font-size:.75rem;
+}
+
+.profile-name-field{
+  display:grid;
+  gap:7px;
+  color:#64748b;
+  font-size:.75rem;
+  font-weight:700;
+}
+
+.profile-name-field input{
+  width:100%;
+  min-height:50px;
+  border-radius:15px;
+}
+
+.messenger-page>.sudoku-escape-button{
+  bottom:max(78px,calc(env(safe-area-inset-bottom) + 72px));
+}
+
+@media (max-width:430px){
+  .profile-onboarding-screen{
+    place-items:start center;
+    padding-top:max(32px,calc(env(safe-area-inset-top) + 18px));
+  }
+
+  .profile-onboarding-card{
+    padding:24px 20px;
+    border-radius:26px;
+  }
+}
