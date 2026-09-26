@@ -148,6 +148,21 @@ Tests:
 - contact ACL enforced;
 - non-contact cannot bypass authorization.
 
+
+
+### #116 implementation checkpoint — 2026-09-26
+
+Branch `fix/contact-to-chat-20260926` makes registered contact rows directly actionable.
+
+- Contacts -> tap registered contact -> open existing direct immediately;
+- if no direct exists, create exactly one encrypted direct conversation and enter its chat/secure-setup state;
+- repeated taps reuse the existing direct rather than creating duplicates;
+- remove-contact remains a separate secondary action;
+- the contact row is now visually a messenger-style chat target instead of a settings-only row;
+- Browser E2E covers one-tap open/create plus reuse with a server-side direct-count assertion.
+
+Pending: branch CI, merge/post-merge verification and physical-device discoverability acceptance.
+
 ## 1.3 PIN first-attempt reliability — #111
 
 Fix reliability before redesigning visuals.
