@@ -330,6 +330,21 @@ Requirements:
 - cursor does not jump during formatting;
 - tests for RU plus at least one non-RU country.
 
+### #106 implementation checkpoint — 2026-09-26
+
+Country-aware phone entry is implemented with one reusable `PhoneInput` across login, invite acceptance, manual contact sync, and Devices phone change.
+
+- device/browser locale selects a sensible default country;
+- explicit country selector is always available;
+- RU local forms `926…`, `8926…`, `7926…`, and `+7926…` normalize to the same `+7` E.164 value;
+- explicit `+` international input is respected;
+- pasted spaces, parentheses and hyphens are normalized;
+- visible input is formatted while typing;
+- caret stays stable through formatting;
+- backend still receives/stores only canonical E.164;
+- system-selected contacts are canonicalized using locale default when they lack an explicit country code;
+- regressions cover RU, Montenegro/non-RU, login request payload, manual contact sync and caret stability.
+
 ## 2.6 Full iOS Contacts access — #113
 
 Keep both modes:
