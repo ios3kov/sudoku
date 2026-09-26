@@ -163,7 +163,7 @@ def main() -> None:
             FROM alembic_version
             """
         )
-        assert cursor.fetchone() == ("0019_transport_sender_device",)
+        assert cursor.fetchone() == ("0020_profile_setup",)
 
         cursor.execute(
             """
@@ -177,6 +177,20 @@ def main() -> None:
         sender_device_column = cursor.fetchone()
         # 0019 is intentionally nullable so pre-existing transport rows remain readable.
         assert sender_device_column == ("YES", "uuid"), sender_device_column
+
+        cursor.execute(
+            """
+            SELECT is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'users'
+              AND column_name = 'profile_setup_completed'
+            """
+        )
+        profile_setup_column = cursor.fetchone()
+        assert profile_setup_column is not None
+        assert profile_setup_column[0] == "NO"
+        assert profile_setup_column[1] in ("true", "TRUE")
 
         cursor.execute(
             """
