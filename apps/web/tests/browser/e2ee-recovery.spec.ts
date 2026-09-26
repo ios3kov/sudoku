@@ -435,9 +435,9 @@ test("BFCache lifecycle preserves the active MLS adapter", async ({ page }) => {
 
 test("fresh authenticated device joins an existing encrypted direct chat without Reload", async ({ browser }) => {
   test.setTimeout(360_000);
-  const primaryPhone = testPhone(3);
-  const peerPhone = testPhone(5);
-  const peerName = "PIN Skip";
+  const primaryPhone = testPhone(6);
+  const peerPhone = testPhone(7);
+  const peerName = "MLS Fresh Peer";
 
   const ownerContext = await browser.newContext();
   const peerContext = await browser.newContext();
