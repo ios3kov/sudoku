@@ -151,7 +151,7 @@ for (const role of ["member", "admin"]) {
 test("correct PIN auto-submits once and unlocks on the first attempt after repeated relaunches", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 844 });
-  await passwordLogin(page, testPhone(2));
+  await passwordLogin(page, testPhone(5));
   await page.getByRole("button", { name: "Set PIN", exact: true }).click();
   await page.getByLabel("Four-digit PIN", { exact: true }).fill("2468");
   await page.getByLabel("Confirm PIN", { exact: true }).fill("2468");
