@@ -226,3 +226,58 @@
     border-radius: 16px;
   }
 }
+
+
+.phone-input-field {
+  display: grid;
+  gap: 7px;
+  color: #64748b;
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.phone-input-control {
+  display: grid;
+  grid-template-columns: 112px minmax(0,1fr);
+  gap: 8px;
+}
+
+.phone-input-control select,
+.phone-input-control input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.phone-input-control select {
+  padding: 0 10px;
+}
+
+.phone-input-control input:focus,
+.phone-input-control select:focus {
+  background: #fff;
+  border-color: #93c5fd;
+  outline: 3px solid rgba(37,99,235,.08);
+}
+
+.contact-manual-form {
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) auto !important;
+  align-items: end;
+  gap: 8px;
+}
+
+.contact-manual-form .phone-input-field {
+  min-width: 0;
+}
+
+@media (max-width:430px) {
+  .phone-input-control {
+    grid-template-columns: 104px minmax(0,1fr);
+  }
+}
