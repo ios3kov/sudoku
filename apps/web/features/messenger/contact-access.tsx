@@ -127,7 +127,10 @@ export function ContactAccess({ onSynced }: { onSynced: () => void }) {
         return;
       }
       const matched = await messengerApi.syncContacts(normalized, true);
-      setFullAuthorization(await nativeContactsAuthorization().catch(() => "unknown"));
+      setFullAuthorization(
+        await nativeContactsAuthorization()
+          .catch((): NativeContactsAuthorization => "unknown"),
+      );
       setNotice(`${matched.length} registered contact${matched.length === 1 ? "" : "s"} available.`);
       setShowFullExplanation(false);
       onSynced();
