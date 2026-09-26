@@ -17,8 +17,7 @@ export function DisplayNameOnboarding({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const normalized = value.trim();
-  const valid = normalized.length >= 1 && normalized.length <= 120
-    && [...normalized].some((char) => char.trim() && char.isWellFormed?.() !== false);
+  const valid = normalized.length >= 1 && normalized.length <= 120;
 
   async function save() {
     if (!valid || busy) return;
