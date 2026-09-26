@@ -169,3 +169,7 @@ The iOS app is a separate release artifact. Server and iOS releases are versione
 - Application logs are structured and correlate to active trace/span IDs.
 - Chat/message bodies, credentials, session material and decrypted attachment data are not logged.
 - Native iOS diagnostics must follow the same rule: no phone-book dump, message plaintext, MLS secrets or attachment plaintext in logs/crash metadata.
+
+## Cross-platform UX parity
+
+Sudoku Messenger uses one product contract across iOS, Android/PWA and desktop/browser. Native bridges are implementation details, not separate UX specifications. Gesture semantics, conceal/reveal behavior, PIN and Messenger flows, contact/chat behavior and private-surface lifecycle must remain equivalent across supported clients. OS-specific APIs may be used to achieve the same result. For background/task-switcher privacy, clients must conceal Messenger and present the last available real Sudoku state before the operating system captures a preview whenever the platform exposes enough lifecycle control.
