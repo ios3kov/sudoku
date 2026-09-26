@@ -31,9 +31,17 @@ async function dragFive(page: Page, progress: number, pointerId: number) {
 }
 
 async function unlockPrivate(page: Page) {
-  // Crossing 50% of the available upward path must hand off to the finishing
-  // animation immediately; no extra release gesture is required.
-  await dragFive(page, 0.55, 7);
+  // Reveal stays finger-tracked until release. Crossing the distance threshold
+  // commits only when the pointer is released.
+  const drag = await dragFive(page, 0.55, 7);
+  await drag.five.dispatchEvent("pointerup", {
+    clientX: drag.startX + 1,
+    clientY: drag.targetY,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+  });
 }
 
 test("mobile Sudoku stays compact and unlock slides the whole screen over chat", async ({ page }) => {
