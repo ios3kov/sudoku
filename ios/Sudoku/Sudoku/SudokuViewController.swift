@@ -235,13 +235,16 @@ final class SudokuViewController: UIViewController {
         )
     }
 
-    private func fetchAllContacts(requestID: String) {
-        guard pendingContactRequestID == nil else {
-            rejectContactRequest(requestID: requestID, message: "Another contacts request is already active")
-            return
+    private func fetchAllContacts(requestID: String, requestAlreadyPending: Bool = false) {
+        if requestAlreadyPending {
+            guard pendingContactRequestID == requestID else { return }
+        } else {
+            guard pendingContactRequestID == nil else {
+                rejectContactRequest(requestID: requestID, message: "Another contacts request is already active")
+                return
+            }
+            pendingContactRequestID = requestID
         }
-
-        pendingContactRequestID = requestID
         let keys: [CNKeyDescriptor] = [
             CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
             CNContactPhoneNumbersKey as CNKeyDescriptor,
@@ -263,6 +266,11 @@ final class SudokuViewController: UIViewController {
     }
 
     private func requestAllContacts(requestID: String) {
+        guard pendingContactRequestID == nil else {
+            rejectContactRequest(requestID: requestID, message: "Another contacts request is already active")
+            return
+        }
+
         let state = contactAuthorizationState()
         if state == "granted" || state == "limited" {
             fetchAllContacts(requestID: requestID)
@@ -273,13 +281,23 @@ final class SudokuViewController: UIViewController {
             return
         }
 
+        pendingContactRequestID = requestID
         contactStore.requestAccess(for: .contacts) { [weak self] granted, _ in
             DispatchQueue.main.async {
                 guard let self else { return }
                 if granted {
-                    self.fetchAllContacts(requestID: requestID)
+                    self.fetchAllContacts(
+                        requestID: requestID,
+                        requestAlreadyPending: true
+                    )
                 } else {
-                    self.rejectContactRequest(requestID: requestID, message: "Contacts access was denied")
+                    if self.pendingContactRequestID == requestID {
+                        self.pendingContactRequestID = nil
+                    }
+                    self.rejectContactRequest(
+                        requestID: requestID,
+                        message: "Contacts access was denied"
+                    )
                 }
             }
         }
