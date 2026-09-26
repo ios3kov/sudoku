@@ -465,6 +465,11 @@ test("fresh authenticated device joins an existing encrypted direct chat without
     const peerResult = owner.locator(".directory-item").filter({ hasText: peerPhone });
     await expect(peerResult).toBeVisible();
     await peerResult.click();
+
+    const resumeSetup = owner.getByRole("button", { name: "Resume secure setup", exact: true });
+    if (await resumeSetup.count()) {
+      await resumeSetup.click();
+    }
     await expect(owner.getByText("End-to-end encrypted", { exact: true })).toBeVisible({
       timeout: 60_000,
     });
