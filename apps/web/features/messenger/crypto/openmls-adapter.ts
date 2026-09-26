@@ -985,6 +985,11 @@ export class OpenMlsProtocolAdapter implements ProtocolAdapter {
     return this.localState!.transportCursors[conversationId] ?? 0;
   }
 
+  joinedConversationIds(): string[] {
+    this.assertReady();
+    return [...this.localState!.trackedConversations].sort();
+  }
+
   trackedConversationIds(): string[] {
     this.assertReady();
     const ids = new Set<string>([
