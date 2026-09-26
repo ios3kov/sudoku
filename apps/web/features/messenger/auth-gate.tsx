@@ -33,6 +33,7 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
 
   const signedOut = useCallback(() => {
     loginPasswordRef.current = null;
+    newAccountRef.current = false;
     setPendingLogin(null);
     setPendingProfile(null);
     forgetUnlock(); setUser(null); setPinRequired(false); setError(null); setLoading(false);
@@ -90,9 +91,14 @@ export function AuthGate({ onHide, active = true }: { onHide: () => void; active
       if (response.ok) {
         const current = await response.json() as CurrentUser;
         if (alive.current && id === requestId.current && started === accessEpoch()) {
-          setPendingProfile(null);
-          setUser(current);
           setPinRequired(false);
+          if (current.display_name === "New member") {
+            setUser(null);
+            setPendingProfile(current);
+          } else {
+            setPendingProfile(null);
+            setUser(current);
+          }
         }
       } else if (response.status === 401) {
         signedOut();
