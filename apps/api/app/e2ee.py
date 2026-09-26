@@ -1431,6 +1431,7 @@ async def list_transport_events(
                     "kind": "message",
                     "message_id": str(message.id),
                     "sender_user_id": str(message.sender_id),
+                    "sender_device_id": str(row.sender_device_id) if row.sender_device_id else None,
                     "message_sequence": message.sequence,
                     "created_at": message.created_at.isoformat(),
                     "envelope": message.envelope,
