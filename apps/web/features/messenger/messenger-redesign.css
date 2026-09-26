@@ -1123,3 +1123,200 @@
 .chat-empty-state{
   margin:auto 0;
 }
+
+
+/* Wave 2 product navigation */
+.minimal-messenger-footer{
+  min-height:68px;
+  padding:6px 84px max(6px,env(safe-area-inset-bottom)) 10px;
+  gap:4px;
+  background:rgba(255,255,255,.97);
+  border-top:1px solid #eef2f7;
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+
+.minimal-messenger-footer button{
+  min-height:52px;
+  display:grid;
+  grid-template-rows:22px 16px;
+  place-items:center;
+  align-content:center;
+  gap:2px;
+  padding:3px 6px;
+  color:#94a3b8;
+  font-size:.6875rem;
+  font-weight:700;
+  overflow:visible;
+}
+
+.minimal-messenger-footer button>span:first-child{
+  font-size:1rem;
+  line-height:1;
+}
+
+.minimal-messenger-footer button.is-active{
+  color:#2563eb;
+  background:#eff6ff;
+}
+
+.sudoku-escape-button{
+  position:fixed;
+  right:max(14px,env(safe-area-inset-right));
+  bottom:max(14px,calc(env(safe-area-inset-bottom) + 8px));
+  z-index:50;
+  width:56px;
+  min-width:56px;
+  height:56px;
+  min-height:56px;
+  padding:0;
+  display:grid;
+  place-items:center;
+  border:0;
+  border-radius:18px;
+  background:#0f172a;
+  color:#fff;
+  box-shadow:0 10px 28px rgba(15,23,42,.22);
+}
+
+.conversation-view~.sudoku-escape-button,
+.chat-view~.sudoku-escape-button{
+  bottom:max(78px,calc(env(safe-area-inset-bottom) + 72px));
+}
+
+.sudoku-escape-button:active{
+  transform:scale(.96);
+}
+
+.sudoku-escape-grid{
+  width:24px;
+  height:24px;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  grid-template-rows:repeat(3,1fr);
+  gap:2px;
+}
+
+.sudoku-escape-grid i{
+  display:block;
+  border:1.5px solid currentColor;
+  border-radius:1px;
+}
+
+.messenger-inline-status{
+  margin:8px 12px 2px;
+  padding:9px 11px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  border:1px solid #dbeafe;
+  border-radius:13px;
+  background:#eff6ff;
+  color:#475569;
+  font-size:.75rem;
+  line-height:1.35;
+}
+
+.messenger-inline-status.is-warning{
+  border-color:#fde68a;
+  background:#fffbeb;
+  color:#92400e;
+}
+
+.messenger-inline-status.is-error{
+  border-color:#fecaca;
+  background:#fef2f2;
+  color:#991b1b;
+}
+
+.messenger-inline-status button{
+  flex:none;
+  min-height:34px;
+  padding:0 9px;
+  border:0;
+  border-radius:9px;
+  background:rgba(255,255,255,.78);
+  color:inherit;
+  font-size:.6875rem;
+  font-weight:750;
+}
+
+.settings-hub{
+  min-height:0;
+  overflow:auto;
+  padding-bottom:96px;
+}
+
+.settings-section-card{
+  display:grid;
+  gap:10px;
+  padding:14px;
+  border:1px solid #e8edf3;
+  border-radius:18px;
+  background:#fff;
+}
+
+.settings-actions-card{
+  gap:2px;
+}
+
+.settings-action-row{
+  width:100%;
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:9px 4px;
+  border:0;
+  border-bottom:1px solid #eef2f7;
+  border-radius:0;
+  background:transparent;
+  color:#334155;
+  text-align:left;
+}
+
+.settings-action-row:last-child{
+  border-bottom:0;
+}
+
+.settings-action-row>span:first-child{
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+
+.settings-action-row strong,
+.settings-action-row small{
+  display:block;
+}
+
+.settings-action-row small{
+  color:#94a3b8;
+  font-size:.75rem;
+}
+
+.settings-action-row>span:last-child{
+  color:#cbd5e1;
+  font-size:1.35rem;
+}
+
+.settings-action-row.is-destructive strong{
+  color:#b91c1c;
+}
+
+@media (max-width:430px){
+  .minimal-messenger-footer{
+    padding-left:8px;
+    padding-right:78px;
+  }
+
+  .sudoku-escape-button{
+    width:54px;
+    min-width:54px;
+    height:54px;
+    min-height:54px;
+    border-radius:17px;
+  }
+}
