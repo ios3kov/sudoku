@@ -670,3 +670,29 @@ Native structure/tests added:
 ### Verification status
 
 Wave 3 code is prepared. Exact-head web/browser/iOS CI and physical-iPhone acceptance remain required before merge or deployment.
+
+
+### Physical iPhone QA follow-up — 2026-09-26
+
+Accepted on physical iPhone:
+
+- branded startup/preloader;
+- no light status-bar seam;
+- reveal starts only from digit 5;
+- Messenger reveal is smooth enough to validate the interaction path;
+- remaining previously listed Wave 3 visual checks reported OK.
+
+Two follow-up requirements were added from physical QA:
+
+1. **App-switcher presentation**
+   - when Sudoku itself is active, iOS may show the live current Sudoku state;
+   - when Messenger is active, the app-switcher must show the **last safe Sudoku state that existed immediately before reveal**, not the branded startup/loading screen and never Messenger;
+   - the pre-reveal Sudoku snapshot is captured before the private transition starts.
+
+2. **Reveal completion physics**
+   - crossing a fixed progress point while the finger remains down must never auto-complete;
+   - the gesture stays interactive until release;
+   - on release, completion/cancel is decided from current progress plus projected upward velocity;
+   - completion duration derives from remaining distance and release velocity so fast swipes finish faster and slow incomplete swipes spring back.
+
+New automated regressions cover no-auto-commit-while-held, projected release behavior, and the native safe-surface privacy policy. Physical re-check remains required for app-switcher fidelity and final gesture feel.
