@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { triggerNativeHaptic } from "./native-haptics";
+import { captureNativeSudokuSnapshot } from "../sudoku/native-surface-theme";
 import {
   SECRET_REVEAL_ARM_DELAY_MS,
   SECRET_REVEAL_CLICK_SUPPRESS_PX,
@@ -227,6 +228,8 @@ export function useSecretUnlock({ onUnlock }: SecretUnlockOptions) {
 
     screenRef.current?.classList.remove("is-returning", "is-unlocking", "is-dragging");
     resetInlineMotion();
+
+    captureNativeSudokuSnapshot();
 
     const now = performance.now();
     const pointerX = event.clientX;
