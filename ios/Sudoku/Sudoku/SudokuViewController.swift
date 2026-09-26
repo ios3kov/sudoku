@@ -85,6 +85,8 @@ final class SudokuViewController: UIViewController {
     private let videoPlayback = NativeVideoPlayback()
     private var lifecycleState = NativeLifecycleState()
     private var currentSurface: NativeSurface = .sudoku
+    private var lastSudokuSnapshot: UIImage?
+    private var sudokuSnapshotWorkItem: DispatchWorkItem?
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
 
@@ -157,6 +159,7 @@ final class SudokuViewController: UIViewController {
     }
 
     deinit {
+        sudokuSnapshotWorkItem?.cancel()
         NotificationCenter.default.removeObserver(self)
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.contactHandlerName
@@ -213,6 +216,7 @@ final class SudokuViewController: UIViewController {
 
     func showPrivacyCover() {
         videoPlayback.cancel()
+        privacyCover.setSudokuSnapshot(lastSudokuSnapshot)
         lifecycleState.apply(.willResignActive)
         renderLifecycle(animatedStartup: false)
     }
@@ -227,18 +231,51 @@ final class SudokuViewController: UIViewController {
 
     func didEnterBackground() {
         videoPlayback.cancel()
+        privacyCover.setSudokuSnapshot(lastSudokuSnapshot)
         lifecycleState.apply(.didEnterBackground)
         renderLifecycle(animatedStartup: false)
     }
 
     private func applySurface(_ surface: NativeSurface) {
-        guard surface != currentSurface else { return }
+        guard surface != currentSurface else {
+            if surface == .sudoku { scheduleSudokuSnapshot() }
+            return
+        }
+
+        if currentSurface == .sudoku && surface == .messenger {
+            captureSudokuSnapshot()
+        }
+
         currentSurface = surface
         let background = NativeSurfacePolicy.background(for: surface)
         view.backgroundColor = background
         webView.backgroundColor = background
         webView.scrollView.backgroundColor = background
         setNeedsStatusBarAppearanceUpdate()
+
+        if surface == .sudoku {
+            scheduleSudokuSnapshot()
+        }
+    }
+
+    private func scheduleSudokuSnapshot() {
+        sudokuSnapshotWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.captureSudokuSnapshot()
+        }
+        sudokuSnapshotWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: item)
+    }
+
+    private func captureSudokuSnapshot() {
+        guard currentSurface == .sudoku, webContentLoaded else { return }
+        let configuration = WKSnapshotConfiguration()
+        configuration.rect = webView.bounds
+        webView.takeSnapshot(with: configuration) { [weak self] image, _ in
+            guard let self, self.currentSurface == .sudoku, let image else { return }
+            self.lastSudokuSnapshot = image
+            self.privacyCover.setSudokuSnapshot(image)
+        }
     }
 
     @objc private func updatePreferredTextSize() {
@@ -461,6 +498,7 @@ extension SudokuViewController: WKNavigationDelegate {
         lifecycleState.apply(.webLoaded)
         updatePreferredTextSize()
         renderLifecycle(animatedStartup: true)
+        scheduleSudokuSnapshot()
     }
 
     func webView(
