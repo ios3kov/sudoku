@@ -252,6 +252,18 @@ Modern PIN setup/unlock is implemented on branch `feat/modern-pin-ux-20260926` w
 
 Biometric removal remains separate under #112.
 
+
+### #107 repository verification — 2026-09-26
+
+PR #132 head `1918e11223d13f6c64c657044bc98f177ef1ac89` passed all required branch workflows:
+
+- `ci` 36268660787;
+- `device-access` 36268660793;
+- `beat-runtime` 36268660820;
+- `api-shutdown` 36268660833.
+
+Repository implementation for #107 is verified. Remaining acceptance is physical-device PIN feel/focus/haptic verification.
+
 ## 2.3 Remove biometrics — #112
 
 Product removal sequence:
