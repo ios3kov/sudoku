@@ -24,6 +24,7 @@ export function DevicePinOnboarding({
   async function savePin(nextConfirm: string) {
     if (busy || !/^[0-9]{4}$/.test(pin) || !/^[0-9]{4}$/.test(nextConfirm)) return;
     if (pin !== nextConfirm) {
+      navigator.vibrate?.(20);
       setConfirm("");
       setError("PINs do not match. Try again.");
       return;
