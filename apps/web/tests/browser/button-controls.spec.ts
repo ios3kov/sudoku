@@ -238,3 +238,37 @@ test("phone input normalizes common Russian and non-Russian local formats", asyn
   expect(result.inferredRu).toBe("RU");
   expect(result.inferredBa).toBe("BA");
 });
+
+
+test("admin invite typeahead searches local contacts by name and Russian phone variants", async ({ page }) => {
+  await mount(page, "invite");
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, "SudokuNativeContacts", {
+      configurable: true,
+      value: {
+        select: async () => [],
+        status: async () => "authorized",
+        all: async () => [
+          { name: ["Иван Петров"], tel: ["+7 (926) 237-36-09"] },
+        ],
+      },
+    });
+    window.dispatchEvent(new Event("sudoku:native-contacts-ready"));
+  });
+
+  const search = page.getByLabel("Search contact name or number", { exact: true });
+  await expect(search).toBeVisible();
+
+  await search.fill("Иван");
+  await expect(page.getByRole("button", { name: /Иван Петров/ })).toBeVisible();
+
+  await search.fill("89262373609");
+  const suggestion = page.getByRole("button", { name: /Иван Петров/ });
+  await expect(suggestion).toBeVisible();
+  await suggestion.click();
+
+  await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("+7 (926) 237-36-09");
+  await page.getByRole("button", { name: "Create invite", exact: true }).click();
+  expect(await page.evaluate(() => window.__buttonAudit.calls.invites.at(-1))).toBe("+79262373609");
+});
