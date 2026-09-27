@@ -22,6 +22,7 @@ final class SudokuViewController: UIViewController {
         controller.add(self, name: Self.contactHandlerName)
         controller.add(self, name: Self.privacyStateHandlerName)
         controller.add(self, name: Self.privacySnapshotHandlerName)
+        hapticBridge.install(into: controller)
         mediaBridge.install(into: controller)
         videoPlayback.install(into: controller)
         videoPlayback.presenter = self
@@ -81,6 +82,7 @@ final class SudokuViewController: UIViewController {
     }()
 
     private let privacyCover = PrivacyCoverView()
+    private let hapticBridge = NativeHapticBridge()
     private let mediaBridge = NativeMediaBridge()
     private let videoPlayback = NativeVideoPlayback()
     private let contactStore = CNContactStore()
@@ -153,6 +155,7 @@ final class SudokuViewController: UIViewController {
             forName: Self.privacySnapshotHandlerName
         )
         videoPlayback.uninstall(from: webView.configuration.userContentController)
+        hapticBridge.uninstall(from: webView.configuration.userContentController)
         mediaBridge.uninstall(
             from: webView.configuration.userContentController
         )
