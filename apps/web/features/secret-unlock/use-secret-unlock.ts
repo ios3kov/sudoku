@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { triggerNativeHaptic } from "./native-haptics";
 
 const CLICK_SUPPRESS_PX = 12;
 const UNLOCK_PROGRESS = 0.5;
@@ -189,6 +190,7 @@ export function useSecretUnlock({ enabled = true, onUnlock }: SecretUnlockOption
     applyOffset(currentOffset.current);
     if (screen) void screen.offsetHeight;
 
+    triggerNativeHaptic("impact");
     window.requestAnimationFrame(() => {
       applyOffset(targetOffset);
     });
@@ -258,6 +260,7 @@ export function useSecretUnlock({ enabled = true, onUnlock }: SecretUnlockOption
 
     applyOffset(0);
     notifyNativeSnapshotRequest();
+    triggerNativeHaptic("selection");
 
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId);
