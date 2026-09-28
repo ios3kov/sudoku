@@ -690,3 +690,15 @@ No TestFlight/App Store production claim is made until the exact candidate passe
 ## Active release sequence
 
 The product-wide continuation of this remediation is defined in [Step 113](113-cross-platform-release-plan.md). Step 113 is authoritative for cross-platform parity, physical iPhone + Android/PWA QA, remaining Step 112 work, full pre-release verification, Release Candidate freeze and TestFlight/production sequencing. This Step 112 remains the detailed remediation backlog.
+
+
+## 2026-09-28 startup/safe-area regression recovery
+
+Physical iPhone QA exposed a regression in the current native host: the privacy-cover fallback was being reused as the cold-launch screen, producing the old “Sudoku + empty grid” loader, and the launch/native safe-area surfaces could flash or seam against the web UI.
+
+Recovery:
+- restored a dedicated dark branded native StartupView from the verified Wave 3 design;
+- restored a dark native LaunchBackground so cold launch never flashes white;
+- startup and privacy cover are separate again;
+- added a narrow sudokuTheme bridge so native safe-area/background/status-bar treatment follows the active Sudoku/Messenger surface;
+- preserved the newer retained-Sudoku App Switcher privacy implementation, Contacts flows, media bridge, haptics and E2EE behavior.
