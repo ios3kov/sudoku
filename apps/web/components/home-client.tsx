@@ -136,11 +136,10 @@ export function HomeClient() {
       </div>
 
       {privacyCover && !sudokuReady ? (
-        <main className="shell privacy-fallback">
-          <section className="card">
-            <h1>Sudoku</h1>
-            <div className="privacy-grid" aria-hidden="true" />
-          </section>
+        <main className="privacy-fallback branded-privacy-fallback" aria-label="SUDOKU.MOSCOW loading">
+          <div className="privacy-brand-mark" aria-hidden="true" />
+          <h1>SUDOKU.MOSCOW</h1>
+          <span>SUDOKU</span>
         </main>
       ) : null}
     </>
