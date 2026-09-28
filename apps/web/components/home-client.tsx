@@ -5,6 +5,7 @@ import { shouldLockPrivateSurface } from "@sudoku/domain";
 import { SudokuBoard } from "../features/sudoku/sudoku-board";
 import { AuthGate } from "../features/messenger/auth-gate";
 import { useAppStore } from "../store/app-store";
+import { syncNativeSurfaceTheme } from "../features/sudoku/native-surface-theme";
 
 type NativeMessageHandler = { postMessage: (message: unknown) => void };
 type NativeWindow = Window & {
@@ -34,6 +35,7 @@ export function HomeClient() {
 
   useEffect(() => {
     notifyNativePrivacyState(mode === "sudoku" ? "sudoku" : "private");
+    syncNativeSurfaceTheme(mode === "sudoku" ? "sudoku" : "messenger");
   }, [mode]);
 
   useEffect(() => {
