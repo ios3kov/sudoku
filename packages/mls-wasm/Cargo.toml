@@ -10,7 +10,7 @@ license = "MIT"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-openmls = { version = "=0.9.0", features = ["js"] }
+openmls = { version = "=0.9.1", features = ["js"] }
 openmls_rust_crypto = "=0.6.0"
 openmls_basic_credential = "=0.6.0"
 wasm-bindgen = "=0.2.105"
